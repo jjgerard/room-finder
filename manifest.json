@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Ulster Room Finder",
+  "version": "0.1.0",
+  "description": "Find rooms free in a recurring slot in Ulster's Resource Booker, using the session you are already signed in to.",
+  "content_scripts": [
+    {
+      "matches": ["*://*/app/booking-types/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ulster-room-finder@jjgerard.github.io",
+      "strict_min_version": "128.0"
+    }
+  }
+}
