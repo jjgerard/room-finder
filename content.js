@@ -291,6 +291,7 @@
 
   function overlaps(iv, from, to) { return iv.from < to && iv.to > from; }
 
+
   // ------------------------------------------------------------------ search
 
   function listResources(btid, query, minCapacity) {
@@ -339,6 +340,67 @@
     }).catch(function () { return null; });
   }
 
+  function poolFor(btid, opts) {
+    return listResources(btid, opts.query, opts.minCapacity).then(function (r) {
+      if (r.status !== 200 || !r.data) throw new Error('Could not list rooms (HTTP ' + r.status + ').');
+      var all = r.data.Resources || [];
+      var dropped = { junk: [], specialist: [], building: [] };
+      var rooms = all.filter(function (x) {
+        var name = x.Name || '';
+        if (JUNK.test(name)) { dropped.junk.push(name); return false; }
+        if (opts.buildings.length) {
+          var ok = opts.buildings.some(function (b) {
+            var u = name.toUpperCase(), c = b.toUpperCase();
+            return u.indexOf('_' + c) !== -1 || u.indexOf(c + '-') !== -1;
+          });
+          if (!ok) { dropped.building.push(name); return false; }
+        }
+        if (opts.ordinaryOnly && SPECIALIST.test(name)) { dropped.specialist.push(name); return false; }
+        return true;
+      });
+      if (!rooms.length) throw new Error('No rooms left after filtering (' + all.length + ' returned by the API).');
+      return { rooms: rooms, dropped: dropped, returned: all.length };
+    });
+  }
+
+  // Keeps every busy interval that lands on a date we care about, so alternatives can
+  // be recomputed (a shifted slot, a looser clash budget) without fetching again.
+  function collect(room, items, extra, keep) {
+    var byDate = {};
+    items.concat(extra).forEach(function (it) {
+      intervals(it).forEach(function (iv) {
+        if (!keep[iv.date]) return;
+        (byDate[iv.date] = byDate[iv.date] || []).push(iv);
+      });
+    });
+    return { name: room.Name, identity: room.Identity, totalEvents: items.length, byDate: byDate, capacity: null };
+  }
+
+  function fetchBusy(btid, rooms, opts, keep) {
+    return pool(rooms, 4, function (room) {
+      return busyTimes(btid, room.Identity, opts.from, opts.to).then(function (b) {
+        var items = Array.isArray(b.data) ? b.data : [];
+        if (!opts.includePending) return collect(room, items, [], keep);
+        return pendingRequests(room.Identity, opts.from, opts.to).then(function (p) {
+          var raw = Array.isArray(p.data) ? p.data : (p.data && p.data.BookingRequests) || [];
+          var extra = [];
+          raw.forEach(function (x) {
+            if (x && x.StartDateTime) extra.push({ StartDateTime: x.StartDateTime, Duration: x.Duration, Name: '(pending request)' });
+          });
+          return collect(room, items, extra, keep);
+        }).catch(function () { return collect(room, items, [], keep); });
+      });
+    }, function (done, total) {
+      run.status('Reading rooms… ' + done + '/' + total);
+    });
+  }
+
+  function keySet(list) {
+    var o = {};
+    list.forEach(function (d) { o[d] = true; });
+    return o;
+  }
+
   function search(opts) {
     var btid = bookingTypeId();
     if (!btid) return Promise.reject(new Error('No booking type in the URL. Open a /app/booking-types/<id> page first.'));
@@ -348,52 +410,16 @@
     if (!dates.length) return Promise.reject(new Error('That date range contains none of the selected weekdays.'));
 
     run.status('Listing rooms…');
-    return listResources(btid, opts.query, opts.minCapacity).then(function (r) {
-      if (r.status !== 200 || !r.data) throw new Error('Could not list rooms (HTTP ' + r.status + ').');
-      var all = r.data.Resources || [];
-
-      var dropped = { junk: [], specialist: [], building: [] };
-      var rooms = all.filter(function (x) {
-        var name = x.Name || '';
-        if (JUNK.test(name)) { dropped.junk.push(name); return false; }
-        if (opts.buildings.length) {
-          var ok = opts.buildings.some(function (b) {
-            return name.toUpperCase().indexOf('_' + b.toUpperCase()) !== -1 ||
-              name.toUpperCase().indexOf(b.toUpperCase() + '-') !== -1;
-          });
-          if (!ok) { dropped.building.push(name); return false; }
-        }
-        if (opts.ordinaryOnly && SPECIALIST.test(name)) { dropped.specialist.push(name); return false; }
-        return true;
-      });
-
-      if (!rooms.length) throw new Error('No rooms left after filtering (' + all.length + ' returned by the API).');
-
-      run.status('Reading ' + rooms.length + ' rooms across ' + dates.length + ' dates…');
-
-      return pool(rooms, 4, function (room) {
-        return busyTimes(btid, room.Identity, opts.from, opts.to).then(function (b) {
-          var items = Array.isArray(b.data) ? b.data : [];
-          var extra = [];
-          if (!opts.includePending) return assess(room, items, extra);
-          return pendingRequests(room.Identity, opts.from, opts.to).then(function (p) {
-            var list = Array.isArray(p.data) ? p.data : (p.data && p.data.BookingRequests) || [];
-            list.forEach(function (x) {
-              if (x && x.StartDateTime) extra.push({ StartDateTime: x.StartDateTime, Duration: x.Duration, Name: '(pending request)' });
-            });
-            return assess(room, items, extra);
-          }).catch(function () { return assess(room, items, extra); });
-        });
-      }, function (done, total) {
-        run.status('Reading rooms… ' + done + '/' + total);
-      }).then(function (results) {
+    return poolFor(btid, opts).then(function (p) {
+      run.status('Reading ' + p.rooms.length + ' rooms across ' + dates.length + ' dates…');
+      return fetchBusy(btid, p.rooms, opts, keySet(dates)).then(function (results) {
         var found = results.filter(Boolean);
-
         // A room with no events at all across the whole term is a shell record, not an
         // opportunity — the real timetable lives on another resource.
         var shells = found.filter(function (x) { return x.totalEvents === 0; });
         var real = found.filter(function (x) { return x.totalEvents > 0; });
 
+        real.forEach(function (r) { r.clashes = URF.analyse.clashesAt(r, dates, opts.slotFrom, opts.slotTo); });
         real.sort(function (a, b) {
           if (a.clashes.length !== b.clashes.length) return a.clashes.length - b.clashes.length;
           return a.name.localeCompare(b.name);
@@ -405,34 +431,44 @@
           return capacityOf(btid, x.identity).then(function (c) { x.capacity = c; return x; });
         }).then(function () {
           return {
-            dates: dates, rooms: real, report: report, shells: shells,
-            dropped: dropped, scanned: rooms.length, returned: all.length
+            mode: 'availability', dates: dates, rooms: real, report: report, shells: shells,
+            dropped: p.dropped, scanned: p.rooms.length, returned: p.returned,
+            campusName: opts.campusName || 'this campus'
           };
         });
       });
-
-      function assess(room, items, extra) {
-        var ivs = [];
-        items.concat(extra).forEach(function (it) { ivs = ivs.concat(intervals(it)); });
-        var clashes = [];
-        dates.forEach(function (d) {
-          var hits = ivs.filter(function (iv) {
-            return iv.date === d && overlaps(iv, opts.slotFrom, opts.slotTo);
-          });
-          if (hits.length) {
-            clashes.push({
-              date: d,
-              what: hits.map(function (h) { return h.name || 'busy'; }).join(', '),
-              when: hits.map(function (h) { return hhmm(h.from) + '–' + hhmm(h.to); }).join(', ')
-            });
-          }
-        });
-        return {
-          name: room.Name, identity: room.Identity,
-          totalEvents: items.length, clashes: clashes, capacity: null
-        };
-      }
     });
+  }
+
+  function searchModule(opts) {
+    var btid = bookingTypeId();
+    if (!btid) return Promise.reject(new Error('No booking type in the URL. Open a /app/booking-types/<id> page first.'));
+    if (!auth.headers) return Promise.reject(new Error('No API session captured yet. Click something in the booking app first, then try again.'));
+
+    var allDates = datesInRange(opts.from, opts.to, [0, 1, 2, 3, 4, 5, 6]);
+    var code = opts.module.toUpperCase();
+
+    run.status('Listing rooms…');
+    return poolFor(btid, { query: opts.query, minCapacity: 0, buildings: opts.buildings, ordinaryOnly: false })
+      .then(function (p) {
+        run.status('Searching ' + p.rooms.length + ' rooms for ' + code + '…');
+        return fetchBusy(btid, p.rooms, opts, keySet(allDates)).then(function (results) {
+          var found = results.filter(Boolean);
+          var byId = {}, events = [];
+          found.forEach(function (r) {
+            byId[r.identity] = r;
+            Object.keys(r.byDate).forEach(function (d) {
+              r.byDate[d].forEach(function (iv) {
+                if ((iv.name || '').toUpperCase().indexOf(code) !== -1) {
+                  events.push({ date: d, from: iv.from, to: iv.to, name: iv.name, roomId: r.identity, roomName: r.name });
+                }
+              });
+            });
+          });
+          var patterns = URF.analyse.modulePattern(events, byId, allDates);
+          return { mode: 'module', module: code, patterns: patterns, events: events, scanned: p.rooms.length, allDates: allDates };
+        });
+      });
   }
 
   // ---------------------------------------------------------------------- UI
@@ -440,7 +476,7 @@
   var CSS = [
     ':host{all:initial}',
     '*{box-sizing:border-box;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}',
-    '.panel{position:fixed;top:16px;right:16px;width:440px;max-height:calc(100vh - 32px);',
+    '.panel{position:fixed;top:16px;right:16px;width:470px;max-height:calc(100vh - 32px);',
     'display:flex;flex-direction:column;background:#fff;color:#111;border:1px solid #c8ccd4;',
     'border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.22);z-index:2147483647;font-size:13px}',
     '.head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #e6e8ec;',
@@ -448,6 +484,8 @@
     '.head h1{margin:0;font-size:13px;font-weight:600;flex:1}',
     '.head button{border:0;background:transparent;font-size:16px;cursor:pointer;color:#666;padding:2px 6px}',
     '.body{padding:12px;overflow:auto}',
+    'textarea{width:100%;min-height:58px;padding:7px 9px;border:1px solid #c8ccd4;border-radius:6px;',
+    'font-size:13px;resize:vertical;background:#fff;color:#111;line-height:1.45}',
     '.row{display:flex;gap:8px;margin-bottom:8px;align-items:center}',
     '.row label{width:104px;flex:none;color:#444}',
     'input[type=text],input[type=number],input[type=date]{flex:1;min-width:0;padding:5px 7px;',
@@ -458,34 +496,54 @@
     '.days button.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff}',
     '.check{display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#444}',
     '.go{width:100%;padding:8px;border:0;border-radius:6px;background:#1d4ed8;color:#fff;',
-    'font-size:13px;font-weight:600;cursor:pointer;margin-top:4px}',
+    'font-size:13px;font-weight:600;cursor:pointer;margin-top:8px}',
     '.go[disabled]{background:#94a3b8;cursor:default}',
+    'details{margin-top:10px}',
+    'summary{cursor:pointer;color:#667;font-size:12px;padding:3px 0}',
     '.status{margin-top:10px;padding:7px 9px;background:#f1f5f9;border-radius:5px;color:#334155;font-size:12px}',
     '.status.err{background:#fee2e2;color:#991b1b}',
-    'table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}',
+    '.read{margin-top:10px;padding:8px 10px;background:#eff6ff;border-left:3px solid #1d4ed8;',
+    'border-radius:0 5px 5px 0;font-size:12px;color:#1e3a5f;line-height:1.55}',
+    '.read b{display:block;margin-bottom:2px}',
+    '.read .warn{color:#92400e;margin-top:4px}',
+    '.summary{margin-top:12px;font-size:13px;line-height:1.6;color:#1f2430}',
+    '.summary p{margin:0 0 7px}',
+    '.summary p:first-child{font-weight:600}',
+    '.alts{margin-top:12px;border-top:1px solid #e6e8ec;padding-top:9px}',
+    '.alts h2{margin:0 0 6px;font-size:11px;text-transform:uppercase;color:#667;font-weight:600}',
+    '.alt{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;font-size:12px;line-height:1.5}',
+    '.alt span{flex:1;color:#333}',
+    '.alt button{flex:none;padding:3px 9px;border:1px solid #1d4ed8;background:#fff;color:#1d4ed8;',
+    'border-radius:5px;font-size:11px;cursor:pointer;white-space:nowrap}',
+    'table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}',
     'th,td{text-align:left;padding:5px 4px;border-bottom:1px solid #eceef1;vertical-align:top}',
     'th{color:#667;font-weight:600;font-size:11px;text-transform:uppercase}',
     'td a{color:#1d4ed8}',
     '.free td:first-child{font-weight:600}',
     '.note{margin-top:10px;font-size:11px;color:#667;line-height:1.5}',
-    '.note details{margin-top:5px}',
-    '.note summary{cursor:pointer}',
     '.launch{position:fixed;bottom:18px;right:18px;z-index:2147483647;padding:9px 14px;border:0;',
     'border-radius:20px;background:#1d4ed8;color:#fff;font-size:13px;font-weight:600;cursor:pointer;',
     'box-shadow:0 4px 14px rgba(0,0,0,.25)}',
     '@media (prefers-color-scheme:dark){',
     '.panel{background:#161a20;color:#e6e8ec;border-color:#2c313a}',
     '.head{background:#1d222a;border-color:#2c313a}',
-    '.row label,.check,th{color:#98a2b3}',
-    'input[type=text],input[type=number],input[type=date]{background:#0f1319;color:#e6e8ec;border-color:#2c313a}',
+    '.row label,.check,th,summary{color:#98a2b3}',
+    'textarea,input[type=text],input[type=number],input[type=date]{background:#0f1319;color:#e6e8ec;border-color:#2c313a}',
     '.days button{background:#0f1319;color:#98a2b3;border-color:#2c313a}',
     '.status{background:#1d222a;color:#c3c9d4}',
     '.status.err{background:#3b1215;color:#fca5a5}',
+    '.read{background:#13233d;color:#cbd9ee}',
+    '.read .warn{color:#fcd34d}',
+    '.summary{color:#e6e8ec}',
+    '.alt span{color:#c3c9d4}',
+    '.alt button{background:#0f1319;border-color:#3b82f6;color:#93c5fd}',
+    '.alts{border-color:#2c313a}',
     'th,td{border-color:#2c313a}',
     '.note{color:#7d8797}}'
   ].join('');
 
   var DAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  var EXAMPLE = 'rooms seating 45+ in BC or BD free 12:15–13:15 every Monday from 28 Sep to 7 Dec';
 
   function el(tag, attrs, kids) {
     var node = document.createElement(tag);
@@ -514,19 +572,22 @@
     var today = new Date().toISOString().slice(0, 10);
     var selected = [1];
 
-    var fQuery = el('input', { type: 'text', value: 'B_', placeholder: 'B_ / C_ / M_' });
+    var fPrompt = el('textarea', { placeholder: 'e.g. ' + EXAMPLE });
+    var fQuery = el('input', { type: 'text', value: 'B_' });
     var fBuildings = el('input', { type: 'text', placeholder: 'e.g. BC, BD — blank for all' });
     var fCapacity = el('input', { type: 'number', min: '0', placeholder: 'e.g. 45' });
     var fFrom = el('input', { type: 'date', value: today });
     var fTo = el('input', { type: 'date', value: addDays(today, 70) });
-    var fSlotFrom = el('input', { type: 'text', value: '12:15', placeholder: 'HH:MM' });
-    var fSlotTo = el('input', { type: 'text', value: '13:15', placeholder: 'HH:MM' });
+    var fSlotFrom = el('input', { type: 'text', value: '12:15' });
+    var fSlotTo = el('input', { type: 'text', value: '13:15' });
     var fMiss = el('input', { type: 'number', min: '0', value: '2' });
+    var fModule = el('input', { type: 'text', placeholder: 'blank unless looking one up' });
     var fOrdinary = el('input', { type: 'checkbox' });
     fOrdinary.checked = true;
     var fPending = el('input', { type: 'checkbox' });
     fPending.checked = true;
 
+    var dayButtons = [];
     var dayBox = el('div', { class: 'days' });
     DAY_NAMES.forEach(function (n, i) {
       var b = el('button', { text: n });
@@ -536,117 +597,217 @@
         if (at === -1) { selected.push(i); b.className = 'on'; }
         else { selected.splice(at, 1); b.className = ''; }
       });
+      dayButtons.push(b);
       dayBox.appendChild(b);
     });
-
-    function row(label, node) {
-      return el('div', { class: 'row' }, [el('label', { text: label }), node]);
+    function setDays(days) {
+      selected = days.slice();
+      dayButtons.forEach(function (b, i) { b.className = days.indexOf(i) !== -1 ? 'on' : ''; });
     }
+
+    function row(label, node) { return el('div', { class: 'row' }, [el('label', { text: label }), node]); }
     function pairRow(label, a, b) {
       return el('div', { class: 'row' }, [el('label', { text: label }), a, el('span', { text: 'to' }), b]);
     }
 
-    var go = el('button', { class: 'go', text: 'Search' });
-    var status = el('div', { class: 'status', text: 'Ready.' });
-    var out = el('div');
-
-    var body = el('div', { class: 'body' }, [
+    var form = el('div', {}, [
       row('Campus prefix', fQuery),
       row('Buildings', fBuildings),
       row('Min capacity', fCapacity),
       pairRow('Dates', fFrom, fTo),
       row('Weekdays', dayBox),
       pairRow('Time', fSlotFrom, fSlotTo),
-      row('Show up to N clashes', fMiss),
+      row('Max clashes', fMiss),
+      row('Module code', fModule),
       el('div', { class: 'check' }, [fOrdinary, el('span', { text: 'Ordinary teaching rooms only (exclude labs/studios)' })]),
-      el('div', { class: 'check' }, [fPending, el('span', { text: 'Count pending booking requests as busy' })]),
-      go, status, out
+      el('div', { class: 'check' }, [fPending, el('span', { text: 'Count pending booking requests as busy' })])
     ]);
+    var refine = el('details');
+    refine.appendChild(el('summary', { text: 'Refine by hand' }));
+    refine.appendChild(form);
 
+    var go = el('button', { class: 'go', text: 'Search' });
+    var readBack = el('div');
+    var status = el('div', { class: 'status', text: 'Ask in your own words, or open "Refine by hand".' });
+    var out = el('div');
+
+    var body = el('div', { class: 'body' }, [fPrompt, go, readBack, refine, status, out]);
     var close = el('button', { text: '×', title: 'Close' });
     panel.appendChild(el('div', { class: 'head' }, [el('h1', { text: 'Ulster Room Finder' }), close]));
     panel.appendChild(body);
 
-    close.addEventListener('click', function () {
-      panel.style.display = 'none';
-      launcher.style.display = '';
-    });
-    launcher.addEventListener('click', function () {
-      panel.style.display = '';
-      launcher.style.display = 'none';
-    });
+    close.addEventListener('click', function () { panel.style.display = 'none'; launcher.style.display = ''; });
+    launcher.addEventListener('click', function () { panel.style.display = ''; launcher.style.display = 'none'; });
 
     run.status = function (msg) { status.className = 'status'; status.textContent = msg; };
     function fail(msg) { status.className = 'status err'; status.textContent = msg; }
 
-    var busy = false;
-    go.addEventListener('click', function () {
-      if (busy) { run.cancelled = true; return; }
-      out.innerHTML = '';
+    function toForm(q) {
+      fQuery.value = q.query;
+      fBuildings.value = q.buildings.join(', ');
+      fCapacity.value = q.minCapacity || '';
+      fFrom.value = q.from;
+      fTo.value = q.to;
+      setDays(q.weekdays);
+      fSlotFrom.value = hhmm(q.slotFrom);
+      fSlotTo.value = hhmm(q.slotTo);
+      fMiss.value = q.maxClashes;
+      fModule.value = q.module || '';
+      fOrdinary.checked = q.ordinaryOnly;
+      fPending.checked = q.includePending;
+    }
 
-      var slotFrom = parseHHMM(fSlotFrom.value), slotTo = parseHHMM(fSlotTo.value);
-      if (slotFrom === null || slotTo === null || slotTo <= slotFrom) {
-        return fail('Give a start and end time as HH:MM, with the end after the start.');
-      }
-      if (!selected.length) return fail('Pick at least one weekday.');
-
-      var opts = {
+    function fromForm() {
+      var a = parseHHMM(fSlotFrom.value), b = parseHHMM(fSlotTo.value);
+      if (a === null || b === null || b <= a) throw new Error('Give times as HH:MM, with the end after the start.');
+      if (!selected.length) throw new Error('Pick at least one weekday.');
+      var campus = { 'B_': 'Belfast', 'C_': 'Coleraine', 'M_': 'Derry/Londonderry' }[fQuery.value.trim().toUpperCase()];
+      return {
+        mode: fModule.value.trim() ? 'module' : 'availability',
+        module: fModule.value.trim().toUpperCase(),
         query: fQuery.value.trim(),
+        campusName: campus || 'this campus',
         buildings: fBuildings.value.split(/[,\s]+/).filter(Boolean),
         minCapacity: +fCapacity.value || 0,
         from: fFrom.value, to: fTo.value,
         weekdays: selected.slice(),
-        slotFrom: slotFrom, slotTo: slotTo,
+        slotFrom: a, slotTo: b,
         maxClashes: Math.max(0, +fMiss.value || 0),
         ordinaryOnly: fOrdinary.checked,
         includePending: fPending.checked
       };
+    }
 
+    // The parser is rule-based, so it will sometimes read a question wrongly. Showing
+    // its reading back, in words, is what makes that visible instead of silent.
+    function showReading(q) {
+      readBack.innerHTML = '';
+      if (!q) return;
+      var box = el('div', { class: 'read' }, [el('b', { text: 'Read as:' })]);
+      var bits = q.read.slice();
+      if (q.campusAssumed) bits.push('Belfast assumed — no campus named');
+      box.appendChild(el('div', { text: bits.join(' · ') }));
+      if (q.leftover) {
+        box.appendChild(el('div', { class: 'warn', text: 'Ignored: "' + q.leftover + '" — check the fields below if that mattered.' }));
+      }
+      readBack.appendChild(box);
+    }
+
+    var busy = false, lastOpts = null;
+
+    function start(opts) {
+      out.innerHTML = '';
+      lastOpts = opts;
       busy = true;
       run.cancelled = false;
       go.textContent = 'Stop';
-      search(opts).then(function (res) {
-        render(out, res, opts);
-        run.status('Done — ' + res.scanned + ' rooms checked across ' + res.dates.length + ' dates.');
+      var job = opts.mode === 'module' ? searchModule(opts) : search(opts);
+      job.then(function (res) {
+        if (res.mode === 'module') renderModule(out, res, opts, rerun);
+        else {
+          render(out, res, opts, rerun);
+          run.status('Done — ' + res.scanned + ' rooms checked across ' + res.dates.length + ' dates.');
+        }
       }).catch(function (e) {
         fail(e && e.message ? e.message : String(e));
       }).then(function () {
         busy = false;
         go.textContent = 'Search';
       });
+    }
+
+    function rerun(apply) {
+      var opts = Object.assign({}, lastOpts, apply);
+      toForm(Object.assign({}, opts, { module: opts.module || '' }));
+      start(opts);
+    }
+
+    go.addEventListener('click', function () {
+      if (busy) { run.cancelled = true; return; }
+      try {
+        var text = fPrompt.value.trim();
+        var opts;
+        if (text) {
+          var q = URF.parse(text, new Date().toISOString().slice(0, 10));
+          if (q.mode === 'module') q.weekdays = [0, 1, 2, 3, 4, 5, 6];
+          showReading(q);
+          toForm(q);
+          opts = fromForm();
+          opts.mode = q.mode;
+          opts.module = q.module || '';
+          opts.campusName = q.campusName;
+        } else {
+          showReading(null);
+          opts = fromForm();
+        }
+        start(opts);
+      } catch (e) {
+        fail(e.message);
+      }
+    });
+
+    fPrompt.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) go.click();
     });
 
     return root;
   }
 
-  function render(out, res, opts) {
+  // ------------------------------------------------------------------ render
+
+  function roomLink(room, btid, date) {
+    var a = el('a', { text: room.name, target: '_blank' });
+    a.href = location.origin + '/app/booking-types/' + btid + '/resources/' + room.identity + '?date=' + date;
+    return a;
+  }
+
+  function renderAlternatives(out, alts, rerun) {
+    if (!alts.length) return;
+    var box = el('div', { class: 'alts' }, [el('h2', { text: 'What would open it up' })]);
+    alts.forEach(function (a) {
+      var line = el('div', { class: 'alt' }, [el('span', { text: a.text + (a.needsRefetch ? ' (searches again)' : '') })]);
+      if (a.apply) {
+        var b = el('button', { text: a.needsRefetch ? 'Search' : 'Use it' });
+        b.addEventListener('click', function () { rerun(a.apply); });
+        line.appendChild(b);
+      }
+      box.appendChild(line);
+    });
+    out.appendChild(box);
+  }
+
+  function render(out, res, opts, rerun) {
     out.innerHTML = '';
     var btid = bookingTypeId();
+    var alts = URF.analyse.alternatives(res, opts);
+
+    var summary = el('div', { class: 'summary' });
+    URF.analyse.summarise(res, opts, alts).forEach(function (line) {
+      summary.appendChild(el('p', { text: line }));
+    });
+    out.appendChild(summary);
+
     var clean = res.report.filter(function (x) { return x.clashes.length === 0; });
     var near = res.report.filter(function (x) { return x.clashes.length > 0; });
-
-    function link(room, date) {
-      var a = el('a', { text: room.name, target: '_blank' });
-      a.href = location.origin + '/app/booking-types/' + btid + '/resources/' +
-        room.identity + '?date=' + date;
-      return a;
-    }
 
     function table(title, rows) {
       if (!rows.length) return;
       out.appendChild(el('div', { class: 'note', html: '<b>' + title + '</b>' }));
-      var t = el('table');
-      var tb = el('tbody');
+      var t = el('table'), tb = el('tbody');
       t.appendChild(tb);
-      tb.appendChild(el('tr', {}, [
-        el('th', { text: 'Room' }), el('th', { text: 'Seats' }), el('th', { text: 'Clashes' })
-      ]));
+      tb.appendChild(el('tr', {}, [el('th', { text: 'Room' }), el('th', { text: 'Seats' }), el('th', { text: 'Pattern' })]));
       rows.forEach(function (x) {
-        var detail = x.clashes.length
-          ? x.clashes.map(function (c) { return c.date + ' (' + c.what + ' ' + c.when + ')'; }).join('; ')
-          : 'free on all ' + res.dates.length;
+        var shape = URF.analyse.clashShape(x.clashes, res.dates);
+        var detail = shape.text;
+        if (x.clashes.length) {
+          detail += ' — ' + x.clashes.map(function (c) {
+            return URF.analyse.nice(c.date) + ': ' + c.what + ' ' + c.when;
+          }).join('; ');
+          var runInfo = URF.analyse.longestFreeRun(x.clashes, res.dates);
+          if (runInfo && runInfo.length > 1) detail += '. Longest clear stretch: ' + runInfo.text;
+        }
         var tr = el('tr', { class: x.clashes.length ? '' : 'free' });
-        tr.appendChild(el('td', {}, [link(x, res.dates[0])]));
+        tr.appendChild(el('td', {}, [roomLink(x, btid, res.dates[0])]));
         tr.appendChild(el('td', { text: x.capacity == null ? '?' : String(x.capacity) }));
         tr.appendChild(el('td', { text: detail }));
         tb.appendChild(tr);
@@ -656,19 +817,12 @@
 
     table('Free on every date', clean);
     table('Near misses', near);
+    renderAlternatives(out, alts, rerun);
 
-    if (!clean.length && !near.length) {
-      out.appendChild(el('div', { class: 'note', text: 'Nothing within ' + opts.maxClashes + ' clashes. Raise that number, widen the buildings, or drop the capacity floor.' }));
-    }
-
-    var notes = el('div', { class: 'note' });
-    notes.appendChild(el('div', {
-      text: 'Slot ' + hhmm(opts.slotFrom) + '–' + hhmm(opts.slotTo) + ' on ' + res.dates.length +
-        ' dates, ' + res.dates[0] + ' to ' + res.dates[res.dates.length - 1] +
-        '. Times are Europe/London. Spot-check two rooms in the app before you rely on this — ' +
+    var notes = el('div', { class: 'note' }, [el('div', {
+      text: 'Times are Europe/London. Spot-check two rooms in the app before relying on this — ' +
         'one date in BST and one after the October clock change.'
-    }));
-
+    })]);
     function disclosure(label, names) {
       if (!names.length) return;
       var d = el('details');
@@ -678,22 +832,68 @@
     }
     disclosure('Excluded as labs/studios/specialist', res.dropped.specialist);
     disclosure('Excluded as shells, duplicates or out of service', res.dropped.junk);
-    disclosure('Skipped: no events at all in this period, so probably shell records', res.shells.map(function (x) { return x.name; }));
-
+    disclosure('Skipped: no events at all, so probably shell records', res.shells.map(function (x) { return x.name; }));
     out.appendChild(notes);
 
     var copy = el('button', { class: 'go', text: 'Copy as text' });
     copy.addEventListener('click', function () {
-      var lines = ['Free ' + hhmm(opts.slotFrom) + '-' + hhmm(opts.slotTo) + ', ' + res.dates.length + ' dates (' + res.dates[0] + ' to ' + res.dates[res.dates.length - 1] + ')', ''];
+      var lines = URF.analyse.summarise(res, opts, alts).slice();
+      lines.push('');
       clean.forEach(function (x) { lines.push('* ' + x.name + ' (' + (x.capacity == null ? '?' : x.capacity) + ') — free on all ' + res.dates.length); });
       if (near.length) lines.push('', 'Near misses:');
       near.forEach(function (x) {
-        lines.push('* ' + x.name + ' (' + (x.capacity == null ? '?' : x.capacity) + ') — busy ' +
-          x.clashes.map(function (c) { return c.date + ' ' + c.what; }).join('; '));
+        lines.push('* ' + x.name + ' (' + (x.capacity == null ? '?' : x.capacity) + ') — ' +
+          URF.analyse.clashShape(x.clashes, res.dates).text);
       });
+      if (alts.length) {
+        lines.push('', 'Alternatives:');
+        alts.forEach(function (a) { lines.push('* ' + a.text); });
+      }
       navigator.clipboard.writeText(lines.join('\n')).then(function () { copy.textContent = 'Copied'; });
     });
     out.appendChild(copy);
+  }
+
+  function renderModule(out, res, opts, rerun) {
+    out.innerHTML = '';
+    var btid = bookingTypeId();
+    var summary = el('div', { class: 'summary' });
+    URF.analyse.summariseModule(res.module, res.patterns).forEach(function (line) {
+      summary.appendChild(el('p', { text: line }));
+    });
+    out.appendChild(summary);
+
+    (res.patterns || []).slice(0, 3).forEach(function (p) {
+      var t = el('table'), tb = el('tbody');
+      t.appendChild(tb);
+      tb.appendChild(el('tr', {}, [el('th', { text: 'Date' }), el('th', { text: 'Status' })]));
+      var present = {};
+      p.occurrences.forEach(function (d) { present[d] = true; });
+      p.candidates.forEach(function (d, i) {
+        var gap = p.gaps.filter(function (g) { return g.date === d; })[0];
+        var status = present[d] ? 'scheduled here'
+          : gap && gap.free ? 'NOT scheduled — room is free (pattern gap)'
+            : 'NOT scheduled — room taken by ' + (gap ? gap.blockedBy + ' ' + gap.when : '?');
+        var tr = el('tr', { class: present[d] ? '' : 'free' });
+        var cell = el('td');
+        cell.appendChild(el('span', { text: URF.analyse.nice(d) + ' ' }));
+        var a = el('a', { text: '(open)', target: '_blank' });
+        a.href = location.origin + '/app/booking-types/' + btid + '/resources/' + p.roomId + '?date=' + d;
+        cell.appendChild(a);
+        tr.appendChild(cell);
+        tr.appendChild(el('td', { text: status }));
+        tb.appendChild(tr);
+      });
+      out.appendChild(el('div', { class: 'note', html: '<b>' + p.roomName + '</b>' }));
+      out.appendChild(t);
+    });
+
+    out.appendChild(el('div', {
+      class: 'note',
+      text: 'Week numbers are deliberately not shown: these are counted from the dates in ' +
+        'range, not from any institutional calendar. Match them to your own numbering. ' +
+        res.scanned + ' rooms searched.'
+    }));
   }
 
   if (document.readyState === 'loading') {
