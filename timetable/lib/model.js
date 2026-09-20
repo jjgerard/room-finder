@@ -237,6 +237,16 @@ function load(dir, opts) {
     roomSubjects.get(c.homeRoom).add(subj);
   }
 
+  // A class's "size" is the capacity of the room it sits in today, not a real
+  // headcount (only 17 of 1,556 rows carry one). Timetabling's working
+  // assumption is that rooms are generally matched to their cohorts, so the
+  // number is usable — but it is an estimate, so a 10% tolerance applies. A
+  // class nominally of 90 may use an 81-seat room. Without that, sizes are
+  // quantised to the capacity ladder (90, 158, 215, 250, 350) and every class
+  // on a rung competes for exactly the rooms on that rung and above.
+  const CAPACITY_TOLERANCE = 0.9;
+  const needSeats = size => Math.ceil(size * CAPACITY_TOLERANCE);
+
   const openRooms = opts.openRooms === undefined ? ['computer'] : opts.openRooms;
   const rebuild = opts.rebuildCandidates !== false;
   const sourceCand = new Map(classes.map(c => [c.id, c.cand.slice()]));
@@ -263,8 +273,10 @@ function load(dir, opts) {
         // ever held classes of unknown size, so nothing suggests they seat a
         // soul. Treating the blank as permissive moved a 350-seat lecture into
         // a design studio and 205 others like it. A class that needs seats
-        // therefore needs a room recorded as having them.
-        if (c.size > 0 && !(room.capacityKnown && room.capacity >= c.size)) continue;
+        // therefore needs a room recorded as having them — give or take the
+        // tolerance below, since the number is an estimate of a headcount, not
+        // a headcount.
+        if (c.size > 0 && !(room.capacityKnown && room.capacity >= needSeats(c.size))) continue;
         allowed.push(room.id);
       }
       if (c.homeRoom != null && !allowed.includes(c.homeRoom)) allowed.push(c.homeRoom);

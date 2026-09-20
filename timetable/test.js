@@ -241,7 +241,10 @@ test('rooms: a class that needs seats is only offered rooms recorded as having t
       const r = model.rooms[id];
       assert.ok(r.capacityKnown, (c.module || c.activity) + ' (' + c.size +
         ' students) offered ' + r.name + ', which has no recorded capacity');
-      assert.ok(r.capacity >= c.size,
+      // Sizes are the current room's capacity standing in for a headcount, so
+      // a 10% tolerance applies: a class nominally of 90 may use an 81-seat
+      // room. Anything tighter than that is a room it does not fit in.
+      assert.ok(r.capacity >= Math.ceil(c.size * 0.9),
         (c.module || c.activity) + ' (' + c.size + ') offered ' + r.name + ' (' + r.capacity + ')');
     }
   }
@@ -615,6 +618,75 @@ test('solver: makes the timetable substantially better', () => {
   // not "converged". A real solve uses hundreds of thousands and many restarts.
   assert.ok(s.totalHard() < before * 0.7,
     `expected a clear drop on a small budget, got ${before} -> ${s.totalHard()}`);
+});
+
+test('solver: repacking rooms changes rooms and nothing else', () => {
+  // The whole safety of the repack pass is that it cannot disturb anything
+  // that depends on time: contiguity, cohort clashes, the teaching day.
+  const s = new Solver(model, Object.assign({ seed: 11, repack: false }, TEST_BUDGET));
+  s.run();
+  const before = s.assignment();
+  s.repackRooms();
+  const after = s.assignment();
+  for (const c of model.classes) {
+    eq(after.get(c.id).day, before.get(c.id).day, (c.module || c.id) + ' changed day');
+    eq(after.get(c.id).start, before.get(c.id).start, (c.module || c.id) + ' changed time');
+  }
+});
+
+test('solver: repacking leaves every class in a room it may use', () => {
+  const s = new Solver(model, Object.assign({ seed: 12, repack: false }, TEST_BUDGET));
+  s.run();
+  s.repackRooms();
+  const a = s.assignment();
+  for (const c of model.classes) {
+    const r = a.get(c.id).room;
+    assert.ok(c.cand.includes(r) || r === c.origRoom,
+      (c.module || c.id) + ' repacked into a room it may not use');
+  }
+});
+
+test('solver: a pinned booking is never repacked out of its room', () => {
+  const s = new Solver(model, Object.assign({ seed: 13, repack: false }, TEST_BUDGET));
+  s.repackRooms();
+  const a = s.assignment();
+  for (const c of model.classes) if (c.isFixed) eq(a.get(c.id).room, c.origRoom);
+});
+
+test('solver: a room swap exchanges two rooms and moves no clock', () => {
+  const s = new Solver(model, Object.assign({ seed: 14 }, TEST_BUDGET));
+  s.run();
+  const before = s.assignment();
+  for (const id of s.violatingClasses().slice(0, 40)) s.tryRoomSwap(id);
+  const after = s.assignment();
+  for (const c of model.classes) {
+    eq(after.get(c.id).day, before.get(c.id).day);
+    eq(after.get(c.id).start, before.get(c.id).start);
+  }
+});
+
+test('solver: the endgame search never makes the timetable worse', () => {
+  // intensify() deliberately wrecks a region before rebuilding it, so the
+  // guarantee that matters is that a failed attempt is rolled back.
+  const s = new Solver(model, Object.assign({ seed: 15 }, TEST_BUDGET));
+  s.run();
+  const before = s.totalHard();
+  const after = s.intensify(6);
+  assert.ok(after <= before, `intensify made it worse: ${before} -> ${after}`);
+  eq(after, s.totalHard());
+});
+
+test('solver: a scattered start still lands inside the teaching day', () => {
+  const { STARTS } = require('./lib/solver');
+  const s = new Solver(model, { seed: 16, start: 'scatter', maxIters: 0 });
+  const a = s.assignment();
+  for (const c of model.classes) {
+    if (c.isFixed) continue;
+    const p = a.get(c.id);
+    assert.ok(p.start >= 9 * 60 + 15, (c.module || c.id) + ' scattered before 09:15');
+    assert.ok(p.day >= 0 && p.day <= 4, (c.module || c.id) + ' scattered off the week');
+  }
+  eq(STARTS.length, 8);
 });
 
 test('solver: never sends block teaching offsite', () => {

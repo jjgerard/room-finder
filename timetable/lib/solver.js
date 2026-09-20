@@ -47,6 +47,11 @@ class Solver {
     this.model = model;
     this.opts = Object.assign({
       seed: 12345,
+      // 'current' starts from today's timetable; 'scatter' throws every
+      // movable component at a random legal slot and room. Keeping today's
+      // times is the lowest priority of all, so when a start anchored to them
+      // plateaus short of clean, the anchor is what goes.
+      start: 'current',
       maxIters: 400000,
       stallLimit: 120,   // rounds without improvement before giving up
       noise: 0.12,          // chance of taking a random repair instead of the best
@@ -56,6 +61,12 @@ class Solver {
       wOutside: 30,         // soft: outside 09:15-18:15 altogether
       wWedPm: 0,            // soft: Wednesday afternoon (off unless asked for)
       wSpread: 8,           // soft: gap-day in a cohort's week
+      // Scarcity: a seat left empty in a big room is a seat denied to the class
+      // that needs it. Belfast has one room over 250 seats and three over 160,
+      // so a 160-seat class parked in the 350-seat theatre does not merely
+      // waste space — it is the reason the 350-seat lecture has nowhere to go.
+      // Weighted per seat so the search prefers the smallest room that fits.
+      wWaste: 0.05,
       wMoveDay: 6,          // movement: changed day
       wMoveTime: 3,         // movement: changed time
       wMoveRoom: 1,         // movement: changed room
@@ -140,6 +151,33 @@ class Solver {
       comp.day = comp.origDay;
       comp.start = comp.origStart;
       if (comp.members.length > 1) this.moveComponent(comp, comp.origDay, comp.origStart);
+    }
+    if (this.opts.start === 'scatter') this.scatter();
+  }
+
+  /**
+   * Throw every movable component at a random legal slot, and every class into
+   * a random room it may use.
+   *
+   * Starting from today's timetable inherits today's pile-ups: 557 bookings at
+   * 09:15, and every big lecture already stacked on the handful of rooms that
+   * can hold it. Min-conflicts repairs locally, so it cannot undo a bad global
+   * shape — it can only shuffle within it. Scattering gives up the free
+   * "nothing moved" head start in exchange for a search that is not trapped by
+   * the arrangement it is asked to fix.
+   */
+  scatter() {
+    for (const comp of this.components) {
+      if (comp.fixed) continue;
+      const wide = comp.span > DAY_WIDTH;
+      const d = Math.floor(this.rand() * DAY_COUNT);
+      const legal = wide ? [DAY_START] : STARTS.filter(s => s + comp.span <= HARD_MAX);
+      if (!legal.length) continue;
+      this.moveComponent(comp, d, legal[Math.floor(this.rand() * legal.length)]);
+      for (const m of comp.members) {
+        const choices = this.roomChoices(m.cls.id);
+        if (choices.length) this.setRoom(m.cls.id, choices[Math.floor(this.rand() * choices.length)]);
+      }
     }
   }
 
@@ -260,6 +298,10 @@ class Solver {
       if (!cls.windowExempt && s + this.dur[id] > HARD_MAX) v += o.wOutside;
       if (o.wWedPm && d === 2 && s >= 13 * 60) v += o.wWedPm;
     }
+    const room = this.model.rooms[this.room[id]];
+    if (o.wWaste && room && room.capacityKnown && room.capacity > cls.size) {
+      v += o.wWaste * (room.capacity - Math.max(cls.size, 0));
+    }
     if (d !== cls.origDay) v += o.wMoveDay;
     if (s !== cls.origStart) v += o.wMoveTime;
     if (this.room[id] !== cls.origRoom) v += o.wMoveRoom;
@@ -298,11 +340,17 @@ class Solver {
   }
 
   /** Try to repair `id` by moving only its room. Returns true if it improved. */
-  tryRoomRepair(id) {
+  tryRoomRepair(id, force) {
     if (this.model.byId.get(id).isFixed) return false;
     const before = this.costOf([id]);
     const cur = this.room[id];
-    let best = null, bestScore = before.hard * 1000 + before.soft;
+    // `force` takes the least-bad room even when it is no better than the one
+    // held, which starts an ejection chain: the class displaced by the move is
+    // itself a violation next round, and gets its own turn. Without it a class
+    // whose every room is occupied has no room move at all, and the search has
+    // to reach for the much blunter instrument of moving its whole group to
+    // another day.
+    let best = null, bestScore = force ? Infinity : before.hard * 1000 + before.soft;
     const choices = this.roomChoices(id);
     for (const r of choices) {
       if (r === cur) continue;
@@ -316,6 +364,56 @@ class Solver {
     }
     if (best !== null) { this.setRoom(id, best); return true; }
     return false;
+  }
+
+  /**
+   * Try to repair `id` by EXCHANGING rooms with a class it clashes with, or
+   * with one sitting in a room it wants.
+   *
+   * Moving one class needs a free room. At the top of the capacity ladder there
+   * are none: 19 classes need 315+ seats and Belfast has one room that size, so
+   * every big room is busy whenever a big lecture is looking. A swap needs no
+   * free room, only two classes each able to use the other's — which is common,
+   * because "too big" never disqualifies a room, only "too small" does.
+   */
+  tryRoomSwap(id) {
+    const cls = this.model.byId.get(id);
+    if (cls.isFixed) return false;
+    const d = this.day[id], s = this.start[id], du = this.dur[id], w = this.weeks[id];
+    const mine = this.room[id];
+    const mySet = this.candSet.get(id);
+
+    // Partners worth trying: whoever sits in a room this class could use, on
+    // this day, overlapping it. Anything else is not what is blocking it.
+    const partners = [];
+    for (const r of this.roomChoices(id)) {
+      if (r === mine) continue;
+      for (const other of this.occ[r * DAY_COUNT + d]) {
+        if (other === id) continue;
+        const o = this.model.byId.get(other);
+        if (o.isFixed) continue;
+        if (!(this.candSet.get(other).has(mine) || o.origRoom === mine)) continue;
+        if (!(s < this.start[other] + this.dur[other] && this.start[other] < s + du)) continue;
+        if (!(w & this.weeks[other])) continue;
+        partners.push(other);
+      }
+    }
+    if (!partners.length) return false;
+
+    const before = this.costOf([id, ...partners]);
+    let best = null, bestScore = before.hard * 1000 + before.soft;
+    for (const other of partners) {
+      const theirs = this.room[other];
+      this.setRoom(id, theirs); this.setRoom(other, mine);
+      const c = this.costOf([id, ...partners]);
+      const score = c.hard * 1000 + c.soft;
+      if (score < bestScore) { bestScore = score; best = other; }
+      this.setRoom(id, mine); this.setRoom(other, theirs);
+    }
+    if (best === null) return false;
+    const theirs = this.room[best];
+    this.setRoom(id, theirs); this.setRoom(best, mine);
+    return true;
   }
 
   /**
@@ -413,9 +511,71 @@ class Solver {
     return placed;
   }
 
+  /**
+   * Re-assign every room from scratch at the times currently held.
+   *
+   * Local repair can only ask "is there a better room for THIS class", and at
+   * the top of the capacity ladder the answer is always no: every big room is
+   * occupied, often by a class that did not need it. Repacking asks the
+   * question the other way round — hardest class first, smallest room that
+   * fits — which is how a human timetabler allocates rooms and what keeps the
+   * three big lecture theatres free for the lectures that cannot go anywhere
+   * else.
+   *
+   * Times are untouched, so nothing that depends on them (contiguity, cohort
+   * clashes, the teaching day) can be disturbed by this pass.
+   */
+  repackRooms(jitter) {
+    const movable = this.model.classes.filter(c => !c.isFixed);
+    // Hardest first: fewest rooms it could use, then biggest, then longest.
+    const noise = new Map();
+    if (jitter) for (const c of movable) noise.set(c.id, this.rand() * 6 - 3);
+    const key = c => this.roomChoices(c.id).length + (noise.get(c.id) || 0);
+    const order = movable.slice().sort((a, b) =>
+      key(a) - key(b) ||
+      b.size - a.size ||
+      b.dur - a.dur);
+
+    // Empty every movable class out of its room first, so an early class is
+    // not blocked by a later one that has not chosen yet.
+    const parked = new Map();
+    for (const c of order) {
+      parked.set(c.id, this.room[c.id]);
+      const bucket = this.occ[this.room[c.id] * DAY_COUNT + this.day[c.id]];
+      const at = bucket.indexOf(c.id);
+      if (at >= 0) bucket.splice(at, 1);
+    }
+
+    for (const c of order) {
+      const id = c.id, d = this.day[id], st = this.start[id], du = this.dur[id], w = this.weeks[id];
+      let best = null, bestScore = Infinity;
+      // Smallest adequate room first: a bigger one is only taken when the
+      // smaller ones are busy.
+      const choices = this.roomChoices(id).slice().sort((x, y) => {
+        const rx = this.model.rooms[x], ry = this.model.rooms[y];
+        const cx = rx.capacityKnown ? rx.capacity : 1e6, cy = ry.capacityKnown ? ry.capacity : 1e6;
+        return cx - cy;
+      });
+      for (const r of choices) {
+        let clashes = 0;
+        for (const other of this.occ[r * DAY_COUNT + d]) {
+          if (this.shares.has(id < other ? id + ':' + other : other + ':' + id)) continue;
+          if (st < this.start[other] + this.dur[other] && this.start[other] < st + du &&
+              (w & this.weeks[other])) clashes++;
+        }
+        if (clashes === 0) { best = r; break; }
+        if (clashes < bestScore) { bestScore = clashes; best = r; }
+      }
+      if (best === null) best = parked.get(id);
+      this.room[id] = best;
+      this.occ[best * DAY_COUNT + d].push(id);
+    }
+  }
+
   run(report) {
     const o = this.opts;
     this.seedWindow();
+    if (o.repack !== false) this.repackRooms();
     let best = this.snapshot(), bestHard = this.totalHard();
     let iter = 0, round = 0, stall = 0;
 
@@ -423,6 +583,11 @@ class Solver {
       let bad = this.violatingClasses();
       if (!bad.length) break;
 
+      // Random order. Repairing the most-constrained class first is the
+      // textbook heuristic and was tried here; it made the plateau worse,
+      // because the repack pass already gives scarce rooms to the classes that
+      // need them, and ordering the repairs on top of that only removed the
+      // variety the restarts depend on.
       for (let i = bad.length - 1; i > 0; i--) {
         const j = Math.floor(this.rand() * (i + 1));
         [bad[i], bad[j]] = [bad[j], bad[i]];
@@ -433,13 +598,14 @@ class Solver {
         if (this.hardOf(id, null) === 0) continue; // an earlier repair got it
         const noisy = this.rand() < o.noise;
         if (!noisy && this.tryRoomRepair(id)) { iter++; continue; }
+        if (!noisy && this.tryRoomSwap(id)) { iter++; continue; }
         if (this.tryTimeRepair(id, 'improve')) { iter++; continue; }
         // Nothing improves it. Take the least-bad slot anyway and let the
         // classes it displaces be repaired next round. A random jump is kept
         // as a rare last resort: applying one to every stuck class scatters
         // the timetable and the search never recovers.
         if (this.tryTimeRepair(id, noisy ? 'random' : 'minconflict')) { iter++; continue; }
-        this.tryRoomRepair(id);
+        this.tryRoomRepair(id, true);
         iter++;
       }
 
@@ -452,11 +618,103 @@ class Solver {
       // Drifting well above the best found wastes the budget — go back and
       // retry from there with different random choices.
       if (hard > bestHard * 1.5 + 10) { this.restore(best); }
+      // A stall means local repair has run out of single moves. Repacking every
+      // room at once is the one step that can cross that plateau, because it
+      // changes hundreds of assignments together rather than one at a time.
+      if (o.repack !== false && stall && stall % 6 === 0) {
+        let before = this.totalHard(), keep = this.snapshot();
+        // Several orders, keeping the best: the tie-breaks among equally hard
+        // classes decide which of them gets the last big room, and there is no
+        // way to know in advance which choice pays.
+        for (let k = 0; k < 3; k++) {
+          this.repackRooms(k > 0);
+          const after = this.totalHard();
+          if (after < before) { before = after; keep = this.snapshot(); }
+          else this.restore(keep);
+        }
+      }
       if (stall > o.stallLimit) break;
     }
 
     if (this.totalHard() > bestHard) this.restore(best);
     return { iters: iter, rounds: round, hard: this.totalHard() };
+  }
+
+  /**
+   * Endgame: ruin the region around each surviving violation and rebuild it.
+   *
+   * Min-conflicts ends up in a state where no single move helps, but a dozen
+   * co-ordinated ones would: four lectures each need the same big room, and
+   * untangling them means moving all four at once. This picks the components
+   * caught up in a violation, plus the ones holding the rooms they want,
+   * scatters that handful at random, and re-runs the ordinary repair on them.
+   * If the result is worse it is thrown away, so the timetable can only
+   * improve — and because the region is small, dozens of attempts cost less
+   * than one more full pass.
+   */
+  intensify(attempts) {
+    let bestHard = this.totalHard();
+    if (bestHard === 0) return bestHard;
+    let best = this.snapshot();
+
+    for (let a = 0; a < (attempts || 60) && bestHard > 0; a++) {
+      // The region: components in violation, and whoever holds the rooms they
+      // could use at the times they are sitting at.
+      const region = new Set();
+      const bad = this.violatingClasses();
+      if (!bad.length) break;
+      // One violation's neighbourhood at a time keeps the region small enough
+      // to search properly; which one is chosen rotates with the attempt.
+      const pick = bad[Math.floor(this.rand() * bad.length)];
+      const seeds = [pick];
+      for (const other of this.timePartners.get(pick)) {
+        if (this.day[other] === this.day[pick]) seeds.push(other);
+      }
+      for (const id of seeds) {
+        region.add(this.compOf[id]);
+        const d = this.day[id], st = this.start[id], du = this.dur[id];
+        for (const r of this.roomChoices(id)) {
+          for (const other of this.occ[r * DAY_COUNT + d]) {
+            if (st < this.start[other] + this.dur[other] && this.start[other] < st + du) {
+              region.add(this.compOf[other]);
+            }
+          }
+        }
+      }
+      const comps = [...region].map(i => this.components[i]).filter(c => !c.fixed);
+      if (comps.length < 2) continue;
+
+      const keep = this.snapshot();
+      // Ruin: scatter the region.
+      for (const comp of comps) {
+        const wide = comp.span > DAY_WIDTH;
+        const legal = wide ? [DAY_START] : STARTS.filter(x => x + comp.span <= HARD_MAX);
+        if (!legal.length) continue;
+        this.moveComponent(comp, Math.floor(this.rand() * DAY_COUNT),
+          legal[Math.floor(this.rand() * legal.length)]);
+      }
+      // Recreate: ordinary repair, but only on the region.
+      const ids = [];
+      for (const comp of comps) for (const m of comp.members) ids.push(m.cls.id);
+      for (let round = 0; round < 12; round++) {
+        let any = false;
+        for (const id of ids) {
+          if (this.hardOf(id, null) === 0) continue;
+          any = true;
+          if (this.tryRoomRepair(id)) continue;
+          if (this.tryRoomSwap(id)) continue;
+          if (this.tryTimeRepair(id, 'improve')) continue;
+          this.tryTimeRepair(id, 'minconflict');
+        }
+        if (!any) break;
+      }
+
+      const now = this.totalHard();
+      if (now < bestHard) { bestHard = now; best = this.snapshot(); }
+      else this.restore(keep);
+    }
+    this.restore(best);
+    return bestHard;
   }
 
   /**

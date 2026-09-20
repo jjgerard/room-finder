@@ -20,6 +20,7 @@ function arg(name, dflt) {
 const SEEDS = Number(arg('seeds', 40));
 const OUT = arg('out', '');
 const CLASHES = arg('clashes', 'all');   // all | evidenced | cohort
+const START = arg('start', 'current');   // current | scatter | mixed
 const CHECK_OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
 
 const model = load(null, { clashes: CLASHES });
@@ -38,8 +39,14 @@ console.log(`today's timetable, judged against the hard rules: ${base.total} vio
 
 let best = null;
 for (let seed = 1; seed <= SEEDS; seed++) {
-  const s = new Solver(model, { seed, maxIters: 200000, noise: 0.03 });
+  // 'mixed' alternates: an anchored start wins when it can, because it moves
+  // far less, and a scattered one is there for when it cannot.
+  const start = START === 'mixed' ? (seed % 2 ? 'current' : 'scatter') : START;
+  const s = new Solver(model, { seed, start, maxIters: 200000, noise: 0.03 });
   s.run();
+  // The endgame: what is left after min-conflicts plateaus needs several
+  // classes moved together, which no single-move search can find.
+  s.intensify(400);
   s.polish(4);
   const a = s.assignment();
   const chk = C.check(model, a, CHECK_OPTS);
@@ -50,7 +57,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   // Hard violations first, then the soft goals, and movement last — the order
   // the constraints were given in.
   const rank = chk.total * 1e6 + soft.edge * 10 + gaps * 8 + moved;
-  const line = `seed ${String(seed).padStart(3)}  hard ${String(chk.total).padStart(3)}  ` +
+  const line = `seed ${String(seed).padStart(3)} ${start.padEnd(7)} hard ${String(chk.total).padStart(3)}  ` +
                `edge ${String(soft.edge).padStart(3)}  gaps ${String(gaps).padStart(3)}  ` +
                `moved ${String(moved).padStart(4)}`;
   if (!best || rank < best.rank) {
