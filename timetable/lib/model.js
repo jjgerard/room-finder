@@ -71,6 +71,30 @@ function load(dir, opts) {
     capacity: Number(r.capacity) || 0,
     capacityKnown: Number(r.capacity) > 0,
   }));
+  // The room inventory mistypes a number of art and design spaces as general.
+  // BB-05-011 "MFA Fine Art Space", BA-03-007 "Interaction Design" and
+  // BB-05-008 "Fine Art AV Edit Suite" are all typed general with no capacity,
+  // which is how a 350-seat lecture came to be offered a design studio.
+  //
+  // Two patterns separate them from real teaching rooms:
+  //   * everything in block BB is specialist;
+  //   * in block BA, an ordinary room is named by its code alone —
+  //     "BA-00-008 (35)" — while a specialist one carries a description:
+  //     "BA-01-002_TADF", "BA-05-005-Media".
+  //
+  // Only rooms currently typed general are reclassified, so theatres and
+  // computer labs keep their type. Once specialist, a room may only take
+  // subjects already scheduled in it, so a reclassified room with no history
+  // is offered to nobody — which is the intended effect.
+  const bareCode = /^B[A-Z]-\d{2}-[\dA-Za-z.]+\s*(\([\d]+\))?\s*$/;
+  let retyped = 0;
+  for (const r of rooms) {
+    if (r.type !== 'general') continue;
+    const isBB = /^BB-/.test(r.name);
+    const isDescribedBA = /^BA-/.test(r.name) && !bareCode.test(r.name);
+    if (isBB || isDescribedBA) { r.type = 'specialist'; r.retyped = true; retyped++; }
+  }
+
   const roomByName = new Map(rooms.map(r => [r.name, r.id]));
 
   // BK rows are one-off room bookings by a named person ("260220/BK/A Gribben"):
@@ -234,7 +258,13 @@ function load(dir, opts) {
           ok = room.type === 'general';
         }
         if (!ok) continue;
-        if (room.capacityKnown && c.size > 0 && room.capacity < c.size) continue;
+        // Capacity. An unrecorded capacity is NOT "fits anyone": of the 138
+        // rooms without one, 81 have never been used and the other 57 have only
+        // ever held classes of unknown size, so nothing suggests they seat a
+        // soul. Treating the blank as permissive moved a 350-seat lecture into
+        // a design studio and 205 others like it. A class that needs seats
+        // therefore needs a room recorded as having them.
+        if (c.size > 0 && !(room.capacityKnown && room.capacity >= c.size)) continue;
         allowed.push(room.id);
       }
       if (c.homeRoom != null && !allowed.includes(c.homeRoom)) allowed.push(c.homeRoom);
@@ -416,7 +446,7 @@ function load(dir, opts) {
     rooms, roomByName, classes, byId,
     cannotShareTime, cannotShareDay, cannotShareDayRaw,
     preservedAdjacency, preservedSlot, examRooms,
-    openRooms, roomSubjects, sourceCand, rebuiltCandidates: rebuild,
+    openRooms, roomSubjects, sourceCand, rebuiltCandidates: rebuild, retypedRooms: retyped,
     mayShareRoom, shareKey,
     clashMode, edgeStats, splitCohorts,
     shadowCount: shadows.length,
