@@ -499,3 +499,34 @@ footer .wrap { padding: 0; }
 /* Method tab sits in a narrower measure than the timetable grid. */
 .narrow-inner { max-width: 780px; }
 .narrow-inner pre { white-space: pre-wrap; }
+
+/* The two-algorithms graphic on the Method tab. Colours come from the page's
+   own tokens so it follows light and dark mode without a second palette. */
+.algo-graphic {
+  margin: 26px 0 30px;
+  padding: 14px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--sh);
+  overflow-x: auto;
+}
+.algo-graphic svg { display: block; width: 100%; min-width: 640px; height: auto; }
+.algo-graphic .g-title { font: 600 15px/1 var(--sans); fill: var(--ink); }
+.algo-graphic .g-sub { font: 12px/1 var(--sans); fill: var(--muted); }
+.algo-graphic .g-label { font: 12px/1 var(--sans); fill: var(--ink); text-anchor: middle; }
+.algo-graphic .g-small { font: 11.5px/1 var(--sans); fill: var(--ink-2); }
+.algo-graphic .g-muted { fill: var(--muted); }
+.algo-graphic .g-box { fill: var(--surface-2); stroke: var(--line); }
+.algo-graphic .g-late { stroke: var(--warn); stroke-dasharray: 4 3; }
+.algo-graphic .g-okbox { stroke: var(--good); }
+.algo-graphic .g-grid { fill: none; stroke: var(--line); stroke-dasharray: 3 3; }
+.algo-graphic .g-fill { fill: var(--accent-weak); stroke: var(--accent); stroke-opacity: .45; }
+.algo-graphic .g-empty { fill: none; stroke: var(--line-2); }
+.algo-graphic .g-clash { fill: var(--warn-weak); stroke: var(--warn); }
+.algo-graphic .g-leftover { fill: var(--warn-weak); stroke: var(--warn); stroke-opacity: .5; }
+.algo-graphic .g-badtext { fill: var(--warn); font-weight: 600; text-anchor: start; }
+.algo-graphic .g-oktext { fill: var(--good); font-weight: 600; }
+.algo-graphic .g-arrow { fill: none; stroke: var(--ink-2); stroke-width: 1.4; color: var(--ink-2); }
+.algo-graphic .g-bad { stroke: var(--warn); color: var(--warn); }
+.algo-graphic .g-loop { stroke: var(--good); color: var(--good); stroke-dasharray: 5 3; }

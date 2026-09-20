@@ -666,19 +666,30 @@
       // A handful of named exceptions is a different thing from a broken
       // timetable, so say which ones and let the reader judge.
       var n = fixed.total;
-      var named = fixed.violations.slice(0, 4).map(function (x) {
+      var named = fixed.violations.slice(0, 5).map(function (x) {
         var A = H.model.byId.get(x.a), B = x.b != null ? H.model.byId.get(x.b) : null;
         return (A.module || A.activity) + '/' + A.activity +
                (B ? ' with ' + (B.module || B.activity) + '/' + B.activity : '') +
                ' (' + x.kind + ')';
       }).join('; ');
-      v.className = n <= 5 ? 'note warn' : 'note warn';
+      // Which rules hold completely is the more useful number: it is the
+      // difference between "a few classes still need a room" and "this
+      // timetable does not work".
+      var held = [], broke = [];
+      Object.keys(fixed.counts).forEach(function (k) {
+        (fixed.counts[k] ? broke : held).push(k);
+      });
+      var now = Cn.check(H.model, H.assign.current, CHECK_OPTS);
+      v.className = 'note warn';
       v.innerHTML = '<p style="margin:0 0 6px"><strong>' +
-        (n === 1 ? 'One class pair could not be placed' : n + ' class pairs could not be placed') +
-        '.</strong> Everything else holds: ' + mv.untouched.toLocaleString() + ' of ' +
-        mv.total.toLocaleString() + ' classes are where they are today, every lecture and seminar is ' +
-        'back-to-back, and nothing runs outside 09:15\u201317:15 except the sessions too long to fit.</p>' +
-        '<p style="margin:0" class="small">Unresolved: ' + esc(named) + '.</p>';
+        (n === 1 ? 'One placement could not be resolved' : n + ' placements could not be resolved') +
+        '</strong>, against ' + now.total.toLocaleString() + ' in the timetable as it stands. ' +
+        held.length + ' of the ' + (held.length + broke.length) + ' hard rules hold outright, ' +
+        'every lecture and seminar is back-to-back, and nothing runs outside 09:15\u201317:15 ' +
+        'except the sessions too long to fit in a day.</p>' +
+        '<p style="margin:0" class="small">Still unresolved' +
+        (n > 5 ? ' (first 5 of ' + n + ')' : '') + ': ' + esc(named) + '. ' +
+        '<a href="#" id="to-method">Why these are the ones left</a>.</p>';
     }
     // Which clash graph this was solved against is a material caveat, not a
     // footnote — under a 9-to-5 day it decides whether there is an answer.
