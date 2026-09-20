@@ -196,10 +196,14 @@ li { margin-bottom: 6px; }
 }
 .stat.good { border-left-color: var(--good); }
 .stat.warn { border-left-color: var(--warn); }
+.stat .t { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin-bottom: 2px; }
 .stat .v { font-size: 25px; font-weight: 600; font-family: var(--mono); letter-spacing: -.5px; line-height: 1.2; }
 .stat.good .v { color: var(--good); }
 .stat.warn .v { color: var(--warn); }
 .stat .k { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+.stat .r { font-size: 12px; font-family: var(--mono); color: var(--good); margin-top: 7px;
+  padding-top: 6px; border-top: 1px solid var(--line); }
 
 /* ---------- callouts ---------- */
 
@@ -406,7 +410,9 @@ footer .wrap { padding: 0; }
   padding: 0 16px;
   display: flex;
   gap: 2px;
-  overflow-x: auto;
+  /* Not a scroll container: overflow-x here clips the Timetables dropdown,
+     which hangs below the bar. Three items fit at phone width without it. */
+  overflow: visible;
   box-shadow: var(--sh);
   position: relative;
   z-index: 4;
@@ -531,6 +537,8 @@ footer .wrap { padding: 0; }
 .algo-graphic .g-empty { fill: none; stroke: var(--line-2); }
 .algo-graphic .g-clash { fill: var(--warn-weak); stroke: var(--warn); }
 .algo-graphic .g-leftover { fill: var(--warn-weak); stroke: var(--warn); stroke-opacity: .5; }
+.algo-graphic .g-rules { fill: var(--good-weak); stroke: var(--good); stroke-opacity: .5; }
+.algo-graphic .g-start { text-anchor: start; }
 .algo-graphic .g-badtext { fill: var(--warn); font-weight: 600; text-anchor: start; }
 .algo-graphic .g-oktext { fill: var(--good); font-weight: 600; }
 .algo-graphic .g-arrow { fill: none; stroke: var(--ink-2); stroke-width: 1.4; color: var(--ink-2); }
@@ -540,3 +548,59 @@ footer .wrap { padding: 0; }
 .algo-graphic .g-barNew { fill: var(--accent); }
 .algo-graphic .g-axis { stroke: var(--line); stroke-width: 1; }
 .algo-graphic .g-faint { stroke-dasharray: 3 3; }
+
+/* The Timetables dropdown. Three timetables today, four once autumn is
+   rebuilt — as peer tabs they would crowd out About and Fix a clash. */
+.tab-menu { position: relative; display: flex; }
+.tab-menu > .tab::after {
+  content: '';
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid currentColor;
+  position: absolute; right: 6px; top: 20px;
+  opacity: .6;
+}
+.tab-menu > .tab { padding-right: 24px; }
+.tab-drop {
+  display: none;
+  position: absolute;
+  top: 100%; left: 0;
+  min-width: 230px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  box-shadow: var(--sh-2);
+  z-index: 30;
+  padding: 4px 0;
+}
+.tab-menu.open .tab-drop { display: block; }
+.drop-item {
+  display: flex; flex-direction: column; gap: 1px;
+  width: 100%;
+  border: none; background: none;
+  text-align: left;
+  padding: 9px 16px;
+  font: inherit; font-size: 14px; font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  line-height: 1.25;
+}
+.drop-item .sub { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.drop-item:hover { background: var(--accent-weak); color: var(--accent); }
+.drop-item[aria-current="true"] { color: var(--accent); }
+.drop-item[aria-current="true"] .sub { color: var(--accent); opacity: .8; }
+.drop-item.soon { cursor: default; color: var(--muted); }
+.drop-item.soon:hover { background: none; color: var(--muted); }
+a.tab { text-decoration: none; }
+
+/* At phone width the three tabs plus their sub-lines run past the screen, and
+   the dropdown with them. The sub-lines are a nicety; the labels are not. */
+@media (max-width: 460px) {
+  .tabs { padding: 0 8px; }
+  .tab { padding: 12px 10px 10px; font-size: 13.5px; }
+  .tabs > .tab .sub, .tab-menu > .tab .sub { display: none; }
+  .tab-menu > .tab { padding-right: 20px; }
+  .tab-menu > .tab::after { top: 17px; }
+  .tab-drop { max-width: calc(100vw - 24px); }
+}

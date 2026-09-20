@@ -116,6 +116,7 @@
   // timetables are the evidence for it. Opening on Autumn asked a visitor to
   // work out for themselves what they were looking at.
   var TABS = ['method', 'autumn', 'springNow', 'springNew'];
+  var TERM_TABS = ['autumn', 'springNow', 'springNew'];
 
   var H = null, tab = 'method', view = 'grid';
   var state = { progs: new Set(), modules: new Set(), rooms: new Set(), weeks: null, days: new Set(), changed: false, split: false };
@@ -597,9 +598,7 @@
   // ---------------- tabs ----------------
   function selectTab(key) {
     tab = key;
-    document.querySelectorAll('#tabs .tab').forEach(function (b) {
-      b.setAttribute('aria-selected', String(b.dataset.k === key));
-    });
+    markNav();
     var isMethod = key === 'method';
     ['filters', 'view-grid', 'view-list'].forEach(function (id) {
       var el = document.getElementById(id);
@@ -711,25 +710,109 @@
     });
   }
 
+  /**
+   * Three things to do here: read the argument, look at a timetable, fix a
+   * clash. The timetables go behind one control because there are three of
+   * them today and four once autumn is rebuilt, and four peer tabs would bury
+   * the other two.
+   */
+  function buildNav() {
+    var tabsEl = document.getElementById('tabs');
+    tabsEl.innerHTML = '';
+
+    var about = document.createElement('button');
+    about.className = 'tab';
+    about.dataset.k = 'method';
+    about.setAttribute('role', 'tab');
+    about.innerHTML = 'About<span class="sub">how it works, and why</span>';
+    about.onclick = function () { selectTab('method'); };
+    tabsEl.appendChild(about);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'tab-menu';
+    var trigger = document.createElement('button');
+    trigger.className = 'tab';
+    trigger.setAttribute('aria-haspopup', 'true');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.innerHTML = 'Timetables<span class="sub">pick one</span>';
+    var menu = document.createElement('div');
+    menu.className = 'tab-drop';
+    menu.setAttribute('role', 'menu');
+
+    TERM_TABS.forEach(function (k) {
+      var t = H.terms[k];
+      if (!t) return;
+      var item = document.createElement('button');
+      item.className = 'drop-item';
+      item.dataset.k = k;
+      item.setAttribute('role', 'menuitem');
+      item.innerHTML = esc(t.label) + '<span class="sub">' + esc(t.sub) + '</span>';
+      item.onclick = function () { close(); selectTab(k); };
+      menu.appendChild(item);
+    });
+    // Autumn rebuilt is not built yet; saying so is better than leaving a gap
+    // where a visitor has to guess whether it is missing or coming.
+    var soon = document.createElement('div');
+    soon.className = 'drop-item soon';
+    soon.innerHTML = 'Autumn 2026<span class="sub">rebuilt \u2014 in progress</span>';
+    menu.appendChild(soon);
+
+    function open() {
+      wrap.classList.add('open');
+      trigger.setAttribute('aria-expanded', 'true');
+    }
+    function close() {
+      wrap.classList.remove('open');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+    trigger.onclick = function (e) {
+      e.stopPropagation();
+      if (wrap.classList.contains('open')) close(); else open();
+    };
+    document.addEventListener('click', function (e) {
+      if (!wrap.contains(e.target)) close();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') close();
+    });
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    tabsEl.appendChild(wrap);
+
+    var fix = document.createElement('a');
+    fix.className = 'tab';
+    fix.href = 'explore.html';
+    fix.innerHTML = 'Fix a clash<span class="sub">what else would fit</span>';
+    tabsEl.appendChild(fix);
+
+    markNav();
+  }
+
+  /** Which nav item reads as current. */
+  function markNav() {
+    var tabsEl = document.getElementById('tabs');
+    var about = tabsEl.querySelector('.tab[data-k="method"]');
+    if (about) about.setAttribute('aria-selected', String(tab === 'method'));
+    var trigger = tabsEl.querySelector('.tab-menu > .tab');
+    if (trigger) {
+      var onTerm = tab !== 'method';
+      trigger.setAttribute('aria-selected', String(onTerm));
+      var t = H.terms[tab];
+      trigger.innerHTML = 'Timetables<span class="sub">' +
+        (onTerm && t ? esc(t.label) + ' \u00b7 ' + esc(t.sub) : 'pick one') + '</span>';
+    }
+    tabsEl.querySelectorAll('.drop-item[data-k]').forEach(function (el) {
+      el.setAttribute('aria-current', String(el.dataset.k === tab));
+    });
+  }
+
   // ---------------- boot ----------------
   M.loadTimetable().then(function (h) {
     H = h;
     Object.keys(H.terms).forEach(function (k) { markSplits(H.terms[k]); });
 
-    var tabsEl = document.getElementById('tabs');
-    TABS.forEach(function (k) {
-      var t = H.terms[k];
-      var b = document.createElement('button');
-      b.className = 'tab';
-      b.dataset.k = k;
-      b.setAttribute('role', 'tab');
-      b.setAttribute('aria-selected', String(k === tab));
-      b.innerHTML = k === 'method'
-        ? 'How it works<span class="sub">and why</span>'
-        : esc(t.label) + '<span class="sub">' + esc(t.sub) + '</span>';
-      b.onclick = function () { selectTab(k); };
-      tabsEl.appendChild(b);
-    });
+    buildNav();
 
     setupPickers();
 

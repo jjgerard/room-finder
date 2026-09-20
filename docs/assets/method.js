@@ -24,6 +24,31 @@
 
   function fmtN(n) { return Number(n).toLocaleString(); }
 
+  // The hard rules, in one place: the checker's key, a short form for the
+  // tiles and the rebuild graphic, and the full sentence for the table. They
+  // are listed in the order the checker reports them.
+  var RULES = [
+    ['roomClash',   'Two classes in one room at once',
+                    'No two classes in one room at once (exam rooms aside)'],
+    ['timeClash',   'A cohort or lecturer in two places',
+                    'No cohort or lecturer in two places at once'],
+    ['roomFit',     'A room that cannot hold the class',
+                    'Right room type, big enough'],
+    ['linkedOrder', 'Lecture and seminar pulled apart',
+                    'Lecture &amp; seminar same day, back-to-back, in order'],
+    ['examSlot',    'An exam out of its module\u2019s slot',
+                    'Exams keep their module\u2019s slot'],
+    ['adjacency',   'An exam detached from its class',
+                    'Exams stay attached to the class they follow'],
+    ['dayPairing',  'A cohort given a new same-day pairing',
+                    'No new same-day pairing for a cohort'],
+    ['window',      'A session outside the teaching day',
+                    'Inside the teaching day'],
+  ];
+  var RULE_ORDER = RULES.map(function (r) { return r[0]; });
+  var TILE_LABELS = {}, ruleLabels = {};
+  RULES.forEach(function (r) { TILE_LABELS[r[0]] = r[1]; ruleLabels[r[0]] = r[2]; });
+
   /** Modules most exposed to a last-minute scramble, and why. */
   function atRisk(model) {
     var deg = {};
@@ -126,7 +151,7 @@
     // variables, sized by viewBox so it holds up at phone width.
     return [
       '<div class="algo-graphic"><div class="algo-inner">',
-      '<svg viewBox="0 0 760 430" role="img" ',
+      '<svg viewBox="0 0 760 ' + (420 + RULES.length * 18) + '" role="img" ',
       'aria-label="Left: today’s method places one booking at a time and never revisits ',
       'an earlier one, so the last bookings get whatever is left. Right: the rebuild places ',
       'every class at once and repairs broken rules in a loop, moving earlier classes when needed.">',
@@ -188,32 +213,40 @@
       '<text x="420" y="26" class="g-title">Rebuild: the whole term at once</text>',
       '<text x="420" y="46" class="g-sub">every class placed, then broken rules repaired until none are left</text>',
 
-      '<rect x="420" y="66" width="320" height="120" rx="8" class="g-grid"/>',
-      '<text x="580" y="86" class="g-label g-muted">every class on the board together</text>',
-      '<rect x="432" y="96" width="70" height="26" rx="4" class="g-fill"/>',
-      '<rect x="508" y="96" width="70" height="26" rx="4" class="g-fill"/>',
-      '<rect x="584" y="96" width="70" height="26" rx="4" class="g-clash"/>',
-      '<rect x="660" y="96" width="70" height="26" rx="4" class="g-fill"/>',
-      '<rect x="432" y="128" width="70" height="26" rx="4" class="g-clash"/>',
-      '<rect x="508" y="128" width="70" height="26" rx="4" class="g-fill"/>',
-      '<rect x="584" y="128" width="70" height="26" rx="4" class="g-fill"/>',
-      '<rect x="660" y="128" width="70" height="26" rx="4" class="g-fill"/>',
-      '<text x="432" y="174" class="g-small g-muted">red = a rule broken</text>',
+      '<rect x="420" y="66" width="320" height="100" rx="8" class="g-grid"/>',
+      '<text x="580" y="84" class="g-label g-muted">every class on the board together</text>',
+      '<rect x="432" y="94" width="70" height="24" rx="4" class="g-fill"/>',
+      '<rect x="508" y="94" width="70" height="24" rx="4" class="g-fill"/>',
+      '<rect x="584" y="94" width="70" height="24" rx="4" class="g-clash"/>',
+      '<rect x="660" y="94" width="70" height="24" rx="4" class="g-fill"/>',
+      '<rect x="432" y="122" width="70" height="24" rx="4" class="g-clash"/>',
+      '<rect x="508" y="122" width="70" height="24" rx="4" class="g-fill"/>',
+      '<rect x="584" y="122" width="70" height="24" rx="4" class="g-fill"/>',
+      '<rect x="660" y="122" width="70" height="24" rx="4" class="g-fill"/>',
+      '<text x="432" y="160" class="g-small g-muted">red = a rule broken</text>',
 
-      '<path d="M580 186 L580 210" class="g-arrow" marker-end="url(#ar)"/>',
-      '<rect x="420" y="212" width="320" height="34" rx="6" class="g-box"/>',
-      '<text x="580" y="234" class="g-label">pick a class that breaks a rule</text>',
-      '<path d="M580 246 L580 266" class="g-arrow" marker-end="url(#ar)"/>',
-      '<rect x="420" y="268" width="320" height="34" rx="6" class="g-box"/>',
-      '<text x="580" y="290" class="g-label">move it — room first, then day and time</text>',
-      '<path d="M580 302 L580 322" class="g-arrow" marker-end="url(#ar)"/>',
-      '<rect x="420" y="324" width="320" height="34" rx="6" class="g-box g-okbox"/>',
-      '<text x="580" y="346" class="g-label">it may displace others — they get repaired too</text>',
+      '<path d="M580 166 L580 184" class="g-arrow" marker-end="url(#ar)"/>',
+      '<rect x="420" y="186" width="320" height="30" rx="6" class="g-box"/>',
+      '<text x="580" y="206" class="g-label">pick a class that breaks a rule</text>',
+      '<path d="M580 216 L580 232" class="g-arrow" marker-end="url(#ar)"/>',
+      '<rect x="420" y="234" width="320" height="30" rx="6" class="g-box"/>',
+      '<text x="580" y="254" class="g-label">move it \u2014 room first, then day and time</text>',
+      '<path d="M580 264 L580 280" class="g-arrow" marker-end="url(#ar)"/>',
+      '<rect x="420" y="282" width="320" height="30" rx="6" class="g-box g-okbox"/>',
+      '<text x="580" y="302" class="g-label">it may displace others \u2014 they get repaired too</text>',
 
       // the loop back
-      '<path d="M740 341 C 756 341, 756 130, 744 130" class="g-arrow g-loop" marker-end="url(#ar)"/>',
-      '<text x="420" y="382" class="g-small g-oktext">repeat until nothing is broken, then improve the soft goals</text>',
-      '<text x="420" y="402" class="g-small g-muted">restart from many random beginnings; keep the best</text>',
+      '<path d="M740 297 C 758 297, 758 128, 744 128" class="g-arrow g-loop" marker-end="url(#ar)"/>',
+      '<text x="420" y="330" class="g-small g-oktext">repeat until nothing is broken, then improve the soft goals</text>',
+      '<text x="420" y="348" class="g-small g-muted">restart from many random beginnings; keep the best</text>',
+
+      // the rules it repairs against, listed in full
+      '<rect x="420" y="364" width="320" height="' + (40 + RULES.length * 18) + '" rx="8" ',
+      'class="g-rules"/>',
+      '<text x="436" y="386" class="g-label g-start g-oktext">the rules it repairs against</text>',
+      RULES.map(function (r, i) {
+        return '<text x="436" y="' + (408 + i * 18) + '" class="g-small">\u2022 ' + r[2] + '</text>';
+      }).join(''),
       '</g>',
       '</svg>',
       '</div><p class="small muted algo-hint">Scroll sideways to see both sides.</p></div>',
@@ -375,10 +408,21 @@
     var risky = atRisk(model);
     var tight = tightest(model);
 
-    function tile(v, k, cls) {
-      return '<div class="stat ' + (cls || '') + '"><div class="v">' + v + '</div>' +
-             '<div class="k">' + k + '</div></div>';
+    // A tile per hard rule: how often today's timetable breaks it, and the
+    // same count in the rebuild. Both numbers come from the checker running in
+    // this browser, not from anything typed in here.
+    function tile(v, k, sub, cls) {
+      return '<div class="stat ' + (cls || '') + '">' +
+             (sub ? '<div class="t">today</div>' : '') +
+             '<div class="v">' + v + '</div>' +
+             '<div class="k">' + k + '</div>' +
+             (sub ? '<div class="r">' + sub + '</div>' : '') + '</div>';
     }
+    var ruleTiles = RULE_ORDER.map(function (k) {
+      var a0 = now.counts[k] || 0, a1 = fixed.counts[k] || 0;
+      return tile(fmtN(a0), TILE_LABELS[k],
+                  'rebuilt: ' + fmtN(a1), a0 ? 'warn' : 'good');
+    }).join('');
 
     var riskRows = risky.map(function (x) {
       var name = (model.modTitles || {})[x.code] || '';
@@ -387,17 +431,7 @@
         '<td>' + x.why + '</td></tr>';
     }).join('');
 
-    var ruleLabels = {
-      roomClash: 'No two classes in one room at once (exam rooms aside)',
-      timeClash: 'No cohort or lecturer in two places at once',
-      roomFit: 'Right room type, big enough',
-      linkedOrder: 'Lecture &amp; seminar same day, back-to-back, in order',
-      examSlot: 'Exams keep their module’s slot',
-      adjacency: 'Exams stay attached to the class they follow',
-      dayPairing: 'No new same-day pairing for a cohort',
-      window: 'Inside the teaching day',
-    };
-    var ruleRows = Object.keys(ruleLabels).map(function (k) {
+    var ruleRows = RULE_ORDER.map(function (k) {
       var a0 = now.counts[k] || 0, a1 = fixed.counts[k] || 0;
       return '<tr><td>' + ruleLabels[k] + '</td>' +
         '<td>' + (a0 ? '<span class="pill no">' + a0 + '</span>' : '<span class="pill ok">holds</span>') + '</td>' +
@@ -413,15 +447,18 @@
 
       graphic(),
 
+      '<h3>Every hard rule, counted both ways</h3>',
+      '<p class="small muted">The large number is how often Spring 2026 as it stands breaks that ',
+      'rule; underneath it, the same count in the rebuild. ' + fmtN(now.total) + ' broken today, ',
+      fmtN(fixed.total) + ' in the rebuild.</p>',
       '<div class="stats">',
-      tile(splitNow + ' \u2192 ' + splitNew, 'classes taught in more than one room', 'good'),
-      tile(String(worstRooms), 'rooms the worst one is split across today', 'warn'),
-      tile(b2b + '/' + groups, 'lecture+seminar pairs back-to-back', b2b === groups ? 'good' : 'warn'),
+      ruleTiles,
       '</div>',
-      '<p class="small muted">A class in two rooms is two rooms staffed, or a cohort divided ',
-      'between them. Giving each one room returns ' + fmtN(extraRooms) + ' room-bookings to the ',
-      'pool \u2014 exams aside, where several rooms are the point. The rebuild reaches zero here ',
-      'by construction rather than by searching: a class simply has one room.</p>',
+      '<p class="small muted">Alongside them, two things the rules do not forbid but the rebuild ',
+      'fixes anyway: ' + fmtN(splitNow) + ' classes are taught in more than one room today ',
+      '(the worst across ' + worstRooms + '), against ' + splitNew + ' in the rebuild \u2014 a class ',
+      'there simply holds one room, so ' + fmtN(extraRooms) + ' room-bookings return to the pool. ',
+      'And ' + b2b + ' of ' + groups + ' lecture+seminar pairs run back-to-back.</p>',
 
       // ------------------------------------------------ why it always clashes
       '<h2>The current method will always clash</h2>',
