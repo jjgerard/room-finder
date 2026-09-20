@@ -248,6 +248,19 @@ class Solver {
             const id = m.cls.id;
             let pick = null, pickCost = Infinity;
             for (const r of this.roomChoices(id)) {
+              // Members of this component are not in the occupancy index yet,
+              // so a sibling would be invisible here. Two that overlap in time
+              // still cannot share a room — a multi-room exam is precisely
+              // several sittings at one slot.
+              let sibling = false;
+              for (let k = 0; k < rooms.length; k++) {
+                if (rooms[k] !== r) continue;
+                const sib = comp.members[k];
+                const ss = st + sib.off, ms = st + m.off;
+                if (ms < ss + sib.cls.dur && ss < ms + m.cls.dur &&
+                    (m.cls.weeks & sib.cls.weeks)) { sibling = true; break; }
+              }
+              if (sibling) continue;
               let clashes = 0;
               for (const other of this.occ[r * DAY_COUNT + d]) {
                 if (this.shares.has(id < other ? id + ':' + other : other + ':' + id)) continue;
@@ -490,8 +503,28 @@ class Solver {
   roomChoices(id) {
     const cls = this.model.byId.get(id);
     const set = this.candSet.get(id);
-    const out = set.size ? [...set] : [];
+    let out = set.size ? [...set] : [];
     if (cls.origRoom !== null && !set.has(cls.origRoom)) out.push(cls.origRoom);
+    // A room held by a member of this class's own component that overlaps it
+    // in time is not a choice. Those members move together, so every room
+    // chooser treats them as "not in the way" — which is right for a lecture
+    // and the seminar that follows it, and wrong for the several sittings of
+    // one exam, which are at the same hour by construction. Excluding them
+    // here fixes every chooser at once rather than each in turn.
+    const comp = this.components[this.compOf[id]];
+    if (comp && comp.members.length > 1) {
+      const s0 = this.start[id], d0 = this.day[id], du = this.dur[id], w = this.weeks[id];
+      const taken = [];
+      for (const mm of comp.members) {
+        const other = mm.cls.id;
+        if (other === id) continue;
+        if (this.day[other] !== d0) continue;
+        if (!(s0 < this.start[other] + this.dur[other] && this.start[other] < s0 + du)) continue;
+        if (!(w & this.weeks[other])) continue;
+        taken.push(this.room[other]);
+      }
+      if (taken.length) out = out.filter(r => taken.indexOf(r) < 0);
+    }
     return out;
   }
 
@@ -980,6 +1013,17 @@ class Solver {
           // Pick the room that displaces the fewest, preferring none at all.
           let best = null, bestCount = Infinity, bestHit = null;
           for (const r of this.roomChoices(id)) {
+            // Own members are skipped below because they move together, which
+            // also hides a sibling collision. Two that overlap in time need
+            // different rooms.
+            let sibling = false;
+            for (let k = 0; k < rooms.length; k++) {
+              if (rooms[k] !== r) continue;
+              const sib = comp.members[k];
+              const ss = st + sib.off;
+              if (s < ss + sib.cls.dur && ss < s + du && (w & sib.cls.weeks)) { sibling = true; break; }
+            }
+            if (sibling) continue;
             const hit = [];
             for (const other of this.occ[r * DAY_COUNT + d]) {
               if (comp.members.some(x => x.cls.id === other)) continue;

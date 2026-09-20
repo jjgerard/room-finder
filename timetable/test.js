@@ -927,6 +927,24 @@ test('solver: the room preferences never bar a room outright', () => {
   eq(s2.roomReluctance(general, lab), 0);
 });
 
+test('solver: a multi-room exam never puts two sittings in one room', () => {
+  // The sittings of one exam are members of a single component at offset 0 —
+  // they move together, which is right, but it also hid them from each
+  // other's room choice. Splitting an exam across rooms and then putting two
+  // of the parts back in the same room defeats the point of splitting it.
+  const s = new Solver(model, Object.assign({ seed: 61 }, TEST_BUDGET));
+  s.run();
+  const a = s.assignment();
+  for (const c of model.classes) {
+    if (!c.isShadow) continue;
+    const mine = a.get(c.id);
+    const parent = a.get(c.shadowOf);
+    if (!mine || !parent) continue;
+    assert.notStrictEqual(mine.room, parent.room,
+      (c.module || c.id) + ' put a sitting back in its parent\'s room');
+  }
+});
+
 test('solver: the chain sweep never makes the timetable worse', () => {
   // chainSweep applies chainRepair until it stops paying; every individual
   // chain is rolled back unless it strictly improves, so the sweep can only
