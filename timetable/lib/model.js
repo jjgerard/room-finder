@@ -295,6 +295,52 @@ function load(dir, opts) {
     });
   }
 
+  // Some rooms hold several cohorts at once, on purpose. The architecture
+  // studio runs five or six year groups together every Tuesday and Thursday,
+  // staff circulating between them; ceramics and fine art do the same.
+  // Treating that as a double-booking would call studio teaching an error, so
+  // pairs that already share a room may go on sharing one.
+  //
+  // This MUST be read from the per-room booking history, not from this class
+  // file. A class here carries only its dominant room, so two classes whose
+  // dominant room happens to coincide look like room-mates when they are not:
+  // deriving it from the class file gave 328 pairs of which only 33 were real,
+  // which would have licensed 295 genuine double-bookings.
+  const mayShareRoom = new Set();
+  const shareKey = (a, b) => (a < b ? a + ':' + b : b + ':' + a);
+  {
+    const idsByTitle = new Map();
+    for (const c of classes) {
+      if (!idsByTitle.has(c.title)) idsByTitle.set(c.title, []);
+      idsByTitle.get(c.title).push(c.id);
+    }
+    try {
+      const terms = JSON.parse(fs.readFileSync(path.join(dir, 'terms.json'), 'utf8'));
+      const rows = (terms.springCurrent || {}).rows || [];
+      const byRoomDay = new Map();
+      for (const row of rows) {
+        const k = row[6] + '|' + row[3];
+        if (!byRoomDay.has(k)) byRoomDay.set(k, []);
+        byRoomDay.get(k).push({ title: row[2], start: row[4], dur: row[5], weeks: weekMask(row[8]) });
+      }
+      for (const list of byRoomDay.values()) {
+        for (let i = 0; i < list.length; i++) {
+          for (let j = i + 1; j < list.length; j++) {
+            const a = list[i], b = list[j];
+            if (a.title === b.title) continue;               // one booking, two rooms
+            if (!(a.weeks & b.weeks)) continue;              // different weeks
+            if (!(a.start < b.start + b.dur && b.start < a.start + a.dur)) continue;
+            for (const x of idsByTitle.get(a.title) || []) {
+              for (const y of idsByTitle.get(b.title) || []) {
+                if (x !== y) mayShareRoom.add(shareKey(x, y));
+              }
+            }
+          }
+        }
+      }
+    } catch (e) { /* no booking history; no sharing is granted */ }
+  }
+
   // Rule 5 is "no NEW same-day pairings" — a pair already sharing a day today
   // is grandfathered. 2,469 of 12,854 are, so this matters a lot.
   const cannotShareDay = cannotShareDayRaw.filter(([a, b]) =>
@@ -371,6 +417,7 @@ function load(dir, opts) {
     cannotShareTime, cannotShareDay, cannotShareDayRaw,
     preservedAdjacency, preservedSlot, examRooms,
     openRooms, roomSubjects, sourceCand, rebuiltCandidates: rebuild,
+    mayShareRoom, shareKey,
     clashMode, edgeStats, splitCohorts,
     shadowCount: shadows.length,
     linkedGroups: [...linkedGroups.entries()].map(([key, members]) => ({ key, members })),

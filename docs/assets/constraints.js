@@ -113,6 +113,9 @@ function check(model, assign, opts) {
         if (pb.start >= pa.start + a.dur) break; // sorted: nothing later overlaps
         if (!overlaps(pa.start, a.dur, pb.start, b.dur)) continue;
         if (!sharesWeek(a, b)) continue;
+        // A pair that already shares a room today may keep sharing one.
+        if (model.mayShareRoom &&
+            model.mayShareRoom.has(a.id < b.id ? a.id + ':' + b.id : b.id + ':' + a.id)) continue;
         add('roomClash', { a: a.id, b: b.id, room: pa.room, day: pa.day });
       }
     }

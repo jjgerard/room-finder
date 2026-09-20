@@ -111,6 +111,8 @@ class Solver {
     }
     this.progDayCount = new Int32Array(this.progIdx.size * DAY_COUNT);
 
+    // Pairs allowed to share a room, because they already do — see model.js.
+    this.shares = model.mayShareRoom || new Set();
     this.candSet = new Map(model.classes.map(c => [c.id, new Set(c.cand)]));
     this.roomCount = model.rooms.length;
     // occupancy[room * 5 + day] → array of class ids
@@ -219,6 +221,7 @@ class Solver {
     // lower than the real one.
     for (const other of this.occ[r * DAY_COUNT + d]) {
       if (other === id) continue;
+      if (this.shares.has(id < other ? id + ':' + other : other + ':' + id)) continue;
       const k = ROOM_RULE + pairKey(id, other);
       if (seen && seen.has(k)) continue;
       if (s < this.start[other] + this.dur[other] && this.start[other] < s + du && (w & this.weeks[other])) {

@@ -464,11 +464,61 @@ test('baseline: today has no cohort or staff clashes', () => {
   eq(r.counts.dayPairing, 0);
 });
 
-test('baseline: today has room clashes, which is the problem to solve', () => {
+test('baseline: the room-clash count measures forcing one room per class', () => {
+  // This number is easy to misreport, so it is pinned down here. The class file
+  // gives each class a single "dominant" room even when it really uses several,
+  // so checking it measures: IF every class were squeezed into one room, how
+  // many pairs would collide? That is the problem statement, not a claim that
+  // the live timetable double-books 295 rooms — it does not.
   const assign = new Map(model.classes.map(c =>
     [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom }]));
   const r = C.check(model, assign, {});
-  assert.ok(r.counts.roomClash > 100, 'expected the multi-room splits to show up');
+  assert.ok(r.counts.roomClash > 100, 'expected collapsing to one room to create collisions');
+  eq(r.counts.timeClash, 0, 'the live timetable has no cohort clashes');
+});
+
+test('baseline: what IS wrong today is gaps and out-of-hours teaching', () => {
+  const assign = new Map(model.classes.map(c =>
+    [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom }]));
+  const r = C.check(model, assign, {});
+  assert.ok(r.counts.linkedOrder > 50, 'expected lecture/seminar gaps');
+  assert.ok(r.counts.window > 50, 'expected classes outside the teaching day');
+});
+
+test('rooms: sharing is grandfathered from real bookings, never invented', () => {
+  // Every allowed pair must appear together in one room in the per-room
+  // booking history. Deriving this from the class file instead produced 328
+  // pairs of which only 33 were real, which would have licensed 295 genuine
+  // double-bookings — so the source of this set matters more than its size.
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const terms = JSON.parse(fs2.readFileSync(
+    path2.join(__dirname, 'data', 'terms.json'), 'utf8'));
+  const real = new Set();
+  const byRoomDay = new Map();
+  for (const row of terms.springCurrent.rows) {
+    const k = row[6] + '|' + row[3];
+    if (!byRoomDay.has(k)) byRoomDay.set(k, []);
+    byRoomDay.get(k).push(row);
+  }
+  for (const list of byRoomDay.values()) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j];
+        if (a[2] === b[2]) continue;
+        if (!(weekMask(a[8]) & weekMask(b[8]))) continue;
+        if (!(a[4] < b[4] + b[5] && b[4] < a[4] + a[5])) continue;
+        real.add([a[2], b[2]].sort().join('||'));
+      }
+    }
+  }
+  assert.ok(model.mayShareRoom.size > 0, 'no sharing was grandfathered at all');
+  for (const key of model.mayShareRoom) {
+    const [a, b] = key.split(':').map(Number);
+    const A = model.byId.get(a), B = model.byId.get(b);
+    assert.ok(real.has([A.title, B.title].sort().join('||')),
+      'allowed a pair that never shares a room today: ' + A.title + ' + ' + B.title);
+  }
 });
 
 test('checker: a class starting before 09:15 breaks the window', () => {
