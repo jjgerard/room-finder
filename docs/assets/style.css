@@ -96,6 +96,10 @@
 
 * { box-sizing: border-box; }
 
+/* `display` in a class rule beats the UA stylesheet's [hidden], so a flex or
+   grid container with the hidden attribute stays visible without this. */
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -382,3 +386,62 @@ footer .wrap { padding: 0; }
   opacity: 0;
   transition: opacity .1s;
 }
+
+/* ---------- term tabs ---------- */
+
+.tabs {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 0 16px;
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  box-shadow: var(--sh);
+  position: relative;
+  z-index: 4;
+}
+.tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 11px 18px 9px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.25;
+}
+.tab .sub { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.tab:hover { background: var(--surface-2); color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.tab[aria-selected="true"] .sub { color: var(--accent); opacity: .8; }
+
+/* ---------- programme picker ---------- */
+
+.drop {
+  position: relative;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--sh-2);
+  max-height: 260px;
+  overflow: auto;
+  display: none;
+  z-index: 20;
+}
+.drop.open { display: block; }
+.opt { padding: 9px 12px; cursor: pointer; font-size: 13.5px; }
+.opt:hover { background: var(--accent-weak); }
+
+#prog-chips .chip[aria-pressed="true"] { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); }
+
+/* Method tab sits in a narrower measure than the timetable grid. */
+.narrow-inner { max-width: 780px; }
+.narrow-inner pre { white-space: pre-wrap; }

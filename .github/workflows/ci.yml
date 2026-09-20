@@ -1,0 +1,42 @@
+name: CI
+
+# The site is served straight from the docs/ folder by GitHub Pages
+# (Settings → Pages → Deploy from a branch → /docs), so nothing here deploys.
+# This guards what that arrangement cannot: that the committed docs/ is
+# actually what the solver produces.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run the solver tests
+        run: node timetable/test.js
+
+      - name: Check docs/ matches what export.js produces
+        # docs/assets/constraints.js and suggest.js are generated copies of
+        # timetable/lib, and docs/data/timetable.json is generated too. Editing
+        # a copy instead of the original would leave the published site and the
+        # solver quietly disagreeing about the rules — and since Pages serves
+        # docs/ directly, that would go live unnoticed.
+        run: |
+          node timetable/export.js
+          if ! git diff --quiet -- docs/; then
+            echo "::error::docs/ is out of date. Run 'node timetable/export.js' and commit the result."
+            git diff --stat -- docs/
+            exit 1
+          fi

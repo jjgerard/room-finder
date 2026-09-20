@@ -1,10 +1,17 @@
 'use strict';
 
-// Pack the model and the solved timetable into what the site loads, and copy
-// the shared pure modules into docs/assets so the browser runs the same
-// constraint and suggestion code the solver did.
+// Pack everything the site loads, and copy the shared pure modules into
+// docs/assets so the browser runs the same constraint and suggestion code the
+// solver did.
 //
 //   node timetable/export.js
+//
+// Three timetables go out:
+//   autumn      — Autumn 2026 as it stands (display only)
+//   springNow   — Spring 2026 as it stands, one row per class-room booking, so
+//                 a class split across rooms shows up once per room
+//   springNew   — the rebuilt Spring 2026, with the full model behind it so the
+//                 browser can re-check the rules and suggest moves
 //
 // Arrays rather than objects throughout: the same data as named fields is
 // roughly three times the bytes, and this file is downloaded by every visitor.
@@ -29,10 +36,62 @@ if (!fs.existsSync(solPath)) {
 }
 const solution = JSON.parse(fs.readFileSync(solPath, 'utf8'));
 const solved = new Map(solution.rows.map(r => [r.id, r]));
+const terms = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'terms.json'), 'utf8'));
 
+// ---- one programme vocabulary across every term -----------------------------
+// The two sources agree on names, so they merge cleanly: the class file carries
+// programmes per class, while the older term data carries them per module.
+const progIdx = new Map();
+const progName = [];
+function progId(name) {
+  if (!progIdx.has(name)) { progIdx.set(name, progName.length); progName.push(name); }
+  return progIdx.get(name);
+}
+for (const d of terms.degrees) progId(d);
+for (const c of model.classes) for (const p of c.programmes) progId(p);
+
+// module code → programme ids, from the older data's module map
+const modProgs = new Map();
+const modTitle = new Map();
+for (const [code, entry] of Object.entries(terms.mod)) {
+  modProgs.set(code, (entry[0] || []).map(i => progId(terms.degrees[i])).filter(x => x >= 0));
+  if (entry[1]) modTitle.set(code, entry[1]);
+}
+
+// A display row: [module, activity, title, day, start, dur, room, nWeeks,
+//                 weeks, progIds, changed]
+function displayRow(r, progs, changed) {
+  return [r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], progs, changed || ''];
+}
+
+const autumnRows = terms.autumn.rows.map(r =>
+  displayRow(r, modProgs.get(r[0]) || []));
+
+const springNowRows = terms.springCurrent.rows.map(r =>
+  displayRow(r, modProgs.get(r[0]) || []));
+
+// The rebuilt term comes from the solver, so its programmes are per class.
+const springNewRows = model.classes.map(c => {
+  const s = solved.get(c.id);
+  const progs = c.programmes.map(p => progId(p));
+  return displayRow(
+    [c.module, c.activity, c.title,
+      s ? s.day : c.origDay, s ? s.start : c.origStart, c.dur,
+      s ? s.room : c.origRoom, c.nWeeks, c.weeksText],
+    progs, s ? s.changed : '');
+});
+
+// ---- the model behind the rebuilt term, for checking and suggestions --------
 const packed = {
   meta: solution.meta,
   rooms: model.rooms.map(r => [r.name, r.type, r.capacity]),
+  programmes: progName,
+  modTitles: Object.fromEntries(modTitle),
+  terms: {
+    autumn: { label: 'Autumn 2026', sub: 'as it stands', rows: autumnRows, checkable: 0 },
+    springNow: { label: 'Spring 2026', sub: 'as it stands', rows: springNowRows, checkable: 0 },
+    springNew: { label: 'Spring 2026', sub: 'rebuilt', rows: springNewRows, checkable: 1 },
+  },
   classes: model.classes.map(c => {
     const s = solved.get(c.id);
     return [
@@ -50,6 +109,7 @@ const packed = {
       c.attended ? 1 : 0,
       c.isShadow ? c.shadowOf : -1,
       c.isFixed ? 1 : 0,
+      c.programmes.map(p => progId(p)),
     ];
   }),
   cand: model.classes.map(c => c.cand),
@@ -72,6 +132,8 @@ fs.mkdirSync(ASSETS, { recursive: true });
 const outFile = path.join(DATA, 'timetable.json');
 fs.writeFileSync(outFile, JSON.stringify(packed));
 console.log(`wrote ${path.relative(ROOT, outFile)} (${(fs.statSync(outFile).size / 1024).toFixed(0)} KB)`);
+console.log(`  autumn ${autumnRows.length} rows · spring now ${springNowRows.length} · ` +
+            `spring rebuilt ${springNewRows.length} · ${progName.length} programmes`);
 
 // One source of truth: these are copied, never hand-edited in docs/assets.
 //

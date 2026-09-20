@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Belfast Spring Timetable</title>
-<meta name="description" content="A Spring 2026 timetable for Ulster's Belfast campus that satisfies every hard constraint, with the rules re-checked in your browser.">
+<title>Belfast Timetable</title>
+<meta name="description" content="Autumn 2026, Spring 2026 as it stands, and a rebuilt Spring 2026 that satisfies every hard constraint — searchable by programme.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -12,290 +12,565 @@
 
 <header class="appbar">
   <span class="mark" aria-hidden="true"></span>
-  <h1>Belfast Spring Timetable</h1>
+  <h1>Belfast Timetable</h1>
   <nav>
-    <a href="index.html" aria-current="page">The result</a>
-    <a href="timetable.html">Timetable</a>
+    <a href="index.html" aria-current="page">Timetable</a>
     <a href="explore.html">Explore moves</a>
-    <a href="method.html">Method</a>
   </nav>
 </header>
 
-<main class="wrap narrow">
+<div class="tabs" id="tabs" role="tablist"></div>
 
-  <h2>One room per class, no clashes, nothing moved off campus</h2>
-  <p class="lead">
-    Spring 2026 at Belfast splits hundreds of classes across two or more rooms. This is a
-    rebuilt timetable that gives every class a single room — exams excepted, since a
-    sitting may legitimately fill several — breaks none of the hard rules, and improves
-    both soft goals on top — <span id="leadmove">while leaving most of
-    the timetable where it is</span>.
-  </p>
+<main class="wrap">
 
-  <div id="verdict" class="note">Checking the timetable in your browser…</div>
+  <div id="banner"></div>
 
-  <div class="stats" id="stats"></div>
-
-  <p class="small muted" id="checkedline"></p>
-
-  <h2>What the rules are</h2>
-  <p>
-    Five hard rules, all of which hold in the result. They are checked live on this page
-    by the same code that built the timetable — if any were broken, the box above would
-    say so.
-  </p>
-
-  <div class="scroll">
-    <table id="rules">
-      <thead><tr><th>Hard rule</th><th>Today</th><th>Rebuilt</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-
-  <h2>What it cost</h2>
-  <p id="costline">…</p>
-  <div class="stats" id="movestats"></div>
-  <p class="small muted">
-    A changed room is invisible to students beyond the room number on their timetable.
-    A changed time or day is what people actually notice, which is why the search tries
-    every room swap before it moves anything in time.
-  </p>
-
-  <h2>The soft goals, which also improved</h2>
-  <p>
-    Fitting the hard rules did not come at the cost of the week students actually
-    experience. Both soft goals are better than the timetable running today.
-  </p>
-  <div class="stats" id="softstats"></div>
-  <p class="small muted">
-    A <strong>gap day</strong> is a day with no classes sitting between two days that
-    have them — a cohort taught Mon/Wed/Fri has two; one taught Mon/Tue/Wed has none.
-    Wednesday afternoons were not optimised for, and did get slightly busier.
-  </p>
-
-  <h2>Two findings worth knowing</h2>
-
-  <div class="grid2">
-    <div class="card pad">
-      <h3 style="margin-top:0">Back-to-back was said to be impossible. It isn't.</h3>
-      <p class="small">
-        The earlier analysis concluded that about 27 modules could never have their
-        lecture and seminar back-to-back, because no free four-hour window existed on
-        any day. It reached 95 of 136 pairs and recommended falling back to
-        "same day, with a gap".
-      </p>
-      <p class="small" style="margin-bottom:0">
-        <strong>All <span id="b2bcount">146</span> linked groups here are strictly
-        back-to-back, in their current order.</strong> The difference is not a better
-        search — it is that contiguity is built into how a group is represented, so it
-        is never something the search has to repair and then protect.
-      </p>
+  <div class="card pad" id="filters" style="margin-bottom:16px">
+    <div>
+      <label class="fld" for="f-prog">Programme <span class="muted" style="font-weight:400">— start here</span></label>
+      <input type="search" id="f-prog" placeholder="Type a degree, e.g. BSc Computing Science…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="prog-list">
+      <div id="prog-list" class="drop" role="listbox"></div>
+      <div class="chips" id="prog-chips" style="margin-top:8px"></div>
     </div>
-    <div class="card pad">
-      <h3 style="margin-top:0">No block teaching had to go off campus.</h3>
-      <p class="small">
-        The earlier analysis found three all-day sessions (NUS762, NUS767, BUS506) that
-        had to move offsite to reach a clean solution.
-      </p>
-      <p class="small" style="margin-bottom:0">
-        <strong>All <span id="blockcount">327</span> block-teaching sessions stay on
-        campus here</strong>, those three included. Belfast's rooms are empty enough to
-        absorb them once the classes around them are free to shuffle.
-      </p>
+    <div class="grid3" style="margin-top:14px">
+      <div>
+        <label class="fld" for="f-module">Module</label>
+        <input type="search" id="f-module" placeholder="Code or title" autocomplete="off">
+      </div>
+      <div>
+        <label class="fld" for="f-room">Room</label>
+        <input type="search" id="f-room" placeholder="e.g. BC-03-123" autocomplete="off">
+      </div>
+      <div>
+        <label class="fld" for="f-week">Week</label>
+        <select id="f-week"><option value="">All weeks</option></select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <span class="small muted" style="font-weight:600">Day</span>
+      <div class="chips" id="f-days"></div>
+      <div class="chips" id="f-flags">
+        <button class="chip" data-f="changed" aria-pressed="false" id="chip-changed" hidden>Moved only</button>
+        <button class="chip" data-f="split" aria-pressed="false" id="chip-split" hidden>Split across rooms</button>
+      </div>
+      <button id="f-clear" style="margin-left:auto">Clear</button>
     </div>
   </div>
 
-  <h2>Before you rely on this</h2>
-
-  <div class="note warn">
-    <p><strong>The clash data is inferred, not authoritative.</strong> "These two classes
-    share students" was derived from the current timetable — same programme and year for
-    a student clash, and same school plus shared room plus never currently overlapping as
-    a proxy for the same lecturer. It will both over-constrain (two cohorts that never
-    really meet) and under-constrain (a genuinely shared lecturer the proxy missed).
-    Re-run this against real enrolment and staff-assignment data before acting on it.</p>
+  <div class="row" style="margin-bottom:12px">
+    <p class="small" id="summary" style="margin:0;min-height:20px"></p>
+    <div class="chips" style="margin-left:auto" role="group" aria-label="View">
+      <button class="chip" id="v-grid" aria-pressed="true">Week grid</button>
+      <button class="chip" id="v-list" aria-pressed="false">List</button>
+    </div>
   </div>
 
-  <div class="note warn">
-    <p><strong>Class sizes are room capacities, not headcounts.</strong>
-    <span id="proxyline"></span> Every "this class fits that room" judgement inherits
-    that. A class whose current room is generous looks bigger than it is, and one in a
-    room that is too small looks smaller.</p>
+  <div id="view-grid">
+    <div class="card gridcard"><div id="grid"></div></div>
+    <div class="legend">
+      <span class="k"><span class="tag t-general"></span>General</span>
+      <span class="k"><span class="tag t-computer"></span>Computer lab</span>
+      <span class="k"><span class="tag t-specialist"></span>Specialist</span>
+      <span class="k"><span class="tag t-theatre"></span>Theatre</span>
+      <span class="k" id="legend-extra" style="margin-left:auto"></span>
+    </div>
   </div>
 
-  <div class="note warn">
-    <p><strong>Most specialist rooms have no recorded capacity.</strong>
-    <span id="capline"></span> Those rooms are recorded as capacity 0, which means
-    "unknown", not "no seats". Because of that a class already sitting in one is allowed
-    to stay there, and capacity is only enforced on a class that moves. Tighten this once
-    real capacities exist.</p>
+  <div id="view-list" hidden>
+    <div class="card" style="overflow:hidden"><div class="scroll"><table id="lst"><thead></thead><tbody></tbody></table></div></div>
+    <p class="small muted" id="listnote"></p>
   </div>
 
-  <div class="note">
-    <p><strong>Exams may use several rooms; the exam set-up block is left alone.</strong>
-    An exam is not a normal class, so the one-room rule does not apply to it — each
-    multi-room exam keeps the number of rooms it uses today, in distinct rooms at one
-    slot. Ten rows marked <em>"Do NOT Edit or Remove booking"</em> reserving rooms for
-    the exam weeks are pinned and never moved; only their dominant room is in the data,
-    so weeks 15–16 availability is optimistic.</p>
-  </div>
-
-  <div class="note">
-    <p><strong>One-off room bookings were excluded.</strong> The source data carries 540
-    <code>BK</code> rows — a named person booking a room on a specific date, with no
-    module, no cohort and no place in the clash graph. They were specific to spring 2026
-    and are not rescheduled, so they are not part of this timetable and their rooms are
-    not reserved in it.</p>
-  </div>
-
-  <p>
-    <a href="timetable.html">See the timetable</a> ·
-    <a href="explore.html">Try moving a class yourself</a> ·
-    <a href="method.html">How it was built</a>
-  </p>
+  <!-- ===================== Method tab ===================== -->
+  <div id="method" hidden></div>
 
 </main>
 
+<div id="tip" role="tooltip"></div>
+
 <footer>
   <div class="wrap">
-    Built from a snapshot of the Spring 2026 Belfast timetable.
-    Source, solver and tests: <a href="https://github.com/jjgerard/room-finder">jjgerard/room-finder</a>.
+    Autumn and current-Spring bookings are shown one row per room, so a class split across
+    rooms appears once per room. One-off <code>BK</code> bookings are excluded throughout.
+    Source and solver: <a href="https://github.com/jjgerard/room-finder">jjgerard/room-finder</a>.
   </div>
 </footer>
 
 <script src="assets/model.js"></script>
 <script src="assets/constraints.js"></script>
+<script src="assets/method.js"></script>
 <script>
 (function () {
   'use strict';
-  var C = window.TTConstraints, M = window.TTModel;
-  var OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
+  var M = window.TTModel, DAYS = M.DAYS, fmt = M.fmt;
+  var TYPE_CLASS = { general: 't-general', computer: 't-computer', specialist: 't-specialist', theatre: 't-theatre' };
+  var CHECK_OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
 
-  function tile(v, k, cls) {
-    return '<div class="stat ' + (cls || '') + '"><div class="v">' + v + '</div>' +
-           '<div class="k">' + k + '</div></div>';
+  // Tab order, as asked for: the two terms as they stand, the rebuild, then the
+  // method. Explore moves lives on its own page, last in the nav.
+  var TABS = ['autumn', 'springNow', 'springNew', 'method'];
+
+  var H = null, tab = 'autumn', view = 'grid';
+  var state = { progs: new Set(), module: '', room: '', week: '', days: new Set(), changed: false, split: false };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+    });
   }
 
-  M.loadTimetable().then(function (h) {
-    var model = h.model, a = h.assign;
-    var now = C.check(model, a.current, OPTS);
-    var fixed = C.check(model, a.solved, OPTS);
-    var mv = C.movement(model, a.solved);
+  function rows() { return H.terms[tab] ? H.terms[tab].rows : []; }
 
-    // Headline claim, verified here rather than asserted.
-    var v = document.getElementById('verdict');
-    if (fixed.total === 0) {
-      v.className = 'note good';
-      v.innerHTML = '<p style="margin:0"><strong>Checked just now, in this browser: ' +
-        '0 violations across all ' + model.classes.length.toLocaleString() +
-        ' classes.</strong> Every hard rule holds — no room double-booked, no cohort or ' +
-        'lecturer in two places, every lecture and seminar back-to-back, and no new ' +
-        'same-day pairings.</p>';
-    } else {
-      v.className = 'note warn';
-      var parts = Object.keys(fixed.counts).filter(function (k) { return fixed.counts[k]; })
-        .map(function (k) { return fixed.counts[k] + ' ' + k; });
-      v.innerHTML = '<p style="margin:0"><strong>' + fixed.total + ' hard violations remain</strong> (' +
-        parts.join(', ') + '). This timetable is not yet clean.</p>';
+  function matches(r) {
+    if (state.progs.size) {
+      var hit = false;
+      for (var i = 0; i < r.progs.length; i++) if (state.progs.has(r.progs[i])) { hit = true; break; }
+      if (!hit) return false;
+    }
+    if (state.module) {
+      var q = state.module.toLowerCase();
+      var title = (H.model.modTitles[r.module] || '').toLowerCase();
+      if ((r.module || '').toLowerCase().indexOf(q) < 0 &&
+          (r.title || '').toLowerCase().indexOf(q) < 0 &&
+          title.indexOf(q) < 0) return false;
+    }
+    if (state.room) {
+      var rm = H.model.rooms[r.room];
+      if (!rm || rm.name.toLowerCase().indexOf(state.room.toLowerCase()) < 0) return false;
+    }
+    if (state.days.size && !state.days.has(r.day)) return false;
+    if (state.week && !(r.weeks & (1 << (Number(state.week) - 1)))) return false;
+    if (state.changed && !r.changed) return false;
+    if (state.split && !r.isSplit) return false;
+    return true;
+  }
+
+  // Mark bookings that share a module, slot and weeks but sit in several rooms.
+  function markSplits(term) {
+    var by = new Map();
+    term.rows.forEach(function (r) {
+      var k = r.title + '|' + r.day + '|' + r.start + '|' + r.weeksText;
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(r);
+    });
+    by.forEach(function (list) {
+      var split = list.length > 1;
+      list.forEach(function (r) { r.isSplit = split; r.splitCount = list.length; });
+    });
+  }
+
+  // ---------------- week grid ----------------
+  var PX = 0.74;
+
+  function drawGrid(list) {
+    var el = document.getElementById('grid');
+    var weekly = list.filter(function (r) { return r.day < 5; });
+    if (!weekly.length) {
+      el.innerHTML = '<div class="empty"><strong>Nothing matches.</strong>Pick a programme above, or widen the filters.</div>';
+      return;
+    }
+    if (weekly.length > 320) {
+      el.innerHTML = '<div class="empty"><strong>' + weekly.length + ' bookings match.</strong>' +
+        'Choose a programme or module to see the week grid, or switch to List.</div>';
+      return;
     }
 
-    // Exams are allowed several rooms by design, so they are not counted as
-    // splits either before or after.
-    var multi = model.classes.filter(function (c) {
-      return c.isMultiRoom && c.activity !== 'EXM';
-    }).length;
-    var stillSplit = 0;
-    var roomsPerSlot = new Map();
-    model.classes.forEach(function (c) {
-      if (c.activity === 'EXM') return;
-      var p = a.solved.get(c.id);
-      var key = c.id;
-      if (!roomsPerSlot.has(key)) roomsPerSlot.set(key, new Set());
-      roomsPerSlot.get(key).add(p.room);
+    // Fit the grid to what is on screen: bookings run from 07:15 to as late as
+    // 23:15, so a fixed origin either clips early starts or wastes half the card.
+    var lo = Infinity, hi = -Infinity;
+    weekly.forEach(function (r) {
+      if (r.start < lo) lo = r.start;
+      if (r.start + r.dur > hi) hi = r.start + r.dur;
     });
-    roomsPerSlot.forEach(function (set) { if (set.size > 1) stillSplit++; });
-    var b2b = 0;
-    model.linkedGroups.forEach(function (g) {
-      var ok = true;
-      for (var i = 0; i + 1 < g.members.length; i++) {
-        var x = g.members[i], y = g.members[i + 1];
-        var px = a.solved.get(x.id), py = a.solved.get(y.id);
-        if (px.day !== py.day || px.start + x.dur !== py.start) ok = false;
+    var T0 = Math.min(Math.floor(lo / 60) * 60, 9 * 60);
+    var T1 = Math.max(Math.ceil(hi / 60) * 60, 18 * 60);
+    var Hh = (T1 - T0) * PX;
+
+    var html = '<div class="tt" style="height:' + (Hh + 32) + 'px"><div class="dh"></div>';
+    for (var d = 0; d < 5; d++) html += '<div class="dh">' + DAYS[d] + '</div>';
+    html += '<div class="timecol" style="height:' + Hh + 'px">';
+    for (var h = T0 / 60; h <= T1 / 60; h++) {
+      var y = (h * 60 - T0) * PX;
+      html += '<div class="hr" style="top:' + y + 'px"></div>' +
+              '<div class="hrl" style="top:' + y + 'px">' + String(h).padStart(2, '0') + ':00</div>';
+    }
+    html += '</div>';
+
+    var byDay = [[], [], [], [], []];
+    weekly.forEach(function (r) { byDay[r.day].push(r); });
+
+    for (var dd = 0; dd < 5; dd++) {
+      html += '<div class="daycol" style="height:' + Hh + 'px">';
+      var items = byDay[dd].map(function (r) { return { r: r, s: r.start, e: r.start + r.dur }; })
+        .sort(function (a, b) { return a.s - b.s || a.e - b.e; });
+
+      // Genuine double-bookings: same room, overlapping, sharing a week, and
+      // not the same booking listed twice for two rooms.
+      items.forEach(function (it) { it.clash = false; });
+      for (var i = 0; i < items.length; i++) {
+        for (var j = i + 1; j < items.length; j++) {
+          var A = items[i], B = items[j];
+          if (A.r.room !== B.r.room) continue;
+          if (!(A.s < B.e && B.s < A.e)) continue;
+          if (!(A.r.weeks & B.r.weeks)) continue;
+          if (A.r.title && A.r.title === B.r.title) continue;
+          A.clash = B.clash = true;
+        }
       }
-      if (ok) b2b++;
+
+      var clusters = [], cur = [], curEnd = -1;
+      items.forEach(function (it) {
+        if (it.s >= curEnd && cur.length) { clusters.push(cur); cur = []; curEnd = -1; }
+        cur.push(it); curEnd = Math.max(curEnd, it.e);
+      });
+      if (cur.length) clusters.push(cur);
+
+      clusters.forEach(function (cl) {
+        var colEnd = [];
+        cl.forEach(function (it) {
+          for (var k = 0; k < colEnd.length; k++) {
+            if (colEnd[k] <= it.s) { it.col = k; colEnd[k] = it.e; return; }
+          }
+          it.col = colEnd.length; colEnd.push(it.e);
+        });
+        var nc = colEnd.length;
+        cl.forEach(function (it) {
+          var r = it.r, room = H.model.rooms[it.r.room] || { name: '?', type: 'general' };
+          var top = (it.s - T0) * PX, ht = Math.max((it.e - it.s) * PX - 2, 14);
+          var w = 100 / nc, left = it.col * w;
+          var colr = 'var(--' + (TYPE_CLASS[room.type] || 't-general') + ')';
+          var chLabel = r.changed ? ['d', 't', 'r'].filter(function (x) { return r.changed.indexOf(x) >= 0; })
+            .map(function (x) { return { d: 'day', t: 'time', r: 'room' }[x]; }).join(', ') : '';
+          var tip = (r.module || r.activity) + ' · ' + r.activity + '\n' +
+                    fmt(it.s) + '–' + fmt(it.e) + '\n' + room.name +
+                    (room.capacityKnown ? ' · ' + room.capacity + ' seats' : ' · capacity not recorded') +
+                    '\nWeeks ' + r.weeksText +
+                    (r.isSplit ? '\nAlso in ' + (r.splitCount - 1) + ' other room' + (r.splitCount > 2 ? 's' : '') : '') +
+                    (chLabel ? '\nMoved: ' + chLabel : '') +
+                    '\n' + r.title;
+          html += '<div class="blk' + (it.clash ? ' clash' : '') + (r.changed ? ' moved' : '') +
+            '" style="top:' + top + 'px;height:' + ht + 'px;left:calc(' + left + '% + 1px);' +
+            'width:calc(' + w + '% - 2px);border-left-color:' + colr + '" data-tip="' + esc(tip) + '">' +
+            '<div class="m">' + esc(r.module || r.activity) + '</div>' +
+            '<div class="r">' + esc(room.name) + '</div>' +
+            (chLabel && ht > 32 ? '<div class="c">moved ' + chLabel + '</div>'
+              : (r.isSplit && ht > 32 ? '<div class="c">+' + (r.splitCount - 1) + ' room' + (r.splitCount > 2 ? 's' : '') + '</div>' : '')) +
+            '</div>';
+        });
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  // ---------------- list ----------------
+  var sortKey = 'day', sortDir = 1;
+  var COLS = [['Module', 'module'], ['Title', 'title'], ['Day', 'day'], ['Start', 'start'],
+              ['Length', 'dur'], ['Room', 'room'], ['Seats', 'seats'], ['Weeks', 'weeks']];
+
+  function drawList(list) {
+    var showChanged = tab === 'springNew';
+    var cols = COLS.concat(showChanged ? [['Changed', 'changed']] : []);
+    var th = document.querySelector('#lst thead'), tb = document.querySelector('#lst tbody');
+    th.innerHTML = '<tr>' + cols.map(function (c) {
+      return '<th data-k="' + c[1] + '">' + c[0] + (sortKey === c[1] ? (sortDir > 0 ? ' ▲' : ' ▼') : '') + '</th>';
+    }).join('') + '</tr>';
+    th.querySelectorAll('th').forEach(function (h) {
+      h.onclick = function () {
+        var k = h.dataset.k;
+        if (k === sortKey) sortDir *= -1; else { sortKey = k; sortDir = 1; }
+        render();
+      };
     });
-    var blocks = model.classes.filter(function (c) { return c.isBlock; }).length;
 
-    document.getElementById('stats').innerHTML =
-      tile(multi.toLocaleString(), 'non-exam classes split across 2+ rooms today', 'warn') +
-      tile(String(stillSplit), 'non-exam classes still split in the rebuild', 'good') +
-      tile(b2b + '/' + model.linkedGroups.length, 'lecture+seminar pairs back-to-back', 'good') +
-      tile(blocks.toLocaleString(), 'block sessions kept on campus', 'good');
-
-    document.getElementById('b2bcount').textContent = model.linkedGroups.length;
-    document.getElementById('blockcount').textContent = blocks;
-
-    var labels = {
-      roomClash: 'No two classes in one room at once (exam rooms aside)',
-      timeClash: 'No cohort or lecturer in two places at once',
-      roomFit: 'Right room type, big enough',
-      linkedOrder: 'Lecture &amp; seminar same day, back-to-back, in order',
-      examSlot: 'Exams keep their module’s slot',
-      adjacency: 'Exams stay attached to the class they follow',
-      dayPairing: 'No new same-day pairing for a cohort',
-      window: 'Inside the teaching day',
+    var val = function (r) {
+      var room = H.model.rooms[r.room] || {};
+      switch (sortKey) {
+        case 'module': return r.module || r.activity;
+        case 'title': return r.title;
+        case 'day': return r.day * 10000 + r.start;
+        case 'start': return r.start;
+        case 'dur': return r.dur;
+        case 'room': return room.name || '';
+        case 'seats': return room.capacity || 0;
+        case 'weeks': return r.weeksText;
+        case 'changed': return r.changed || '';
+        default: return 0;
+      }
     };
-    var tb = document.querySelector('#rules tbody');
-    tb.innerHTML = Object.keys(labels).map(function (k) {
-      var a0 = now.counts[k] || 0, a1 = fixed.counts[k] || 0;
-      return '<tr><td>' + labels[k] + '</td>' +
-        '<td>' + (a0 ? '<span class="pill no">' + a0 + ' broken</span>' : '<span class="pill ok">holds</span>') + '</td>' +
-        '<td>' + (a1 ? '<span class="pill no">' + a1 + ' broken</span>' : '<span class="pill ok">holds</span>') + '</td></tr>';
+    var sorted = list.slice().sort(function (a, b) {
+      var va = val(a), vb = val(b);
+      return (va > vb ? 1 : va < vb ? -1 : 0) * sortDir;
+    });
+    var CAP = 800, show = sorted.slice(0, CAP);
+    tb.innerHTML = show.map(function (r) {
+      var room = H.model.rooms[r.room] || { name: '?', type: 'general' };
+      var chTxt = r.changed ? ['d', 't', 'r'].filter(function (x) { return r.changed.indexOf(x) >= 0; })
+        .map(function (x) { return { d: 'day', t: 'time', r: 'room' }[x]; }).join(', ') : '';
+      return '<tr>' +
+        '<td class="mono">' + esc(r.module || '—') + '</td>' +
+        '<td class="muted">' + esc(r.title) + '</td>' +
+        '<td>' + DAYS[r.day] + '</td>' +
+        '<td class="mono">' + fmt(r.start) + '</td>' +
+        '<td class="mono">' + (r.dur / 60) + 'h</td>' +
+        '<td><span class="tag ' + (TYPE_CLASS[room.type] || 't-general') + '"></span>' + esc(room.name) +
+          (r.isSplit ? ' <span class="pill neutral">+' + (r.splitCount - 1) + '</span>' : '') + '</td>' +
+        '<td class="mono">' + (room.capacityKnown ? room.capacity : '—') + '</td>' +
+        '<td class="mono">' + esc(r.weeksText) + '</td>' +
+        (showChanged ? '<td>' + (chTxt ? '<span class="pill no">' + chTxt + '</span>'
+          : '<span class="pill ok">same</span>') + '</td>' : '') +
+        '</tr>';
     }).join('');
+    document.getElementById('listnote').textContent = sorted.length > CAP
+      ? 'Showing the first ' + CAP + ' of ' + sorted.length + ' rows — narrow the filters to see the rest.'
+      : sorted.length + ' rows.';
+  }
 
-    var moved = mv.total - mv.untouched;
-    document.getElementById('costline').innerHTML =
-      '<strong>' + moved.toLocaleString() + ' of ' + mv.total.toLocaleString() +
-      ' classes changed in some way; ' + mv.untouched.toLocaleString() +
-      ' are untouched.</strong> Most changes are a room swap, which is the cheapest kind.';
-    document.getElementById('movestats').innerHTML =
-      tile(mv.untouched.toLocaleString(), 'completely unchanged', 'good') +
-      tile(mv.movedRoom.toLocaleString(), 'changed room') +
-      tile(mv.movedTime.toLocaleString(), 'changed time of day', 'warn') +
-      tile(mv.movedDay.toLocaleString(), 'changed day', 'warn');
+  function render() {
+    if (tab === 'method') return;
+    var list = rows().filter(matches);
+    var roomSet = new Set(list.map(function (r) { return r.room; }));
+    var split = list.filter(function (r) { return r.isSplit; }).length;
+    var moved = list.filter(function (r) { return r.changed; }).length;
+    document.getElementById('summary').innerHTML =
+      '<strong>' + list.length.toLocaleString() + '</strong> bookings · ' +
+      '<strong>' + roomSet.size + '</strong> rooms' +
+      (split ? ' · <span class="warn" style="color:var(--warn);font-weight:600">' + split + '</span> split across rooms' : '') +
+      (tab === 'springNew' && moved ? ' · <strong>' + moved + '</strong> moved from today' : '');
+    if (view === 'grid') drawGrid(list); else drawList(list);
+  }
 
-    var proxy = model.classes.filter(function (c) { return c.size > 0; }).length;
-    document.getElementById('proxyline').textContent =
-      'Of ' + model.classes.length.toLocaleString() + ' classes, all but a handful use the ' +
-      'seat count of their current room as a stand-in for how many students attend.';
+  // ---------------- programme picker ----------------
+  function setupProgrammes() {
+    var input = document.getElementById('f-prog');
+    var drop = document.getElementById('prog-list');
+    var chips = document.getElementById('prog-chips');
 
-    var unknown = model.rooms.filter(function (r) { return !r.capacityKnown; }).length;
-    document.getElementById('capline').textContent =
-      unknown + ' of ' + model.rooms.length + ' rooms have no capacity recorded — almost ' +
-      'all of them studios, workshops and specialist labs.';
+    // Only offer programmes that actually appear in the current tab.
+    function available() {
+      var seen = new Set();
+      rows().forEach(function (r) { r.progs.forEach(function (p) { seen.add(p); }); });
+      return seen;
+    }
 
-    var soft = C.softScore(model, a.solved);
-    var softNow = C.softScore(model, a.current);
-    var meta = model.meta || {};
-    var gaps = meta.gapDays, gapsWas = meta.gapDaysBefore;
-    document.getElementById('softstats').innerHTML =
-      tile(softNow.edge + ' \u2192 ' + soft.edge, 'teaching classes in 9\u201310am / 4\u20135pm edge slots', 'good') +
-      (gaps != null
-        ? tile(gapsWas + ' \u2192 ' + gaps, 'gap days in cohorts\u2019 teaching weeks', 'good')
-        : '') +
-      tile(softNow.wedPm + ' \u2192 ' + soft.wedPm, 'classes on Wednesday afternoon', 'warn');
+    function drawChips() {
+      chips.innerHTML = [...state.progs].map(function (p) {
+        return '<button class="chip" aria-pressed="true" data-p="' + p + '">' +
+          esc(H.model.programmes[p]) + ' ✕</button>';
+      }).join('');
+      chips.querySelectorAll('.chip').forEach(function (b) {
+        b.onclick = function () { state.progs.delete(Number(b.dataset.p)); drawChips(); render(); };
+      });
+    }
 
-    document.getElementById('leadmove').textContent =
-      'while leaving ' + mv.untouched.toLocaleString() + ' of ' +
-      mv.total.toLocaleString() + ' classes exactly where they are';
+    function drawDrop() {
+      var q = input.value.trim().toLowerCase();
+      if (!q) { drop.classList.remove('open'); input.setAttribute('aria-expanded', 'false'); return; }
+      var avail = available();
+      var hits = [];
+      for (var i = 0; i < H.model.programmes.length && hits.length < 60; i++) {
+        if (!avail.has(i) || state.progs.has(i)) continue;
+        if (H.model.programmes[i].toLowerCase().indexOf(q) >= 0) hits.push(i);
+      }
+      drop.innerHTML = hits.length
+        ? hits.map(function (i) { return '<div class="opt" role="option" data-p="' + i + '">' + esc(H.model.programmes[i]) + '</div>'; }).join('')
+        : '<div class="opt muted" style="cursor:default">No programme matches, in this term</div>';
+      drop.querySelectorAll('.opt[data-p]').forEach(function (o) {
+        o.onclick = function () {
+          state.progs.add(Number(o.dataset.p));
+          input.value = '';
+          drop.classList.remove('open');
+          input.setAttribute('aria-expanded', 'false');
+          drawChips(); render();
+        };
+      });
+      drop.classList.add('open');
+      input.setAttribute('aria-expanded', 'true');
+    }
 
-    document.getElementById('checkedline').textContent =
-      'Data generated ' + (model.meta && model.meta.generated ? model.meta.generated : 'unknown') +
-      ' · ' + model.classes.length.toLocaleString() + ' classes · ' + model.rooms.length + ' rooms' +
-      ' · rules re-checked in your browser on page load.';
+    input.oninput = drawDrop;
+    input.onfocus = drawDrop;
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#f-prog') && !e.target.closest('#prog-list')) {
+        drop.classList.remove('open');
+        input.setAttribute('aria-expanded', 'false');
+      }
+    });
+    return { drawChips: drawChips };
+  }
+
+  // ---------------- tabs ----------------
+  function selectTab(key) {
+    tab = key;
+    document.querySelectorAll('#tabs .tab').forEach(function (b) {
+      b.setAttribute('aria-selected', String(b.dataset.k === key));
+    });
+    var isMethod = key === 'method';
+    ['filters', 'view-grid', 'view-list'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.hidden = isMethod || (id === 'view-grid' ? view !== 'grid' : id === 'view-list' ? view !== 'list' : false);
+    });
+    document.getElementById('summary').parentElement.hidden = isMethod;
+    document.getElementById('method').hidden = !isMethod;
+
+    document.getElementById('chip-changed').hidden = key !== 'springNew';
+    document.getElementById('chip-split').hidden = key === 'springNew';
+    if (key === 'springNew') { state.split = false; document.getElementById('chip-split').setAttribute('aria-pressed', 'false'); }
+    else { state.changed = false; document.getElementById('chip-changed').setAttribute('aria-pressed', 'false'); }
+
+    document.getElementById('legend-extra').textContent =
+      key === 'springNew' ? 'Dashed edge = moved from today' : 'Outlined = same room double-booked';
+
+    drawBanner();
+    if (!isMethod) render();
+  }
+
+  function drawBanner() {
+    var el = document.getElementById('banner');
+    if (tab === 'autumn') {
+      el.innerHTML = '<div class="note"><p style="margin:0"><strong>Autumn 2026, as it stands.</strong> ' +
+        'Shown for reference — the rebuild covers Spring only.</p></div>';
+    } else if (tab === 'springNow') {
+      el.innerHTML = '<div class="note warn"><p style="margin:0"><strong>Spring 2026, as it stands.</strong> ' +
+        'Bookings marked <em>split across rooms</em> are the problem being fixed: one class ' +
+        'occupying two or three rooms. Compare with the rebuilt tab.</p></div>';
+    } else if (tab === 'springNew') {
+      el.innerHTML = '<div id="verdict" class="note">Checking the rebuilt timetable in your browser…</div>';
+      checkRebuild();
+    } else {
+      el.innerHTML = '';
+    }
+  }
+
+  function checkRebuild() {
+    var Cn = window.TTConstraints;
+    var fixed = Cn.check(H.model, H.assign.solved, CHECK_OPTS);
+    var mv = Cn.movement(H.model, H.assign.solved);
+    var v = document.getElementById('verdict');
+    if (!v) return;
+    if (fixed.total === 0) {
+      v.className = 'note good';
+      v.innerHTML = '<p style="margin:0"><strong>Checked just now, in this browser: 0 violations across all ' +
+        H.model.classes.length.toLocaleString() + ' classes.</strong> One room per class (exams aside, ' +
+        'which may fill several), no cohort or lecturer in two places, every lecture and seminar ' +
+        'back-to-back, and no new same-day pairings. ' +
+        mv.untouched.toLocaleString() + ' of ' + mv.total.toLocaleString() +
+        ' classes are exactly where they are today. <a href="#" id="to-method">How it was built</a>.</p>';
+    } else {
+      v.className = 'note warn';
+      v.innerHTML = '<p style="margin:0"><strong>' + fixed.total +
+        ' hard violations remain.</strong> This timetable is not clean.</p>';
+    }
+    var link = document.getElementById('to-method');
+    if (link) link.onclick = function (e) { e.preventDefault(); selectTab('method'); };
+  }
+
+  // ---------------- boot ----------------
+  M.loadTimetable().then(function (h) {
+    H = h;
+    Object.keys(H.terms).forEach(function (k) { markSplits(H.terms[k]); });
+
+    var tabsEl = document.getElementById('tabs');
+    TABS.forEach(function (k) {
+      var t = H.terms[k];
+      var b = document.createElement('button');
+      b.className = 'tab';
+      b.dataset.k = k;
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(k === tab));
+      b.innerHTML = k === 'method'
+        ? 'Method'
+        : esc(t.label) + '<span class="sub">' + esc(t.sub) + '</span>';
+      b.onclick = function () { selectTab(k); };
+      tabsEl.appendChild(b);
+    });
+
+    var progUI = setupProgrammes();
+
+    var dayWrap = document.getElementById('f-days');
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].forEach(function (d, i) {
+      var b = document.createElement('button');
+      b.className = 'chip'; b.textContent = d; b.setAttribute('aria-pressed', 'false');
+      b.onclick = function () {
+        var on = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(on));
+        if (on) state.days.add(i); else state.days.delete(i);
+        render();
+      };
+      dayWrap.appendChild(b);
+    });
+
+    var wk = document.getElementById('f-week');
+    for (var w = 1; w <= 16; w++) {
+      var o = document.createElement('option');
+      o.value = String(w); o.textContent = 'Week ' + w;
+      wk.appendChild(o);
+    }
+    wk.onchange = function () { state.week = wk.value; render(); };
+
+    document.getElementById('f-module').oninput = function (e) { state.module = e.target.value.trim(); render(); };
+    document.getElementById('f-room').oninput = function (e) { state.room = e.target.value.trim(); render(); };
+
+    document.querySelectorAll('#f-flags .chip').forEach(function (b) {
+      b.onclick = function () {
+        var on = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(on));
+        state[b.dataset.f] = on;
+        render();
+      };
+    });
+
+    var vg = document.getElementById('v-grid'), vl = document.getElementById('v-list');
+    vg.onclick = function () {
+      view = 'grid';
+      vg.setAttribute('aria-pressed', 'true'); vl.setAttribute('aria-pressed', 'false');
+      document.getElementById('view-grid').hidden = false;
+      document.getElementById('view-list').hidden = true;
+      render();
+    };
+    vl.onclick = function () {
+      view = 'list';
+      vl.setAttribute('aria-pressed', 'true'); vg.setAttribute('aria-pressed', 'false');
+      document.getElementById('view-list').hidden = false;
+      document.getElementById('view-grid').hidden = true;
+      render();
+    };
+
+    document.getElementById('f-clear').onclick = function () {
+      state.progs.clear();
+      state.module = state.room = state.week = '';
+      state.days.clear();
+      state.changed = state.split = false;
+      document.getElementById('f-prog').value = '';
+      document.getElementById('f-module').value = '';
+      document.getElementById('f-room').value = '';
+      document.getElementById('f-week').value = '';
+      document.querySelectorAll('#f-days .chip, #f-flags .chip').forEach(function (b) {
+        b.setAttribute('aria-pressed', 'false');
+      });
+      progUI.drawChips();
+      render();
+    };
+
+    document.getElementById('method').innerHTML = window.TTMethod.html(H);
+    selectTab('autumn');
   }).catch(function (e) {
-    document.getElementById('verdict').className = 'note warn';
-    document.getElementById('verdict').textContent = e.message;
+    document.getElementById('banner').innerHTML =
+      '<div class="note warn"><p style="margin:0">' + esc(e.message) + '</p></div>';
+  });
+
+  // Tooltip
+  var tip = document.getElementById('tip');
+  document.addEventListener('mouseover', function (e) {
+    var b = e.target.closest('[data-tip]');
+    if (b) { tip.innerHTML = esc(b.dataset.tip).replace(/\n/g, '<br>'); tip.style.opacity = '1'; }
+  });
+  document.addEventListener('mousemove', function (e) {
+    var b = e.target.closest('[data-tip]');
+    if (!b) { tip.style.opacity = '0'; return; }
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 8) + 'px';
   });
 })();
 </script>
