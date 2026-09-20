@@ -153,6 +153,123 @@ class Solver {
       if (comp.members.length > 1) this.moveComponent(comp, comp.origDay, comp.origStart);
     }
     if (this.opts.start === 'scatter') this.scatter();
+    if (this.opts.start === 'greedy') this.construct();
+  }
+
+  /**
+   * Build a timetable from nothing, hardest component first.
+   *
+   * The big-room band runs at 93-97% of usable capacity in weeks 1, 5 and 9 —
+   * a near-perfect packing, which is where repairing an existing arrangement
+   * stops working: every single move looks bad because everything is already
+   * nearly full. Constructing instead, and letting the component with the
+   * fewest rooms and the longest span choose first, is how a timetabler does
+   * it by hand and puts the search in a different basin to start from.
+   *
+   * Fixed components keep their slots; everything else is placed against what
+   * has been placed so far, never against a half-finished future.
+   */
+  construct() {
+    const order = this.components
+      .filter(c => !c.fixed)
+      .sort((a, b) => {
+        const ra = Math.min(...a.members.map(m => this.roomChoices(m.cls.id).length));
+        const rb = Math.min(...b.members.map(m => this.roomChoices(m.cls.id).length));
+        return ra - rb || b.span - a.span || b.members.length - a.members.length;
+      });
+
+    // Lift everything movable out of the grid first, so an early component is
+    // not blocked by a late one that has not chosen yet.
+    for (const comp of order) {
+      for (const m of comp.members) {
+        const bucket = this.occ[this.room[m.cls.id] * DAY_COUNT + this.day[m.cls.id]];
+        const at = bucket.indexOf(m.cls.id);
+        if (at >= 0) bucket.splice(at, 1);
+      }
+      comp.placed = false;
+    }
+    // progDayCount must only count what is actually on the grid.
+    this.progDayCount.fill(0);
+    for (const c of this.model.classes) {
+      if (!this.components[this.compOf[c.id]].fixed) continue;
+      for (const p of this.classProgs.get(c.id)) this.progDayCount[p * DAY_COUNT + this.day[c.id]]++;
+    }
+
+    for (const comp of order) {
+      const ids = comp.members.map(m => m.cls.id);
+      const wide = comp.span > DAY_WIDTH;
+      const starts = wide ? [DAY_START] : STARTS.filter(x => x + comp.span <= HARD_MAX);
+      let best = null, bestScore = Infinity;
+      for (let d = 0; d < DAY_COUNT; d++) {
+        for (const st of starts) {
+          // Put it down, choose rooms greedily, score, lift it again.
+          for (const m of comp.members) {
+            this.day[m.cls.id] = d;
+            this.start[m.cls.id] = st + m.off;
+          }
+          const rooms = [];
+          let score = 0;
+          for (const m of comp.members) {
+            const id = m.cls.id;
+            let pick = null, pickCost = Infinity;
+            for (const r of this.roomChoices(id)) {
+              let clashes = 0;
+              for (const other of this.occ[r * DAY_COUNT + d]) {
+                if (this.shares.has(id < other ? id + ':' + other : other + ':' + id)) continue;
+                if (this.start[id] < this.start[other] + this.dur[other] &&
+                    this.start[other] < this.start[id] + this.dur[id] &&
+                    (this.weeks[id] & this.weeks[other])) clashes++;
+              }
+              // Among rooms that work, take the tightest fit, so the big rooms
+              // stay free for the classes that cannot use anything else.
+              const room = this.model.rooms[r];
+              const waste = room.capacityKnown ? Math.max(0, room.capacity - m.cls.size) : 0;
+              const cost = clashes * 1000 + waste * 0.05;
+              if (cost < pickCost) { pickCost = cost; pick = r; }
+              if (clashes === 0 && waste === 0) break;
+            }
+            if (pick === null) pick = m.cls.origRoom;
+            rooms.push(pick);
+            score += pickCost;
+          }
+          // Cohort and same-day rules, against what is already down.
+          for (const m of comp.members) {
+            const id = m.cls.id;
+            for (const other of this.timePartners.get(id)) {
+              if (this.day[other] !== d || this.room[other] < 0) continue;
+              if (!this.components[this.compOf[other]].placed) continue;
+              if (this.start[id] < this.start[other] + this.dur[other] &&
+                  this.start[other] < this.start[id] + this.dur[id] &&
+                  (this.weeks[id] & this.weeks[other])) score += 1000;
+            }
+            for (const other of this.dayPartners.get(id)) {
+              if (!this.components[this.compOf[other]].placed) continue;
+              if (this.day[other] === d) score += 1000;
+            }
+          }
+          if (this.opts.wEdge) {
+            for (const m of comp.members) {
+              if (!m.cls.attended) continue;
+              const ms = st + m.off;
+              if (ms < EDGE_EARLY || ms >= EDGE_LATE) score += this.opts.wEdge;
+            }
+          }
+          score += this.rand() * 4;   // break ties differently on each seed
+          if (score < bestScore) { bestScore = score; best = { d, st, rooms }; }
+        }
+      }
+      if (!best) best = { d: comp.origDay, st: comp.origStart, rooms: ids.map(i => this.model.byId.get(i).origRoom) };
+      comp.day = best.d; comp.start = best.st;
+      comp.members.forEach((m, k) => {
+        const id = m.cls.id;
+        this.day[id] = best.d;
+        this.start[id] = best.st + m.off;
+        this.room[id] = best.rooms[k];
+        this.occ[best.rooms[k] * DAY_COUNT + best.d].push(id);
+        for (const p of this.classProgs.get(id)) this.progDayCount[p * DAY_COUNT + best.d]++;
+      });
+      comp.placed = true;
+    }
   }
 
   /**
@@ -765,6 +882,74 @@ class Solver {
           this.tryTimeRepair(id, 'minconflict');
         }
         if (!any) break;
+      }
+
+      const now = this.totalHard();
+      if (now < bestHard) { bestHard = now; best = this.snapshot(); }
+      else this.restore(keep);
+    }
+    this.restore(best);
+    return bestHard;
+  }
+
+  /**
+   * A bigger ruin: tear up a random slice of the whole timetable, not just the
+   * neighbourhood of one clash, and rebuild it.
+   *
+   * intensify() works on what a violation touches, which is the right first
+   * move but leaves the search inside the same basin. Once it has stopped
+   * paying, displacing a percent or two of the term at random gives the repair
+   * loop somewhere genuinely new to land, while still being small enough that
+   * a failed attempt costs little to undo.
+   */
+  ruinAndRecreate(attempts, frac) {
+    frac = frac || 0.03;
+    let bestHard = this.totalHard();
+    if (bestHard === 0) return bestHard;
+    let best = this.snapshot();
+
+    const movable = this.components.filter(c => !c.fixed);
+    for (let a = 0; a < (attempts || 40) && bestHard > 0; a++) {
+      const keep = this.snapshot();
+      // Always include whatever is broken; the rest is a random slice.
+      const region = new Set();
+      for (const id of this.violatingClasses()) region.add(this.compOf[id]);
+      const want = Math.max(8, Math.floor(movable.length * frac));
+      while (region.size < want) {
+        region.add(movable[Math.floor(this.rand() * movable.length)].id);
+      }
+
+      const comps = [...region].map(i => this.components[i]).filter(c => c && !c.fixed);
+      for (const comp of comps) {
+        const wide = comp.span > DAY_WIDTH;
+        const legal = wide ? [DAY_START] : STARTS.filter(x => x + comp.span <= HARD_MAX);
+        if (!legal.length) continue;
+        this.moveComponent(comp, Math.floor(this.rand() * DAY_COUNT),
+          legal[Math.floor(this.rand() * legal.length)]);
+      }
+      const ids = [];
+      for (const comp of comps) for (const m of comp.members) ids.push(m.cls.id);
+      for (let round = 0; round < 10; round++) {
+        let any = false;
+        for (const id of ids) {
+          if (this.hardOf(id, null) === 0) continue;
+          any = true;
+          if (this.tryRoomRepair(id)) continue;
+          if (this.tryRoomSwap(id)) continue;
+          if (this.tryTimeRepair(id, 'improve')) continue;
+          this.tryTimeRepair(id, 'minconflict');
+        }
+        if (!any) break;
+      }
+      // Let the rest of the timetable settle around the slice that moved.
+      for (let round = 0; round < 3; round++) {
+        const bad = this.violatingClasses();
+        if (!bad.length) break;
+        for (const id of bad) {
+          if (this.tryRoomRepair(id)) continue;
+          if (this.tryRoomSwap(id)) continue;
+          this.tryTimeRepair(id, 'improve');
+        }
       }
 
       const now = this.totalHard();

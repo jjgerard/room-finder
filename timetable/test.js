@@ -759,6 +759,40 @@ test('solver: going home never costs hard violations', () => {
     `home repair made it worse: ${before} -> ${s.totalHard()}`);
 });
 
+test('solver: a greedy construction places every class legally in time', () => {
+  // Construction throws the whole timetable away and rebuilds it, so the
+  // invariants the repair loop assumes have to hold before it starts.
+  const s = new Solver(model, { seed: 31, start: 'greedy', maxIters: 0 });
+  const a = s.assignment();
+  const chk = C.check(model, a, {});
+  eq(chk.counts.linkedOrder, 0, 'construction broke a lecture/seminar pair');
+  eq(chk.counts.window, 0, 'construction placed something outside the teaching day');
+  for (const c of model.classes) {
+    const p = a.get(c.id);
+    assert.ok(p.room >= 0 && p.day >= 0, (c.module || c.id) + ' was left unplaced');
+  }
+});
+
+test('solver: construction leaves a pinned booking where it is', () => {
+  const s = new Solver(model, { seed: 32, start: 'greedy', maxIters: 0 });
+  const a = s.assignment();
+  for (const c of model.classes) {
+    if (!c.isFixed) continue;
+    eq(a.get(c.id).day, c.origDay, c.title + ' was moved by construction');
+    eq(a.get(c.id).start, c.origStart, c.title + ' was moved by construction');
+    eq(a.get(c.id).room, c.origRoom, c.title + ' was moved by construction');
+  }
+});
+
+test('solver: the wider ruin never makes the timetable worse', () => {
+  const s = new Solver(model, Object.assign({ seed: 33 }, TEST_BUDGET));
+  s.run();
+  const before = s.totalHard();
+  const after = s.ruinAndRecreate(4, 0.02);
+  assert.ok(after <= before, `ruinAndRecreate made it worse: ${before} -> ${after}`);
+  eq(after, s.totalHard());
+});
+
 test('solver: never sends block teaching offsite', () => {
   const s = new Solver(model, Object.assign({ seed: 5 }, TEST_BUDGET));
   s.run();
