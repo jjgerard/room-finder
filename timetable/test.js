@@ -836,6 +836,24 @@ test('export: the browser is given the grandfathered sharing pairs', () => {
     'the export ships a different number of sharing pairs than the model has');
 });
 
+test('sizes: a confirmed size gets no capacity tolerance', () => {
+  // The tolerance is there because a size is normally the capacity of the
+  // room a class sits in today. A real headcount gets no such benefit: 225
+  // students do not go in a 215-seat theatre.
+  const law = model.classes.find(c => c.module === 'LAW139' && c.sizeConfirmed);
+  assert.ok(law, 'expected a confirmed LAW139 lecture');
+  eq(law.size, 225);
+  for (const id of law.cand) {
+    if (id === law.homeRoom) continue;
+    const r = model.rooms[id];
+    assert.ok(r.capacity >= law.size,
+      'a confirmed 225 was offered ' + r.name + ' (' + r.capacity + ')');
+  }
+  // A module's seminar groups keep their own proxy sizes.
+  const groups = model.classes.filter(c => c.module === 'LAW139' && !c.sizeConfirmed);
+  assert.ok(groups.length >= 4, 'LAW139 should still have its seminar groups');
+});
+
 test('sizes: a confirmed cohort size caps the room-capacity proxy', () => {
   // COM663 and BME104 are booked into the 215-seat Conor Lecture Theatre and
   // take about 100, so the proxy had them competing for the three biggest

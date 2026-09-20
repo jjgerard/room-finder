@@ -179,6 +179,15 @@ function load(dir, opts) {
         trueSizes.has(String(r.module || '').trim())
           ? trueSizes.get(String(r.module || '').trim())
           : Infinity),
+      // True where the number above IS the confirmed figure rather than the
+      // proxy — which is only when the cap actually bound. A module's seminar
+      // groups keep their own proxy sizes, and an unrecorded size stays
+      // unrecorded.
+      sizeConfirmed: trueSizes.get(String(r.module || '').trim()) ===
+        Math.min(Number(r.size_estimate) || 0,
+          trueSizes.has(String(r.module || '').trim())
+            ? trueSizes.get(String(r.module || '').trim())
+            : Infinity),
       sizeKnown: r.size_basis === 'known_headcount',
       day: DAYS.indexOf(r.current_day),
       start,
@@ -398,7 +407,12 @@ function load(dir, opts) {
         // therefore needs a room recorded as having them — give or take the
         // tolerance below, since the number is an estimate of a headcount, not
         // a headcount.
-        if (c.size > 0 && !(room.capacityKnown && room.capacity >= needSeats(c.size))) continue;
+        // The tolerance exists because a size is usually the capacity of the
+        // room the class sits in today, not a headcount. Where somebody has
+        // told us the real number it gets no such benefit of the doubt: 225
+        // students do not go in a 215-seat theatre.
+        const needs = c.sizeConfirmed ? c.size : needSeats(c.size);
+        if (c.size > 0 && !(room.capacityKnown && room.capacity >= needs)) continue;
         allowed.push(room.id);
       }
       if (c.homeRoom != null && !allowed.includes(c.homeRoom)) allowed.push(c.homeRoom);
