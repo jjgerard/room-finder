@@ -427,8 +427,13 @@ class Solver {
    *
    * Five lectures that can only use Lecture Theatre 1 sit across the week
    * today without touching each other; a search that had never considered
-   * going home stacked three of them on top of each other. So home is tried
-   * first, before any room swap or time move.
+   * going home stacked three of them on top of each other.
+   *
+   * It belongs at the END, not in the repair loop. Offering it on every
+   * repair was measured and made things worse — 11 violations became 16 —
+   * because pulling classes back mid-search undoes the displacement the
+   * repair depends on, and costs the variety the restarts feed on. Once the
+   * timetable has stopped moving, the same move only helps.
    */
   tryHomeRepair(id) {
     const cls = this.model.byId.get(id);
@@ -641,7 +646,6 @@ class Solver {
         if (iter >= o.maxIters) break;
         if (this.hardOf(id, null) === 0) continue; // an earlier repair got it
         const noisy = this.rand() < o.noise;
-        if (!noisy && this.tryHomeRepair(id)) { iter++; continue; }
         if (!noisy && this.tryRoomRepair(id)) { iter++; continue; }
         if (!noisy && this.tryRoomSwap(id)) { iter++; continue; }
         if (this.tryTimeRepair(id, 'improve')) { iter++; continue; }
@@ -755,7 +759,6 @@ class Solver {
         for (const id of ids) {
           if (this.hardOf(id, null) === 0) continue;
           any = true;
-          if (this.tryHomeRepair(id)) continue;
           if (this.tryRoomRepair(id)) continue;
           if (this.tryRoomSwap(id)) continue;
           if (this.tryTimeRepair(id, 'improve')) continue;
