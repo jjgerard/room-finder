@@ -302,6 +302,17 @@ function load(dir, opts) {
     if (!roomSubjects.has(c.homeRoom)) roomSubjects.set(c.homeRoom, new Set());
     roomSubjects.get(c.homeRoom).add(subj);
   }
+  // Which subjects each room has actually served, kept on the room so the
+  // solver can prefer a School's own lab for that School's classes. For a
+  // specialist room this is already a hard restriction; for a lab it is only
+  // a preference, since a lab is shared space in practice.
+  for (const room of rooms) room.subjects = roomSubjects.get(room.id) || new Set();
+  // A School's own lab, as opposed to the central ones anybody books. The
+  // booking history says plainly who they belong to: the five "IT Lab -
+  // School of Computing" rooms are 90% COM and CMP, and the CAD lab is BEN,
+  // ENE, ARC, CIV and BLD — computing and engineering, exactly as the name
+  // (Computing, Engineering and the Built Environment) suggests.
+  for (const room of rooms) room.isSchoolLab = /CEBE|MARCS/.test(room.name);
 
   // A class's "size" is the capacity of the room it sits in today, not a real
   // headcount (only 17 of 1,556 rows carry one). Timetabling's working

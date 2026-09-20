@@ -820,6 +820,27 @@ test('rooms: the CEBE labs are offered to the classes that need machines', () =>
   }
 });
 
+test('rooms: a School lab favours the School it belongs to', () => {
+  // CEBE's labs go to computing and engineering first, read from what has
+  // actually been taught in each one rather than from a list of codes.
+  const s = new Solver(model, Object.assign({ seed: 43 }, TEST_BUDGET));
+  const cad = model.rooms.find(r => /BC-05-306/.test(r.name));
+  const itLab = model.rooms.find(r => /BC-03-311/.test(r.name));
+  assert.ok(cad && itLab, 'expected the CAD lab and the big IT lab');
+  assert.ok(cad.isSchoolLab && itLab.isSchoolLab);
+  assert.ok(itLab.subjects.has('COM'), 'the IT lab should serve computing');
+  assert.ok(cad.subjects.has('BEN') || cad.subjects.has('CIV'),
+    'the CAD lab should serve the built environment');
+
+  const com = model.classes.find(c => /^COM/.test(String(c.module)));
+  const acf = model.classes.find(c => /^ACF/.test(String(c.module)));
+  assert.ok(s.roomReluctance(com, itLab) < s.roomReluctance(acf, itLab),
+    'a computing class should be preferred in the computing lab');
+  // Still only a preference: turning the weight off removes it entirely.
+  const off = new Solver(model, Object.assign({ seed: 43, wOtherSchool: 0, wLabSquat: 0 }, TEST_BUDGET));
+  eq(off.roomReluctance(acf, itLab), 0);
+});
+
 test('rooms: the library computer room is flagged, and only it', () => {
   const lib = model.rooms.filter(r => r.isLibrary);
   eq(lib.length, 1, 'expected exactly one library computer room');

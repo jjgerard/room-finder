@@ -73,6 +73,10 @@ class Solver {
       // The library's computer room is a student resource first; teaching goes
       // there only when a School lab is not free.
       wLibrary: 9,
+      // A School's own lab is for that School. CEBE's IT labs and CAD lab go
+      // to computing and engineering before anyone else — read from what has
+      // been taught in each one rather than from a list of subject codes.
+      wOtherSchool: 20,
       wMoveDay: 6,          // movement: changed day
       wMoveTime: 3,         // movement: changed time
       wMoveRoom: 1,         // movement: changed room
@@ -730,6 +734,10 @@ class Solver {
     if (!room) return v;
     if (o.wLabSquat && room.type === 'computer' && cls.roomType !== 'computer') v += o.wLabSquat;
     if (o.wLibrary && room.isLibrary) v += o.wLibrary;
+    if (o.wOtherSchool && room.isSchoolLab && room.subjects && room.subjects.size) {
+      const subj = String(cls.module || '').replace(/[0-9].*$/, '');
+      if (subj && !room.subjects.has(subj)) v += o.wOtherSchool;
+    }
     return v;
   }
 
