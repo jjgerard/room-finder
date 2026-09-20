@@ -71,6 +71,26 @@ function load(dir, opts) {
     capacity: Number(r.capacity) || 0,
     capacityKnown: Number(r.capacity) > 0,
   }));
+  // Capacities the room inventory does not carry, read out of Ulster's own
+  // Resource Booker. Five CEBE IT labs, the CAD lab and the two MARCS rooms
+  // are in daily teaching use and have no seat count anywhere in the handoff
+  // data, which meant the model offered them to nobody and left two central
+  // labs carrying what twelve carry in practice.
+  //
+  // These are recorded numbers, not inferences, so they override a blank and
+  // are marked as coming from the booker rather than from the class data.
+  try {
+    for (const row of rd('room_capacities.csv')) {
+      const room = rooms.find(r => r.name === row.room_name);
+      if (!room) continue;
+      const cap = Number(row.capacity);
+      if (!(cap > 0)) continue;
+      room.capacity = cap;
+      room.capacityKnown = true;
+      room.capacitySource = row.source || 'resource booker';
+    }
+  } catch (e) { /* no supplementary capacities available */ }
+
   // The room inventory mistypes a number of art and design spaces as general.
   // BB-05-011 "MFA Fine Art Space", BA-03-007 "Interaction Design" and
   // BB-05-008 "Fine Art AV Edit Suite" are all typed general with no capacity,

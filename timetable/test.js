@@ -793,6 +793,33 @@ test('solver: the wider ruin never makes the timetable worse', () => {
   eq(after, s.totalHard());
 });
 
+test('rooms: the booker capacities are applied and marked as recorded', () => {
+  // These came out of Ulster's Resource Booker, not out of the handoff data
+  // and not out of an inference, so they must be distinguishable from both.
+  const fromBooker = model.rooms.filter(r => r.capacitySource);
+  assert.ok(fromBooker.length >= 7, 'expected the supplementary capacities to load');
+  for (const r of fromBooker) {
+    assert.ok(r.capacity > 0 && r.capacityKnown, r.name + ' has a booker capacity of zero');
+    assert.ok(!r.capacityInferred, r.name + ' is marked both recorded and inferred');
+  }
+  const big = model.rooms.find(r => /BC-03-311/.test(r.name));
+  eq(big.capacity, 80, 'the largest CEBE lab should carry its real capacity');
+});
+
+test('rooms: the CEBE labs are offered to the classes that need machines', () => {
+  // The bug this guards: five working School of Computing labs had no seat
+  // count anywhere, so a strict reading offered them to nobody.
+  const cebe = model.rooms.filter(r => /CEBE/.test(r.name) && r.type === 'computer');
+  const usable = cebe.filter(r => r.capacityKnown);
+  assert.ok(usable.length >= 6, 'only ' + usable.length + ' CEBE labs carry a capacity');
+  const midSized = model.classes.find(c => c.roomType === 'computer' && c.size >= 40 && c.size <= 50);
+  if (midSized) {
+    const offered = midSized.cand.filter(id => /CEBE/.test(model.rooms[id].name));
+    assert.ok(offered.length > 0,
+      (midSized.module || midSized.id) + ' is still offered no CEBE lab');
+  }
+});
+
 test('rooms: the library computer room is flagged, and only it', () => {
   const lib = model.rooms.filter(r => r.isLibrary);
   eq(lib.length, 1, 'expected exactly one library computer room');
