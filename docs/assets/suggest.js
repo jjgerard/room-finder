@@ -17,6 +17,15 @@
 const DAY_COUNT = 5;
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
+// The teaching day is defined once, in constraints.js. Reaching for it rather
+// than restating it is what stops this file offering slots the solver forbids.
+const RULES = (typeof require === 'function')
+  ? require('./constraints')
+  : (typeof window !== 'undefined' ? window.TTConstraints : null);
+const DAY_START = RULES ? RULES.DAY_START : 9 * 60 + 15;
+const DAY_END = RULES ? RULES.DAY_END : 17 * 60 + 15;
+const DAY_WIDTH = DAY_END - DAY_START;
+
 function fmt(v) {
   return String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
 }
@@ -40,6 +49,12 @@ function buildIndex(model, assign) {
   return { byRoomDay, timeP, dayP };
 }
 
+/** "CMM151 Drawing in Practice/LEC" reads better than "CMM151/LEC". */
+function describe(model, c) {
+  const name = (model.modTitles || {})[c.module];
+  return (c.module || c.activity) + (name ? ' ' + name : '') + '/' + c.activity;
+}
+
 /**
  * Everything that would stop `cls` sitting at (day, start, room).
  * `ignore` is the set of class ids moving with it, which cannot block it.
@@ -49,8 +64,15 @@ function blockersAt(model, assign, idx, cls, day, start, room, ignore) {
   const at = id => (assign.get ? assign.get(id) : assign[id]);
 
   if (day < 0 || day > 4) out.push({ rule: 'window', text: 'outside the teaching week' });
-  if (start < 7 * 60 + 15 || start + cls.dur > 23 * 60 + 15) {
-    out.push({ rule: 'window', text: `${fmt(start)}–${fmt(start + cls.dur)} falls outside the day` });
+  // A session longer than the day may overrun its end — there is nowhere else
+  // for it — but may never start before the day begins.
+  const tooLong = cls.windowExempt || cls.dur > DAY_WIDTH;
+  if (!cls.isFixed && (start < DAY_START || (!tooLong && start + cls.dur > DAY_END))) {
+    out.push({
+      rule: 'window',
+      text: `${fmt(start)}–${fmt(start + cls.dur)} falls outside ` +
+            `${fmt(DAY_START)}–${fmt(DAY_END)}`,
+    });
   }
 
   const roomObj = model.rooms[room];
@@ -70,8 +92,8 @@ function blockersAt(model, assign, idx, cls, day, start, room, ignore) {
     if (!(cls.weeks & o.weeks)) continue;
     out.push({
       rule: 'roomClash', other: otherId,
-      text: `${roomObj ? roomObj.name : 'the room'} is taken by ${o.module || o.activity}` +
-            `/${o.activity} ${fmt(po.start)}–${fmt(po.start + o.dur)}`,
+      text: `${roomObj ? roomObj.name : 'the room'} is taken by ${describe(model, o)} ` +
+            `${fmt(po.start)}–${fmt(po.start + o.dur)}`,
     });
   }
 
@@ -83,7 +105,7 @@ function blockersAt(model, assign, idx, cls, day, start, room, ignore) {
     if (!(cls.weeks & o.weeks)) continue;
     out.push({
       rule: 'timeClash', other: otherId,
-      text: `clashes with ${o.module || o.activity}/${o.activity} ` +
+      text: `clashes with ${describe(model, o)} ` +
             `${fmt(po.start)}–${fmt(po.start + o.dur)} (same students or staff)`,
     });
   }
@@ -95,7 +117,8 @@ function blockersAt(model, assign, idx, cls, day, start, room, ignore) {
     const o = model.byId.get(otherId);
     out.push({
       rule: 'dayPairing', other: otherId,
-      text: `would put ${o.module || o.activity} on the same day for a cohort that does not share one today`,
+      text: `would put ${describe(model, o)} on the same day for a cohort that ` +
+            `does not share one today`,
     });
   }
 
@@ -142,7 +165,7 @@ function alternatives(model, components, assign, classId, opts) {
   for (let d = 0; d < DAY_COUNT; d++) {
     for (const s of starts) {
       if (d === curDay && s === curStart) continue;
-      if (s + comp.span > 23 * 60 + 15) continue;
+      if (comp.span > DAY_WIDTH ? s !== DAY_START : s + comp.span > DAY_END) continue;
 
       // For each member pick the least-blocked room, preferring the one it
       // already holds so an otherwise fine move is not reported as a room change.
@@ -216,11 +239,11 @@ function alternatives(model, components, assign, classId, opts) {
 
 function defaultStarts() {
   const out = [];
-  for (let t = 7 * 60 + 15; t <= 19 * 60 + 15; t += 60) out.push(t);
+  for (let t = DAY_START; t + 60 <= DAY_END; t += 60) out.push(t);
   return out;
 }
 
-const api = { alternatives, blockersAt, buildIndex, componentOf, defaultStarts, fmt, DAY_NAMES };
+const api = { alternatives, blockersAt, buildIndex, componentOf, defaultStarts, describe, fmt, DAY_NAMES };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 if (typeof window !== 'undefined') window.TTSuggest = api;
 

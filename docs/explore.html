@@ -100,6 +100,9 @@
     });
   }
   function assign() { return which === 'solved' ? H.assign.solved : H.assign.current; }
+  // The module's name, not its code — "Drawing in Practice", not "AAD009".
+  function modName(code) { return (H.model.modTitles || {})[code] || ''; }
+  function label(c) { return (c.module || c.activity) + '/' + c.activity; }
   function roomName(r) { return H.model.rooms[r] ? H.model.rooms[r].name : 'room ' + r; }
 
   function search(q) {
@@ -110,15 +113,17 @@
     var hits = H.model.classes.filter(function (c) {
       if ((c.module || '').toLowerCase().indexOf(q) >= 0) return true;
       if ((c.title || '').toLowerCase().indexOf(q) >= 0) return true;
+      if (modName(c.module).toLowerCase().indexOf(q) >= 0) return true;
       return roomName(a.get(c.id).room).toLowerCase().indexOf(q) >= 0;
     }).slice(0, 40);
 
     if (!hits.length) { out.innerHTML = '<span class="small muted">No class matches that.</span>'; return; }
     out.innerHTML = hits.map(function (c) {
       var p = a.get(c.id);
-      return '<button class="chip" data-id="' + c.id + '">' +
-        esc(c.module || c.activity) + ' · ' + esc(c.activity) + ' · ' +
-        DAYS[p.day] + ' ' + fmt(p.start) + '</button>';
+      var nm = modName(c.module);
+      return '<button class="chip" data-id="' + c.id + '" title="' + esc(c.title) + '">' +
+        esc(c.module || c.activity) + (nm ? ' <span class="muted">' + esc(nm) + '</span>' : '') +
+        ' · ' + esc(c.activity) + ' · ' + DAYS[p.day] + ' ' + fmt(p.start) + '</button>';
     }).join('');
     out.querySelectorAll('.chip').forEach(function (b) {
       b.onclick = function () { select(Number(b.dataset.id)); };
@@ -130,7 +135,9 @@
   function renderOption(o, cls) {
     var moves = o.members.map(function (m) {
       var c = H.model.byId.get(m.id);
-      return esc(c.module || c.activity) + '/' + esc(c.activity) + ' → ' + esc(roomName(m.room));
+      var nm = modName(c.module);
+      return '<strong>' + esc(label(c)) + '</strong>' + (nm ? ' ' + esc(nm) : '') +
+             ' → ' + esc(roomName(m.room));
     }).join('<br>');
     return '<div class="card pad" style="margin-bottom:10px">' +
       '<div class="row" style="justify-content:space-between">' +
@@ -158,8 +165,12 @@
     var p = a.get(id);
     var room = H.model.rooms[p.room];
 
-    document.getElementById('ptitle').textContent =
-      (c.module || c.activity) + ' · ' + c.activity + ' — ' + c.title;
+    var nm = modName(c.module);
+    document.getElementById('ptitle').innerHTML =
+      '<span class="mono">' + esc(c.module || c.activity) + '</span>' +
+      (nm ? ' — ' + esc(nm) : '') +
+      ' <span class="muted" style="font-weight:400">· ' + esc(c.activity) +
+      ' · ' + esc(c.title) + '</span>';
     document.getElementById('pmeta').innerHTML =
       DAYS[p.day] + ' ' + fmt(p.start) + '–' + fmt(p.start + c.dur) +
       ' · ' + esc(room.name) +
@@ -188,7 +199,8 @@
     if (r.component.size > 1) {
       var names = r.component.ids.map(function (i) {
         var x = H.model.byId.get(i);
-        return esc((x.module || x.activity) + '/' + x.activity);
+        var xn = modName(x.module);
+        return esc(label(x)) + (xn ? ' (' + esc(xn) + ')' : '');
       }).join(', ');
       comp.innerHTML = '<div class="note"><p style="margin:0"><strong>This class cannot move on its own.</strong> ' +
         'It is locked to ' + (r.component.size - 1) + ' other' + (r.component.size > 2 ? 's' : '') +

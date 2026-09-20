@@ -348,6 +348,17 @@ tbody tr:hover td { background: var(--accent-weak); }
 .blk.clash { border-color: var(--warn); box-shadow: 0 0 0 1.5px var(--warn); }
 .blk.moved { border-left-style: dashed; }
 .blk .m { font-family: var(--mono); font-weight: 600; font-size: 10.5px; }
+.blk .n {
+  color: var(--ink);
+  font-size: 9.5px;
+  line-height: 1.25;
+  /* Two lines of the module name at most, so a long one cannot push the room
+     out of a short block. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .blk .r { color: var(--ink-2); font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .blk .c { color: var(--warn); font-size: 9px; font-weight: 600; }
 

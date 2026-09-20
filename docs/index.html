@@ -31,7 +31,7 @@
       <div class="box"><input id="in-prog" type="search" placeholder="Type a degree, or click to browse…" autocomplete="off" role="combobox" aria-expanded="false"></div>
       <div class="drop" role="listbox" aria-multiselectable="true"></div>
     </div>
-    <div class="grid3" style="margin-top:14px">
+    <div class="grid2" style="margin-top:14px">
       <div class="ms" id="ms-mod">
         <label class="fld" for="in-mod">Module</label>
         <div class="box"><input id="in-mod" type="search" placeholder="Code or title…" autocomplete="off" role="combobox" aria-expanded="false"></div>
@@ -42,12 +42,13 @@
         <div class="box"><input id="in-room" type="search" placeholder="e.g. BC-03…" autocomplete="off" role="combobox" aria-expanded="false"></div>
         <div class="drop" role="listbox" aria-multiselectable="true"></div>
       </div>
-      <div>
-        <label class="fld" for="f-week">Week</label>
-        <select id="f-week"><option value="">All weeks</option></select>
-      </div>
     </div>
     <div class="row" style="margin-top:14px">
+      <span class="small muted" style="font-weight:600">Week</span>
+      <div class="chips" id="f-weeks"></div>
+      <button id="f-weeks-all" class="chip" style="border-style:dashed">All</button>
+    </div>
+    <div class="row" style="margin-top:12px">
       <span class="small muted" style="font-weight:600">Day</span>
       <div class="chips" id="f-days"></div>
       <div class="chips" id="f-flags">
@@ -114,7 +115,7 @@
   var TABS = ['autumn', 'springNow', 'springNew', 'method'];
 
   var H = null, tab = 'autumn', view = 'grid';
-  var state = { progs: new Set(), modules: new Set(), rooms: new Set(), week: '', days: new Set(), changed: false, split: false };
+  var state = { progs: new Set(), modules: new Set(), rooms: new Set(), weeks: null, days: new Set(), changed: false, split: false };
 
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (ch) {
@@ -123,6 +124,11 @@
   }
 
   function rows() { return H.terms[tab] ? H.terms[tab].rows : []; }
+
+  // "CMM151" is what the timetable calls it; "Drawing in Practice" is what
+  // people call it. 95-99% of modules have a name, so show it wherever there
+  // is room, and fall back to the code where there is not.
+  function modName(code) { return (H.model.modTitles || {})[code] || ''; }
 
   // `skip` names one filter to ignore, so each picker can count how many
   // bookings each of its options would give under the *other* filters.
@@ -135,7 +141,9 @@
     if (skip !== 'modules' && state.modules.size && !state.modules.has(r.module)) return false;
     if (skip !== 'rooms' && state.rooms.size && !state.rooms.has(r.room)) return false;
     if (state.days.size && !state.days.has(r.day)) return false;
-    if (state.week && !(r.weeks & (1 << (Number(state.week) - 1)))) return false;
+    // `weeks` is a bitmask of the ticked weeks; null means every week, which
+    // is the default. A booking shows if it runs in any of them.
+    if (state.weeks !== null && !(r.weeks & state.weeks)) return false;
     if (state.changed && !r.changed) return false;
     if (state.split && !r.isSplit) return false;
     return true;
@@ -192,13 +200,25 @@
     }
     html += '</div>';
 
+    // One class booked into several rooms is still ONE class. Drawing it once
+    // per room shreds a day into a dozen 14px columns that can show neither the
+    // module name nor the room, so collapse it into a single block that says
+    // how many rooms it occupies.
+    var groups = new Map();
+    weekly.forEach(function (r) {
+      var k = r.title + '|' + r.day + '|' + r.start + '|' + r.weeksText;
+      if (!groups.has(k)) groups.set(k, { r: r, rooms: [r.room] });
+      else groups.get(k).rooms.push(r.room);
+    });
+
     var byDay = [[], [], [], [], []];
-    weekly.forEach(function (r) { byDay[r.day].push(r); });
+    groups.forEach(function (g) { byDay[g.r.day].push(g); });
 
     for (var dd = 0; dd < 5; dd++) {
       html += '<div class="daycol" style="height:' + Hh + 'px">';
-      var items = byDay[dd].map(function (r) { return { r: r, s: r.start, e: r.start + r.dur }; })
-        .sort(function (a, b) { return a.s - b.s || a.e - b.e; });
+      var items = byDay[dd].map(function (g) {
+        return { r: g.r, rooms: g.rooms, s: g.r.start, e: g.r.start + g.r.dur };
+      }).sort(function (a, b) { return a.s - b.s || a.e - b.e; });
 
       // Genuine double-bookings: same room, overlapping, sharing a week, and
       // not the same booking listed twice for two rooms.
@@ -206,11 +226,11 @@
       for (var i = 0; i < items.length; i++) {
         for (var j = i + 1; j < items.length; j++) {
           var A = items[i], B = items[j];
-          if (A.r.room !== B.r.room) continue;
           if (!(A.s < B.e && B.s < A.e)) continue;
           if (!(A.r.weeks & B.r.weeks)) continue;
           if (A.r.title && A.r.title === B.r.title) continue;
-          A.clash = B.clash = true;
+          var shared = A.rooms.some(function (x) { return B.rooms.indexOf(x) >= 0; });
+          if (shared) { A.clash = B.clash = true; }
         }
       }
 
@@ -231,26 +251,36 @@
         });
         var nc = colEnd.length;
         cl.forEach(function (it) {
-          var r = it.r, room = H.model.rooms[it.r.room] || { name: '?', type: 'general' };
+          var r = it.r, room = H.model.rooms[it.rooms[0]] || { name: '?', type: 'general' };
+          var nRooms = it.rooms.length;
+          var roomLabel = nRooms > 1 ? nRooms + ' rooms' : room.name;
+          var roomList = it.rooms.map(function (x) {
+            var rm = H.model.rooms[x];
+            return rm ? rm.name : String(x);
+          });
           var top = (it.s - T0) * PX, ht = Math.max((it.e - it.s) * PX - 2, 14);
           var w = 100 / nc, left = it.col * w;
           var colr = 'var(--' + (TYPE_CLASS[room.type] || 't-general') + ')';
           var chLabel = r.changed ? ['d', 't', 'r'].filter(function (x) { return r.changed.indexOf(x) >= 0; })
             .map(function (x) { return { d: 'day', t: 'time', r: 'room' }[x]; }).join(', ') : '';
-          var tip = (r.module || r.activity) + ' · ' + r.activity + '\n' +
-                    fmt(it.s) + '–' + fmt(it.e) + '\n' + room.name +
-                    (room.capacityKnown ? ' · ' + room.capacity + ' seats' : ' · capacity not recorded') +
+          var name = modName(r.module);
+          var tip = (r.module || r.activity) + (name ? ' — ' + name : '') + '\n' +
+                    r.activity + ' · ' + fmt(it.s) + '–' + fmt(it.e) + '\n' +
+                    (nRooms > 1
+                      ? nRooms + ' rooms: ' + roomList.slice(0, 6).join(', ') +
+                        (nRooms > 6 ? ' and ' + (nRooms - 6) + ' more' : '')
+                      : room.name + (room.capacityKnown ? ' · ' + room.capacity + ' seats'
+                                                        : ' · capacity not recorded')) +
                     '\nWeeks ' + r.weeksText +
-                    (r.isSplit ? '\nAlso in ' + (r.splitCount - 1) + ' other room' + (r.splitCount > 2 ? 's' : '') : '') +
                     (chLabel ? '\nMoved: ' + chLabel : '') +
                     '\n' + r.title;
           html += '<div class="blk' + (it.clash ? ' clash' : '') + (r.changed ? ' moved' : '') +
             '" style="top:' + top + 'px;height:' + ht + 'px;left:calc(' + left + '% + 1px);' +
             'width:calc(' + w + '% - 2px);border-left-color:' + colr + '" data-tip="' + esc(tip) + '">' +
             '<div class="m">' + esc(r.module || r.activity) + '</div>' +
-            '<div class="r">' + esc(room.name) + '</div>' +
-            (chLabel && ht > 32 ? '<div class="c">moved ' + chLabel + '</div>'
-              : (r.isSplit && ht > 32 ? '<div class="c">+' + (r.splitCount - 1) + ' room' + (r.splitCount > 2 ? 's' : '') + '</div>' : '')) +
+            (name && ht > 40 ? '<div class="n">' + esc(name) + '</div>' : '') +
+            '<div class="r">' + esc(roomLabel) + '</div>' +
+            (chLabel && ht > 56 ? '<div class="c">moved ' + chLabel + '</div>' : '') +
             '</div>';
         });
       });
@@ -262,7 +292,7 @@
 
   // ---------------- list ----------------
   var sortKey = 'day', sortDir = 1;
-  var COLS = [['Module', 'module'], ['Title', 'title'], ['Day', 'day'], ['Start', 'start'],
+  var COLS = [['Module', 'module'], ['Module name', 'name'], ['Day', 'day'], ['Start', 'start'],
               ['Length', 'dur'], ['Room', 'room'], ['Seats', 'seats'], ['Weeks', 'weeks']];
 
   function drawList(list) {
@@ -284,7 +314,7 @@
       var room = H.model.rooms[r.room] || {};
       switch (sortKey) {
         case 'module': return r.module || r.activity;
-        case 'title': return r.title;
+        case 'name': return modName(r.module) || r.title;
         case 'day': return r.day * 10000 + r.start;
         case 'start': return r.start;
         case 'dur': return r.dur;
@@ -306,7 +336,9 @@
         .map(function (x) { return { d: 'day', t: 'time', r: 'room' }[x]; }).join(', ') : '';
       return '<tr>' +
         '<td class="mono">' + esc(r.module || '—') + '</td>' +
-        '<td class="muted">' + esc(r.title) + '</td>' +
+        '<td>' + (modName(r.module)
+            ? esc(modName(r.module)) + '<br><span class="small muted">' + esc(r.title) + '</span>'
+            : '<span class="muted">' + esc(r.title) + '</span>') + '</td>' +
         '<td>' + DAYS[r.day] + '</td>' +
         '<td class="mono">' + fmt(r.start) + '</td>' +
         '<td class="mono">' + (r.dur / 60) + 'h</td>' +
@@ -526,6 +558,39 @@
     pickers.forEach(function (p) { p.refresh(); });
   }
 
+  // Only offer the weeks this term actually uses. Every week starts ticked, as
+  // the original explorer had it, so the default view is the whole term.
+  function buildWeeks() {
+    var wrap = document.getElementById('f-weeks');
+    var present = [];
+    var mask = 0;
+    rows().forEach(function (r) { mask |= r.weeks; });
+    for (var w = 1; w <= 16; w++) if (mask & (1 << (w - 1))) present.push(w);
+    state.weeks = null;
+    wrap.innerHTML = '';
+    present.forEach(function (w) {
+      var b = document.createElement('button');
+      b.className = 'chip';
+      b.textContent = String(w);
+      b.setAttribute('aria-pressed', 'true');
+      b.onclick = function () {
+        var on = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(on));
+        // Start from "all ticked" the first time one is turned off.
+        if (state.weeks === null) {
+          state.weeks = 0;
+          present.forEach(function (x) { state.weeks |= 1 << (x - 1); });
+        }
+        if (on) state.weeks |= 1 << (w - 1); else state.weeks &= ~(1 << (w - 1));
+        var all = 0;
+        present.forEach(function (x) { all |= 1 << (x - 1); });
+        if (state.weeks === all) state.weeks = null;
+        render(); refreshAll();
+      };
+      wrap.appendChild(b);
+    });
+  }
+
   // ---------------- tabs ----------------
   function selectTab(key) {
     tab = key;
@@ -558,7 +623,9 @@
         esc(err.message) + '</p></div>';
     }
     if (!isMethod) {
-      // A different term has a different set of programmes, modules and rooms.
+      // A different term has a different set of programmes, modules, rooms
+      // and teaching weeks.
+      buildWeeks();
       pickers.forEach(function (p) { p.refresh(); });
       render();
     }
@@ -665,13 +732,14 @@
       dayWrap.appendChild(b);
     });
 
-    var wk = document.getElementById('f-week');
-    for (var w = 1; w <= 16; w++) {
-      var o = document.createElement('option');
-      o.value = String(w); o.textContent = 'Week ' + w;
-      wk.appendChild(o);
-    }
-    wk.onchange = function () { state.week = wk.value; render(); refreshAll(); };
+    buildWeeks();
+    document.getElementById('f-weeks-all').onclick = function () {
+      state.weeks = null;
+      document.querySelectorAll('#f-weeks .chip').forEach(function (b) {
+        b.setAttribute('aria-pressed', 'true');
+      });
+      render(); refreshAll();
+    };
 
     document.querySelectorAll('#f-flags .chip').forEach(function (b) {
       b.onclick = function () {
@@ -700,10 +768,9 @@
 
     document.getElementById('f-clear').onclick = function () {
       pickers.forEach(function (p) { p.clear(); });
-      state.week = '';
       state.days.clear();
       state.changed = state.split = false;
-      document.getElementById('f-week').value = '';
+      buildWeeks();
       document.querySelectorAll('#f-days .chip, #f-flags .chip').forEach(function (b) {
         b.setAttribute('aria-pressed', 'false');
       });
