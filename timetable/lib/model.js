@@ -293,6 +293,21 @@ function load(dir, opts) {
   const CAPACITY_TOLERANCE = 0.9;
   const needSeats = size => Math.ceil(size * CAPACITY_TOLERANCE);
 
+  // Two rooms-preferences that are about the building, not the rules.
+  //
+  //   * the Library computer room is a student resource first. Teaching may go
+  //     in it, but should prefer a School lab where one is free;
+  //   * a class that does not need machines should not sit in a lab at all
+  //     while computing classes are short of them. In the last rebuild 24
+  //     non-computing classes held 460 lab-hours across the term, one of them
+  //     a nine-hour session in a 66-seat central lab every week.
+  //
+  // Neither is a hard rule: both only ever break a tie between rooms that are
+  // otherwise legal, so they cannot make a timetable impossible.
+  for (const room of rooms) {
+    room.isLibrary = /library\s*comp/i.test(room.name);
+  }
+
   const openRooms = opts.openRooms === undefined ? ['computer'] : opts.openRooms;
   const rebuild = opts.rebuildCandidates !== false;
   const sourceCand = new Map(classes.map(c => [c.id, c.cand.slice()]));

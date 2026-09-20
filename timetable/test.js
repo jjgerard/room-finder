@@ -793,6 +793,27 @@ test('solver: the wider ruin never makes the timetable worse', () => {
   eq(after, s.totalHard());
 });
 
+test('rooms: the library computer room is flagged, and only it', () => {
+  const lib = model.rooms.filter(r => r.isLibrary);
+  eq(lib.length, 1, 'expected exactly one library computer room');
+  assert.ok(/library/i.test(lib[0].name));
+});
+
+test('solver: the room preferences never bar a room outright', () => {
+  // Both are tie-breakers. If either could forbid a room it could make a
+  // timetable impossible, which is not what a preference is for.
+  const s = new Solver(model, Object.assign({ seed: 41 }, TEST_BUDGET));
+  const lab = model.rooms.find(r => r.type === 'computer');
+  const general = model.classes.find(c => c.roomType === 'general');
+  assert.ok(s.roomReluctance(general, lab) > 0, 'a general class in a lab should be discouraged');
+  const comp = model.classes.find(c => c.roomType === 'computer');
+  eq(s.roomReluctance(comp, lab), lab.isLibrary ? s.opts.wLibrary : 0,
+    'a computing class should not be penalised for using a lab');
+  // And with the preferences off, the same room costs nothing.
+  const s2 = new Solver(model, Object.assign({ seed: 41, wLabSquat: 0, wLibrary: 0 }, TEST_BUDGET));
+  eq(s2.roomReluctance(general, lab), 0);
+});
+
 test('solver: never sends block teaching offsite', () => {
   const s = new Solver(model, Object.assign({ seed: 5 }, TEST_BUDGET));
   s.run();

@@ -67,6 +67,12 @@ class Solver {
       // waste space — it is the reason the 350-seat lecture has nowhere to go.
       // Weighted per seat so the search prefers the smallest room that fits.
       wWaste: 0.05,
+      // A class that does not need machines should not hold a computing lab
+      // while computing classes are short of them.
+      wLabSquat: 14,
+      // The library's computer room is a student resource first; teaching goes
+      // there only when a School lab is not free.
+      wLibrary: 9,
       wMoveDay: 6,          // movement: changed day
       wMoveTime: 3,         // movement: changed time
       wMoveRoom: 1,         // movement: changed room
@@ -246,7 +252,7 @@ class Solver {
               // stay free for the classes that cannot use anything else.
               const room = this.model.rooms[r];
               const waste = room.capacityKnown ? Math.max(0, room.capacity - m.cls.size) : 0;
-              const cost = clashes * 1000 + waste * 0.05;
+              const cost = clashes * 1000 + waste * 0.05 + this.roomReluctance(m.cls, room);
               if (cost < pickCost) { pickCost = cost; pick = r; }
               if (clashes === 0 && waste === 0) break;
             }
@@ -438,8 +444,12 @@ class Solver {
       if (o.wWedPm && d === 2 && s >= 13 * 60) v += o.wWedPm;
     }
     const room = this.model.rooms[this.room[id]];
-    if (o.wWaste && room && room.capacityKnown && room.capacity > cls.size) {
-      v += o.wWaste * (room.capacity - Math.max(cls.size, 0));
+    if (room) {
+      if (o.wWaste && room.capacityKnown && room.capacity > cls.size) {
+        v += o.wWaste * (room.capacity - Math.max(cls.size, 0));
+      }
+      if (o.wLabSquat && room.type === 'computer' && cls.roomType !== 'computer') v += o.wLabSquat;
+      if (o.wLibrary && room.isLibrary) v += o.wLibrary;
     }
     if (d !== cls.origDay) v += o.wMoveDay;
     if (s !== cls.origStart) v += o.wMoveTime;
@@ -713,6 +723,16 @@ class Solver {
    * Times are untouched, so nothing that depends on them (contiguity, cohort
    * clashes, the teaching day) can be disturbed by this pass.
    */
+  /** Soft reluctance to put this class in this room; never a bar. */
+  roomReluctance(cls, room) {
+    const o = this.opts;
+    let v = 0;
+    if (!room) return v;
+    if (o.wLabSquat && room.type === 'computer' && cls.roomType !== 'computer') v += o.wLabSquat;
+    if (o.wLibrary && room.isLibrary) v += o.wLibrary;
+    return v;
+  }
+
   repackRooms(jitter) {
     const movable = this.model.classes.filter(c => !c.isFixed);
     // Hardest first: fewest rooms it could use, then biggest, then longest.
@@ -751,8 +771,9 @@ class Solver {
           if (st < this.start[other] + this.dur[other] && this.start[other] < st + du &&
               (w & this.weeks[other])) clashes++;
         }
-        if (clashes === 0) { best = r; break; }
-        if (clashes < bestScore) { bestScore = clashes; best = r; }
+        const score = clashes * 1000 + this.roomReluctance(c, this.model.rooms[r]);
+        if (score < bestScore) { bestScore = score; best = r; }
+        if (score === 0) break;
       }
       if (best === null) best = parked.get(id);
       this.room[id] = best;
