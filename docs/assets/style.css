@@ -511,7 +511,13 @@ footer .wrap { padding: 0; }
   box-shadow: var(--sh);
   overflow-x: auto;
 }
-.algo-graphic svg { display: block; width: 100%; min-width: 640px; height: auto; }
+/* The SVG cannot hold a minimum width of its own reliably, so a block wrapper
+   does it: below that the card scrolls sideways rather than shrinking the
+   labels past reading size. */
+.algo-inner { min-width: 660px; }
+.algo-graphic svg { display: block; width: 100%; height: auto; }
+.algo-hint { display: none; margin: 8px 0 0; }
+@media (max-width: 700px) { .algo-hint { display: block; } }
 .algo-graphic .g-title { font: 600 15px/1 var(--sans); fill: var(--ink); }
 .algo-graphic .g-sub { font: 12px/1 var(--sans); fill: var(--muted); }
 .algo-graphic .g-label { font: 12px/1 var(--sans); fill: var(--ink); text-anchor: middle; }

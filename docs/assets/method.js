@@ -125,7 +125,7 @@
     // Two algorithms side by side. Plain SVG, themed from the page's own
     // variables, sized by viewBox so it holds up at phone width.
     return [
-      '<div class="algo-graphic">',
+      '<div class="algo-graphic"><div class="algo-inner">',
       '<svg viewBox="0 0 760 430" role="img" ',
       'aria-label="Left: today’s method places one booking at a time and never revisits ',
       'an earlier one, so the last bookings get whatever is left. Right: the rebuild places ',
@@ -216,7 +216,7 @@
       '<text x="420" y="402" class="g-small g-muted">restart from many random beginnings; keep the best</text>',
       '</g>',
       '</svg>',
-      '</div>',
+      '</div><p class="small muted algo-hint">Scroll sideways to see both sides.</p></div>',
     ].join('');
   }
 
