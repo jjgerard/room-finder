@@ -533,7 +533,14 @@ test('baseline: what IS wrong today is gaps and out-of-hours teaching', () => {
     [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom }]));
   const r = C.check(model, assign, {});
   assert.ok(r.counts.linkedOrder > 50, 'expected lecture/seminar gaps');
-  assert.ok(r.counts.window > 50, 'expected classes outside the teaching day');
+  // Out-of-hours teaching is no longer counted here: a class that STARTS in
+  // the evening is pinned there deliberately, and pinned bookings are not
+  // judged against the teaching day. What the rebuild still has to fix is
+  // teaching that starts inside the day and runs past the end of it.
+  const overrunning = model.classes.filter(c =>
+    !c.isFixed && c.origStart + c.dur > 17 * 60 + 15);
+  assert.ok(overrunning.length > 30,
+    'expected teaching running past 17:15, got ' + overrunning.length);
 });
 
 test('rooms: sharing is grandfathered from real bookings, never invented', () => {
@@ -610,22 +617,25 @@ test('checker: a pinned booking is not judged against the window', () => {
   eq(r.counts.window, 0);
 });
 
-test('model: an evening society booking is pinned, not treated as teaching', () => {
-  // A booking that starts at or after 17:15 with no module and no cohort is a
-  // society meeting or an event. Treated as a class it has to fit inside the
-  // teaching day, so the solver drags it into the middle of the afternoon —
-  // which is how the Christian Union's five-hour Thursday evening came to
-  // displace MEC113's statics seminar.
-  const evening = model.classes.filter(c =>
-    !c.module && c.programmes.length === 0 && c.origStart >= 17 * 60 + 15);
-  assert.ok(evening.length, 'expected some evening bookings');
+test('model: whatever is taught in the evening stays in the evening', () => {
+  // The 9-to-5 day was meant for daytime provision. Applied to everything it
+  // moved 42 evening classes into the working day, including nineteen modules
+  // taught wholly in the evening — BA Hons Modern Irish PT, MSc FinTech
+  // Management PT, the Executive MBA. Those students are at work at 10:15.
+  const evening = model.classes.filter(c => c.origStart >= 17 * 60 + 15);
+  assert.ok(evening.length > 30, 'expected the evening bookings');
   for (const c of evening) {
-    assert.ok(c.isFixed, 'not pinned: ' + c.title);
+    assert.ok(c.isFixed, 'an evening class was left movable: ' + c.title);
   }
-  // And a real class in the evening is still ours to move.
-  const teaching = model.classes.filter(c =>
-    c.module && c.programmes.length && c.origStart >= 17 * 60 + 15 && !c.isFixed);
-  assert.ok(teaching.length >= 0);
+});
+
+test('model: an early class is still moved into the day', () => {
+  // Only the evening is preserved. "Nothing earlier than 9am" still holds.
+  const early = model.classes.filter(c =>
+    c.origStart < 9 * 60 + 15 && !/do\s*not\s*edit/i.test(c.title || ''));
+  for (const c of early) {
+    assert.ok(!c.isFixed, 'an early class was pinned rather than moved: ' + c.title);
+  }
 });
 
 test('model: every "do not edit" booking is pinned', () => {

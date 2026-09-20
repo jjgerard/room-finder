@@ -245,18 +245,26 @@ function load(dir, opts) {
       // "Do NOT Edit or Remove booking", "- do Not Edit", "*do Not edit*".
       // Pinned: not ours to move, and not judged against the teaching day.
       //
-      // Two kinds. Bookings marked "do not edit" in the source — exam set-up,
-      // Estates, IT maintenance. And evening events: a booking that starts at
-      // or after 17:15 (or before 09:15) and carries no module and no cohort
-      // is a society meeting or a one-off event, not a class. There are four —
-      // the Christian Union, a law event, the K-pop society — and treating
-      // them as teaching had the solver dragging them into the middle of the
-      // day, where the CU's five-hour Thursday evening displaced MEC113's
-      // statics seminar from the room it needs. They belong in the evening,
-      // where nothing we schedule runs.
-      isFixed: /do\s*not\s*edit/i.test(r.title || '') ||
-        ((start >= 17 * 60 + 15 || start < 9 * 60 + 15) &&
-         !String(r.module || '').trim() && splitList(r.programmes).length === 0),
+      // Bookings marked "do not edit" in the source — exam set-up, Estates, IT
+      // maintenance — and anything already taught in the evening.
+      //
+      // The 9-to-5 day was meant for daytime provision, and applying it to
+      // everything moved 42 evening classes into the middle of the working
+      // day. Nineteen modules are taught wholly in the evening, and the
+      // programme names say why: BA Hons Modern Irish PT, Dip in Irish
+      // Language PT, MSc Human Resource Management PT, MSc FinTech Management
+      // PT, MBA (Executive) PT. Part-time and executive students are taught
+      // after work; a 10:15 Tuesday slot is not an inconvenience to them, it
+      // is an impossibility. The society bookings — the Christian Union, a law
+      // event, the K-pop society — are the same story without a cohort.
+      //
+      // So an evening booking stays exactly where it is. All 45 of them sit
+      // together today without a single room or cohort collision, and pinning
+      // them hands 886 room-hours back to the daytime timetable.
+      //
+      // Only the evening. A class starting before 09:15 is still moved into
+      // the day, which is what was asked for.
+      isFixed: /do\s*not\s*edit/i.test(r.title || '') || start >= 17 * 60 + 15,
       isShadow: false,
       linked: r.linked_group || '',
       order: r.group_order === '' ? null : Number(r.group_order),
