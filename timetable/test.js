@@ -885,6 +885,22 @@ test('rooms: a 90-seat class may use the 80-seat CEBE lab', () => {
   assert.ok(offered.length > 0, 'a 90-seat class is still refused the 80-seat lab');
 });
 
+test('rooms: a required room is the only room a class is offered', () => {
+  // Some classes belong to a particular room for reasons the booking data
+  // does not carry — licensed software, equipment, access. A requirement has
+  // to be a bar, not a preference, or the search will move the class instead
+  // of moving what is in its way.
+  const cmm = model.classes.filter(c => c.module === 'CMM375');
+  assert.ok(cmm.length, 'expected CMM375 in the model');
+  const want = model.rooms.find(r => /BC-02-426/.test(r.name));
+  assert.ok(want, 'expected BC-02-426 in the room list');
+  for (const c of cmm) {
+    assert.deepStrictEqual(c.cand, [want.id],
+      'CMM375/' + c.activity + ' is offered ' + c.cand.length + ' rooms, not just the required one');
+    eq(c.roomRequired, want.id);
+  }
+});
+
 test('rooms: a School lab favours the School it belongs to', () => {
   // CEBE's labs go to computing and engineering first, read from what has
   // actually been taught in each one rather than from a list of codes.

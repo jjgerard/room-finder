@@ -378,6 +378,36 @@ function load(dir, opts) {
     room.isLibrary = /library\s*comp/i.test(room.name);
   }
 
+  // Rooms a class must be in, whatever else would fit.
+  //
+  // Some classes belong to a particular room for reasons the booking data does
+  // not carry — the software licensed on its machines, a piece of equipment,
+  // an access arrangement. Timetabling names them; the model obeys. A
+  // requirement narrows the candidate list to that one room, so the search has
+  // to move whatever is in the way rather than move this class.
+  //
+  // The activity column is optional: blank means every class of the module.
+  const roomRequirements = [];
+  try {
+    for (const row of rd('room_requirements.csv')) {
+      const room = rooms.find(r => r.name === row.room_name);
+      if (!room || !row.module) continue;
+      roomRequirements.push({
+        module: row.module.trim(),
+        activity: String(row.activity || '').trim(),
+        roomId: room.id,
+      });
+    }
+  } catch (e) { /* no room requirements */ }
+  const requiredRoom = c => {
+    for (const req of roomRequirements) {
+      if (req.module !== c.module) continue;
+      if (req.activity && req.activity !== c.activity) continue;
+      return req.roomId;
+    }
+    return null;
+  };
+
   const openRooms = opts.openRooms === undefined ? ['computer'] : opts.openRooms;
   const rebuild = opts.rebuildCandidates !== false;
   const sourceCand = new Map(classes.map(c => [c.id, c.cand.slice()]));
@@ -416,6 +446,8 @@ function load(dir, opts) {
         allowed.push(room.id);
       }
       if (c.homeRoom != null && !allowed.includes(c.homeRoom)) allowed.push(c.homeRoom);
+      const must = requiredRoom(c);
+      if (must !== null) { c.cand = [must]; c.roomRequired = must; continue; }
       c.cand = allowed;
     }
   }
