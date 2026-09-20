@@ -26,9 +26,6 @@ const DOCS = path.join(ROOT, 'docs');
 const DATA = path.join(DOCS, 'data');
 const ASSETS = path.join(DOCS, 'assets');
 
-const model = load();
-const { components } = build(model);
-
 const solPath = path.join(DATA, 'solution.json');
 if (!fs.existsSync(solPath)) {
   console.error('No solution.json — run:  node timetable/solve.js --out docs/data');
@@ -36,6 +33,12 @@ if (!fs.existsSync(solPath)) {
 }
 const solution = JSON.parse(fs.readFileSync(solPath, 'utf8'));
 const solved = new Map(solution.rows.map(r => [r.id, r]));
+
+// Load the model exactly as the solve did. If the solution was produced
+// against a pruned clash graph and the site shipped the full one, the page
+// would report violations of rules the solver was never given.
+const model = load(null, { clashes: solution.meta.clashMode || 'all' });
+const { components } = build(model);
 const terms = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'terms.json'), 'utf8'));
 
 // ---- one programme vocabulary across every term -----------------------------

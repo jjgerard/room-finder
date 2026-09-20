@@ -119,6 +119,13 @@ if (OUT) {
     meta: {
       campus: 'Belfast', term: 'Spring 2026', generated: new Date().toISOString().slice(0, 10),
       seed: best.seed, hardViolations: chk.total,
+      // Which clash graph this was solved against. The site must check the
+      // result with the same rules, or it reports violations the solver was
+      // never asked to avoid.
+      clashMode: model.clashMode,
+      clashEdges: model.cannotShareTime.length,
+      clashEdgesTotal: model.edgeStats.total,
+      dayStart: C.DAY_START, dayEnd: C.DAY_END,
       moved: mv.total - mv.untouched, untouched: mv.untouched,
       backToBack: b2b, linkedGroups: model.linkedGroups.length,
       edge: soft.edge, edgeBefore: baseSoft.edge,

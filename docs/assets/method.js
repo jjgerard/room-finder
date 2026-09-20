@@ -8,7 +8,8 @@
   function html(H) {
     var C = window.TTConstraints;
     var model = H.model, a = H.assign;
-    var OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
+    // Judge against the real teaching day, not a permissive one.
+    var OPTS = {};
     var now = C.check(model, a.current, OPTS);
     var fixed = C.check(model, a.solved, OPTS);
     var mv = C.movement(model, a.solved);
@@ -98,6 +99,19 @@
       '<p>The same analysis found three all-day sessions that had to move off campus. ',
       'All <strong>' + blocks + '</strong> block-teaching sessions stay on site here.</p>',
 
+      '<h2>The teaching day</h2>',
+      '<p>Nothing starts before <strong>09:15</strong> or ends after <strong>17:15</strong>, which gives ',
+      'eight start slots a day rather than the thirteen the raw data happens to use. Two exceptions, both ',
+      'forced by the data rather than chosen:</p>',
+      '<ul><li><strong>30 sessions are longer than any eight-hour day</strong> \u2014 nine, twelve and ',
+      'thirteen hours. They may not start early, but must overflow at the end; there is nowhere else for ',
+      'them to go.</li>',
+      '<li><strong>25 bookings are marked "do not edit"</strong> in the source \u2014 the exam set-up ',
+      'reservation, Estates exams, IT maintenance windows, applicant days. They are pinned where they are ',
+      'and are not judged against the day, since several run to 21:15 by design.</li></ul>',
+      '<p>General classes may also use a <strong>computer lab</strong>, which widens the tightest room ',
+      'category; the classes that genuinely need a lab keep first claim through their own room lists.</p>',
+
       '<h2>How the search runs</h2>',
       '<ol>',
       '<li>Start from the current timetable, pulled into component geometry — which by itself ',
@@ -121,14 +135,23 @@
       'plus never currently overlapping as a proxy for the same lecturer. Re-run this against real ',
       'enrolment and staff-assignment data before acting on it.</p></div>',
 
-      '<div class="note good"><p style="margin:0"><strong>How much that matters was measured.</strong> ',
+      '<div class="note warn"><p style="margin:0"><strong>This timetable depends on that pruning.</strong> ',
+      'Under a 09:15\u201317:15 day the full inferred graph leaves <strong>117</strong> violations that no ',
+      'amount of searching removes; with the unevidenced edges dropped the same search reaches ',
+      '<strong>' + (meta.hardViolations === 0 ? 'zero' : String(meta.hardViolations)) + '</strong>. ',
+      'The published result is solved against <strong>' + (meta.clashEdges || '?') + ' of ' +
+      (meta.clashEdgesTotal || '?') + '</strong> clash edges. That is a judgement, not a fact: it assumes ',
+      'a cohort that already runs two of its own classes at once is split into groups, and so is not ',
+      'obliged to keep every other pair apart. Real enrolment data would settle it.</p></div>',
+
+      '<div class="note good"><p style="margin:0"><strong>Why that pruning is defensible.</strong> ',
       'Overlap in the current timetable is positive proof — two classes running at the same time ',
       'cannot share a lecturer or an audience — while absence of overlap proves nothing. Applied ',
       'consistently, 353 of 948 cohorts already run their own classes overlapping, so 12,702 of ',
       '16,246 clash edges rest on cohorts that are demonstrably split. Re-solving without them ',
-      'still gives zero violations and only slightly better soft goals: <strong>dropping 86% of the ',
-      'clash constraints barely changes the answer</strong>. Room availability and the back-to-back ',
-      'rule are what bind this problem, not the inferred graph.</p></div>',
+      'still reaches a clean timetable. On the old, longer teaching day it barely mattered \u2014 dropping ',
+      'those edges changed the answer very little, because rooms were the binding constraint. Inside a ',
+      '9-to-5 day it decides whether there is an answer at all.</p></div>',
 
       '<div class="note warn"><p style="margin:0"><strong>Class sizes are room capacities, not ',
       'headcounts</strong>, for all but 17 rows, and <strong>' + unknownCap + ' of ' + model.rooms.length +

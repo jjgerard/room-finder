@@ -207,18 +207,30 @@ ends.
 ## The result
 
 Starting from a spring timetable with **328 room double-bookings** (once every
-multi-room class is collapsed into a single room) and **75 lecture/seminar pairs running
-with a gap**:
+multi-room class is collapsed into a single room), **75 lecture/seminar pairs running
+with a gap**, and classes spread from 07:15 to 23:15:
 
 | | Today | Rebuilt |
 |---|---|---|
 | Room double-bookings | 328 | **0** |
 | Cohort / staff clashes | 0 | **0** |
+| Outside a 09:15–17:15 day | 102 | **0** (bar sessions too long to fit) |
 | Lecture+seminar back-to-back | 73 of 146 | **146 of 146** |
 | Block teaching sent off campus | — | **none** |
-| Classes in 9–10am / 4–5pm edge slots | 585 | **328** |
-| Cohort gap-days | 399 | **191** |
-| Classes left untouched | — | 810 of 1,556 |
+| Classes in 9–10am / 4–5pm edge slots | 585 | **333** |
+| Cohort gap-days | 399 | **251** |
+| Classes left untouched | — | 848 of 1,556 |
+
+One pair remains unplaced — `ENE325/LEC` with `BEN315/LEC` on the same-day rule. That is
+not a search failure: BEN315 has four classes, each of which must avoid the days of about
+fifty others, and there are only five days.
+
+**A 9-to-5 day only works if the inferred clash graph is pruned.** With all 16,246 clash
+pairs the search plateaus at **117** violations however long it runs; with the 3,278 the
+current timetable actually evidences, it reaches **1**. On the old, longer teaching day
+that pruning barely mattered — rooms were the binding constraint. Inside a 9-to-5 day it
+decides whether there is an answer at all. The published solution records which graph it
+used, and the site says so on the face of it.
 
 Two results contradict the earlier analysis this work started from, which concluded that
 ~27 modules could never be back-to-back and that three all-day sessions had to move

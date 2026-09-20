@@ -105,7 +105,9 @@
   'use strict';
   var M = window.TTModel, DAYS = M.DAYS, fmt = M.fmt;
   var TYPE_CLASS = { general: 't-general', computer: 't-computer', specialist: 't-specialist', theatre: 't-theatre' };
-  var CHECK_OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
+  // Empty options means the teaching day defined in constraints.js, which is
+  // the same one the solver enforced.
+  var CHECK_OPTS = {};
 
   // Tab order, as asked for: the two terms as they stand, the rebuild, then the
   // method. Explore moves lives on its own page, last in the nav.
@@ -546,7 +548,15 @@
     document.getElementById('legend-extra').textContent =
       key === 'springNew' ? 'Dashed edge = moved from today' : 'Outlined = same room double-booked';
 
-    drawBanner();
+    // The banner is decoration; if it throws, the timetable must still draw.
+    // Letting an exception here abort selectTab left the tab highlighted while
+    // the table still showed the previous term.
+    try { drawBanner(); }
+    catch (err) {
+      document.getElementById('banner').innerHTML =
+        '<div class="note warn"><p style="margin:0">Could not summarise this term: ' +
+        esc(err.message) + '</p></div>';
+    }
     if (!isMethod) {
       // A different term has a different set of programmes, modules and rooms.
       pickers.forEach(function (p) { p.refresh(); });
@@ -586,12 +596,38 @@
         mv.untouched.toLocaleString() + ' of ' + mv.total.toLocaleString() +
         ' classes are exactly where they are today. <a href="#" id="to-method">How it was built</a>.</p>';
     } else {
-      v.className = 'note warn';
-      v.innerHTML = '<p style="margin:0"><strong>' + fixed.total +
-        ' hard violations remain.</strong> This timetable is not clean.</p>';
+      // A handful of named exceptions is a different thing from a broken
+      // timetable, so say which ones and let the reader judge.
+      var n = fixed.total;
+      var named = fixed.violations.slice(0, 4).map(function (x) {
+        var A = H.model.byId.get(x.a), B = x.b != null ? H.model.byId.get(x.b) : null;
+        return (A.module || A.activity) + '/' + A.activity +
+               (B ? ' with ' + (B.module || B.activity) + '/' + B.activity : '') +
+               ' (' + x.kind + ')';
+      }).join('; ');
+      v.className = n <= 5 ? 'note warn' : 'note warn';
+      v.innerHTML = '<p style="margin:0 0 6px"><strong>' +
+        (n === 1 ? 'One class pair could not be placed' : n + ' class pairs could not be placed') +
+        '.</strong> Everything else holds: ' + mv.untouched.toLocaleString() + ' of ' +
+        mv.total.toLocaleString() + ' classes are where they are today, every lecture and seminar is ' +
+        'back-to-back, and nothing runs outside 09:15\u201317:15 except the sessions too long to fit.</p>' +
+        '<p style="margin:0" class="small">Unresolved: ' + esc(named) + '.</p>';
     }
-    var link = document.getElementById('to-method');
-    if (link) link.onclick = function (e) { e.preventDefault(); selectTab('method'); };
+    // Which clash graph this was solved against is a material caveat, not a
+    // footnote — under a 9-to-5 day it decides whether there is an answer.
+    var meta = H.model.meta || {};
+    if (meta.clashMode && meta.clashMode !== 'all') {
+      v.innerHTML += '<p style="margin:8px 0 0" class="small">Solved against <strong>' +
+        (meta.clashEdges || 0).toLocaleString() + ' of ' + (meta.clashEdgesTotal || 0).toLocaleString() +
+        '</strong> inferred clash pairs \u2014 those the current timetable actually evidences. ' +
+        '<a href="#" id="to-method2">Why, and what it assumes</a>.</p>';
+      var l2 = document.getElementById('to-method2');
+      if (l2) l2.onclick = function (e) { e.preventDefault(); selectTab('method'); };
+    }
+    ['to-method', 'to-method2'].forEach(function (id) {
+      var link = document.getElementById(id);
+      if (link) link.onclick = function (e) { e.preventDefault(); selectTab('method'); };
+    });
   }
 
   // ---------------- boot ----------------
