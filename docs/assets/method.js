@@ -404,7 +404,6 @@
         fixed.total === 0 ? 'good' : 'warn'),
       tile(String(now.total), 'broken in the timetable as it stands', 'warn'),
       tile(b2b + '/' + groups, 'lecture+seminar pairs back-to-back', b2b === groups ? 'good' : 'warn'),
-      tile(softNow.edge + ' \u2192 ' + soft.edge, 'classes in 9\u201310am / 4\u20135pm slots', 'good'),
       '</div>',
 
       // ------------------------------------------------ why it always clashes
