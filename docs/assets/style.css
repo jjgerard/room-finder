@@ -536,3 +536,7 @@ footer .wrap { padding: 0; }
 .algo-graphic .g-arrow { fill: none; stroke: var(--ink-2); stroke-width: 1.4; color: var(--ink-2); }
 .algo-graphic .g-bad { stroke: var(--warn); color: var(--warn); }
 .algo-graphic .g-loop { stroke: var(--good); color: var(--good); stroke-dasharray: 5 3; }
+.algo-graphic .g-barNow { fill: var(--muted); }
+.algo-graphic .g-barNew { fill: var(--accent); }
+.algo-graphic .g-axis { stroke: var(--line); stroke-width: 1; }
+.algo-graphic .g-faint { stroke-dasharray: 3 3; }

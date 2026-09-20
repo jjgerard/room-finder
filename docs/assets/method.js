@@ -220,6 +220,72 @@
     ].join('');
   }
 
+  /**
+   * When classes actually run, hour by hour, before and after.
+   *
+   * Counted as classes OCCUPYING each hour rather than starting in it, so a
+   * three-hour lecture is in all three of its bars — which is what somebody
+   * asking "how busy is 2pm" means.
+   */
+  function hourChart(model, assign) {
+    // The teaching day runs 09:15 to 17:15, so the bars are its eight slots
+    // rather than clock hours: counting 9-to-10 and 17-to-18 as hours makes
+    // the two ends look quiet when they are only partly inside the day.
+    var SLOT0 = 9 * 60 + 15, n = 8;
+    var now = new Array(n).fill(0), rebuilt = new Array(n).fill(0);
+    model.classes.forEach(function (c) {
+      if (!c.attended) return;
+      for (var k = 0; k < 2; k++) {
+        var p = k === 0 ? { start: c.origStart } : assign.get(c.id);
+        if (!p) continue;
+        var into = k === 0 ? now : rebuilt;
+        for (var i = 0; i < n; i++) {
+          var s = SLOT0 + i * 60, e = s + 60;
+          if (p.start < e && s < p.start + c.dur) into[i]++;
+        }
+      }
+    });
+    var peak = Math.max.apply(null, now.concat(rebuilt)) || 1;
+    var W = 620, chartH = 150, base = chartH + 26, colW = W / n;
+    var bars = '', labels = '';
+    for (var i = 0; i < n; i++) {
+      var x = 44 + i * ((W - 60) / n);
+      var bw = ((W - 60) / n - 10) / 2;
+      var ha = Math.round(now[i] / peak * chartH), hb = Math.round(rebuilt[i] / peak * chartH);
+      bars += '<rect x="' + x + '" y="' + (base - ha) + '" width="' + bw + '" height="' + ha +
+        '" rx="2" class="g-barNow"/>';
+      bars += '<rect x="' + (x + bw + 2) + '" y="' + (base - hb) + '" width="' + bw + '" height="' + hb +
+        '" rx="2" class="g-barNew"/>';
+      var edge = (i === 0 || i === n - 1);
+      labels += '<text x="' + (x + bw) + '" y="' + (base + 14) + '" class="g-small ' +
+        (edge ? 'g-badtext' : 'g-muted') + '" text-anchor="middle">' +
+        (9 + i) + ':15</text>';
+    }
+    // A horizontal rule at the peak, so the bars have a scale.
+    var grid = '<line x1="40" y1="' + base + '" x2="' + (W - 8) + '" y2="' + base +
+      '" class="g-axis"/>' +
+      '<line x1="40" y1="' + (base - chartH) + '" x2="' + (W - 8) + '" y2="' + (base - chartH) +
+      '" class="g-axis g-faint"/>' +
+      '<text x="36" y="' + (base - chartH + 4) + '" class="g-small g-muted" text-anchor="end">' +
+      peak + '</text>' +
+      '<text x="36" y="' + (base + 4) + '" class="g-small g-muted" text-anchor="end">0</text>';
+    return [
+      '<div class="algo-graphic"><div class="algo-inner" style="min-width:600px">',
+      '<svg viewBox="0 0 ' + W + ' ' + (base + 46) + '" role="img" ',
+      'aria-label="Classes running in each hour of the day, today against the rebuild. ',
+      'The rebuild empties the 9am and 4pm ends and carries the middle of the day instead.">',
+      '<text x="40" y="16" class="g-title">Classes running in each hour of the teaching day</text>',
+      grid, bars, labels,
+      '<rect x="44" y="' + (base + 26) + '" width="11" height="11" rx="2" class="g-barNow"/>',
+      '<text x="62" y="' + (base + 36) + '" class="g-small g-muted">as it stands</text>',
+      '<rect x="150" y="' + (base + 26) + '" width="11" height="11" rx="2" class="g-barNew"/>',
+      '<text x="168" y="' + (base + 36) + '" class="g-small g-muted">rebuilt</text>',
+      '<text x="250" y="' + (base + 36) + '" class="g-small g-badtext">the first and last ',
+      'slots are the ones worth emptying</text>',
+      '</svg></div></div>',
+    ].join('');
+  }
+
   /** Why a block session cannot find a room: the grid is cut vertically. */
   function stripeGraphic() {
     var cells = '';
@@ -361,6 +427,8 @@
       '<li><strong>The rest is settled by hand</strong> in the weeks before term, one email at ',
       'a time. It recurs every year because the method produces it, not the term.</li>',
       '</ul>',
+
+      hourChart(model, a.solved),
 
       stripeGraphic(),
 

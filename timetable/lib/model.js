@@ -186,7 +186,10 @@ function load(dir, opts) {
   // window, which is a standing reservation rather than a one-off.
   const oneOffBooking = r =>
     !String(r.module || '').trim() && (Number(r.n_weeks) || 0) <= 1;
-  const classRows = rd('belfast_classes.csv')
+  const classRows = (opts.term === 'autumn'
+    ? require('./autumn').autumnRows(
+        JSON.parse(fs.readFileSync(path.join(dir, 'terms.json'), 'utf8')), rooms)
+    : rd('belfast_classes.csv'))
     .filter(r => r.activity !== 'BK' && !oneOffBooking(r));
   const classes = classRows.map(r => {
     const start = toMin(r.current_start);
@@ -507,8 +510,45 @@ function load(dir, opts) {
     .map(r => [Number(r.class_id_a), Number(r.class_id_b)])
     .filter(([a, b]) => byId.has(a) && byId.has(b));
 
-  let cannotShareTime = pairFile('conflicts_cannot_share_time.csv');
-  const cannotShareDayRaw = pairFile('cannot_share_day.csv');
+  // Spring's conflict pairs arrive as files keyed to its own class ids. Autumn
+  // has none, so they are derived from the same thing those files encode: two
+  // classes cannot share a time if a cohort attends both, and two DIFFERENT
+  // modules of one cohort should not land on the same day. Deriving them here
+  // rather than shipping another file keeps the two terms on one definition.
+  let cannotShareTime, cannotShareDayRaw;
+  if (opts.term === 'autumn') {
+    const pairs = [], dayPairs = [];
+    const byProgramme = new Map();
+    for (const c of classes) {
+      for (const p of c.programmes) {
+        if (!byProgramme.has(p)) byProgramme.set(p, []);
+        byProgramme.get(p).push(c);
+      }
+    }
+    const seenTime = new Set(), seenDay = new Set();
+    const key = (a, b) => (a < b ? a + ':' + b : b + ':' + a);
+    for (const [, cs] of byProgramme) {
+      // A cohort of 400 classes would be 80,000 pairs on its own; the cap is
+      // what stops one enormous programme dominating the graph, and it is the
+      // same shape of judgement the spring files already embody.
+      if (cs.length > 120) continue;
+      for (let i = 0; i < cs.length; i++) {
+        for (let j = i + 1; j < cs.length; j++) {
+          const a = cs[i], b = cs[j];
+          const k = key(a.id, b.id);
+          if (!seenTime.has(k)) { seenTime.add(k); pairs.push([a.id, b.id]); }
+          if (a.module && b.module && a.module !== b.module && !seenDay.has(k)) {
+            seenDay.add(k); dayPairs.push([a.id, b.id]);
+          }
+        }
+      }
+    }
+    cannotShareTime = pairs;
+    cannotShareDayRaw = dayPairs;
+  } else {
+    cannotShareTime = pairFile('conflicts_cannot_share_time.csv');
+    cannotShareDayRaw = pairFile('cannot_share_day.csv');
+  }
 
   // Overlap in the current timetable is positive proof: two classes running at
   // the same time cannot share a lecturer, and cannot be attended by the same
@@ -575,7 +615,7 @@ function load(dir, opts) {
     }
     try {
       const terms = JSON.parse(fs.readFileSync(path.join(dir, 'terms.json'), 'utf8'));
-      const rows = (terms.springCurrent || {}).rows || [];
+      const rows = ((opts.term === 'autumn' ? terms.autumn : terms.springCurrent) || {}).rows || [];
       const byRoomDay = new Map();
       for (const row of rows) {
         const k = row[6] + '|' + row[3];

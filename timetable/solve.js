@@ -24,11 +24,12 @@ const SEEDS = Number(arg('seeds', 40));
 const SEED0 = Number(arg('seed0', 1));
 const OUT = arg('out', '');
 const CLASHES = arg('clashes', 'all');   // all | evidenced | cohort
+const TERM = arg('term', 'spring');      // spring | autumn
 const START = arg('start', 'current');   // current | scatter | mixed
 const CHECK_OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
 
-const model = load(null, { clashes: CLASHES });
-console.log(`Belfast spring: ${model.classes.length} classes (one-off bookings excluded), ` +
+const model = load(null, { clashes: CLASHES, term: TERM });
+console.log(`Belfast ${TERM}: ${model.classes.length} classes (one-off bookings excluded), ` +
             `${model.rooms.length} rooms, ${model.linkedGroups.length} linked groups`);
 console.log(`clash edges: ${model.cannotShareTime.length} of ${model.edgeStats.total} ` +
             `(mode "${model.clashMode}")` +
