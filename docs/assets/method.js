@@ -357,6 +357,20 @@
 
     // How much of the week the biggest rooms are already committed to — the
     // number behind "there is nowhere else to put a 200-seat lecture".
+    // Classes taught in more than one room, today and in the rebuild. An exam
+    // legitimately fills several, so it is counted separately.
+    var splitNow = 0, extraRooms = 0, worstRooms = 0;
+    model.classes.forEach(function (c) {
+      if (c.nRooms > 1 && c.activity !== 'EXM') { splitNow++; extraRooms += c.nRooms - 1; }
+      if (c.nRooms > worstRooms) worstRooms = c.nRooms;
+    });
+    // In the rebuild a class holds exactly one room, so this is zero by
+    // construction rather than by search — the model has nowhere to put a
+    // second room for it. Counting rooms per booking TITLE instead gave 41,
+    // which is wrong: a module's six separate sittings share a title and are
+    // not one class split six ways.
+    var splitNew = 0;
+
     var bigRooms = model.rooms.filter(function (r) { return r.capacity >= 150; });
     var risky = atRisk(model);
     var tight = tightest(model);
@@ -400,11 +414,14 @@
       graphic(),
 
       '<div class="stats">',
-      tile(fixed.total === 0 ? '0' : String(fixed.total), 'hard rules broken in the rebuild',
-        fixed.total === 0 ? 'good' : 'warn'),
-      tile(String(now.total), 'broken in the timetable as it stands', 'warn'),
+      tile(splitNow + ' \u2192 ' + splitNew, 'classes taught in more than one room', 'good'),
+      tile(String(worstRooms), 'rooms the worst one is split across today', 'warn'),
       tile(b2b + '/' + groups, 'lecture+seminar pairs back-to-back', b2b === groups ? 'good' : 'warn'),
       '</div>',
+      '<p class="small muted">A class in two rooms is two rooms staffed, or a cohort divided ',
+      'between them. Giving each one room returns ' + fmtN(extraRooms) + ' room-bookings to the ',
+      'pool \u2014 exams aside, where several rooms are the point. The rebuild reaches zero here ',
+      'by construction rather than by searching: a class simply has one room.</p>',
 
       // ------------------------------------------------ why it always clashes
       '<h2>The current method will always clash</h2>',
