@@ -220,6 +220,47 @@
     ].join('');
   }
 
+  /** Why a block session cannot find a room: the grid is cut vertically. */
+  function stripeGraphic() {
+    var cells = '';
+    var WEEKS = 8, ROOMS = 4;
+    // Rooms 1-3 carry an ordinary weekly class; room 4 is free but too small.
+    for (var r = 0; r < ROOMS; r++) {
+      for (var w = 0; w < WEEKS; w++) {
+        var x = 60 + w * 34, y = 40 + r * 30;
+        var busy = (r === 0) || (r === 1 && w !== 5) || (r === 2 && w % 3 !== 2);
+        cells += '<rect x="' + x + '" y="' + y + '" width="30" height="26" rx="3" class="' +
+          (busy ? 'g-fill' : 'g-empty') + '"/>';
+      }
+      cells += '<text x="52" y="' + (58 + r * 30) + '" class="g-small g-muted" ' +
+        'text-anchor="end">room ' + (r + 1) + '</text>';
+      // The last row is empty on purpose, and needs saying, or the picture
+      // argues against itself: there IS a free room, it is just too small.
+      if (r === ROOMS - 1)
+        cells += '<text x="' + (60 + WEEKS * 34 + 8) + '" y="' + (58 + r * 30) +
+          '" class="g-small g-badtext">too small</text>';
+    }
+    for (var w2 = 0; w2 < WEEKS; w2++)
+      cells += '<text x="' + (75 + w2 * 34) + '" y="32" class="g-small g-muted" ' +
+        'text-anchor="middle">' + (w2 + 1) + '</text>';
+    return [
+      '<div class="algo-graphic"><div class="algo-inner" style="min-width:560px">',
+      '<svg viewBox="0 0 580 234" role="img" aria-label="A grid of rooms against weeks. ',
+      'Ordinary weekly classes fill most cells, so no room is free in every week a block ',
+      'session runs.">',
+      '<text x="20" y="20" class="g-title">A block day needs one room free in every week it runs</text>',
+      cells,
+      '<rect x="56" y="' + (40 + 3 * 30 + 32) + '" width="276" height="26" rx="3" class="g-clash"/>',
+      '<text x="194" y="' + (58 + 3 * 30 + 32) + '" class="g-label">a block day needs this whole row</text>',
+      '<text x="350" y="' + (58 + 3 * 30 + 32) + '" class="g-small g-badtext">nowhere to put it</text>',
+      // SVG text does not wrap, so the caption is set as three lines by hand.
+      '<text x="20" y="196" class="g-small g-muted">Each cell is one room on one day in one week.</text>',
+      '<text x="20" y="210" class="g-small g-muted">A two-hour class running twelve weeks colours a whole row,</text>',
+      '<text x="20" y="224" class="g-small g-muted">so a block day has nowhere to land even when the building looks half empty.</text>',
+      '</svg></div></div>',
+    ].join('');
+  }
+
   function html(H) {
     var C = window.TTConstraints;
     var model = H.model, a = H.assign;
@@ -286,199 +327,90 @@
     return [
       '<div class="narrow-inner">',
 
-      '<h2 style="margin-top:0">How the two timetables are built</h2>',
-      '<p class="lead">Spring 2026 is assembled request by request. This rebuild places the ',
-      'whole term at once and repairs what breaks. That one difference is where the clashes go.</p>',
+      '<h2 style="margin-top:0">Two ways to build a timetable</h2>',
+      '<p class="lead">Spring 2026 is assembled one booking at a time. This rebuild places the ',
+      'whole term at once and repairs what breaks.</p>',
+
+      graphic(),
 
       '<div class="stats">',
       tile(fixed.total === 0 ? '0' : String(fixed.total), 'hard rules broken in the rebuild',
         fixed.total === 0 ? 'good' : 'warn'),
+      tile(String(now.total), 'broken in the timetable as it stands', 'warn'),
       tile(b2b + '/' + groups, 'lecture+seminar pairs back-to-back', b2b === groups ? 'good' : 'warn'),
-      tile(String(blocks), 'block sessions kept on campus', 'good'),
-      tile(fmtN(mv.untouched), 'classes left exactly as they are'),
+      tile(softNow.edge + ' \u2192 ' + soft.edge, 'classes in 9\u201310am / 4\u20135pm slots', 'good'),
       '</div>',
 
-      (fixed.total === 0 ? '' :
-        '<div class="note warn"><p><strong>What is still broken, and why.</strong> ' +
-        fixed.total + ' hard rule' + (fixed.total === 1 ? '' : 's') + ' remain' +
-        (fixed.total === 1 ? 's' : '') + ' broken \u2014 ' + breakdown(fixed.counts) +
-        ' \u2014 against ' + now.total + ' in the current timetable. ' +
-        'They land where the building is tightest: ' +
-        (tight && tight.over > 0
-          ? 'in week ' + tight.week + ', classes needing ' + tight.seats + ' seats or more ask ' +
-            'for ' + Math.round(tight.need) + ' room-hours and Belfast has ' + tight.rooms +
-            ' rooms that size, which is ' + tight.hours + '. No search can place ' +
-            Math.round(tight.over) + ' hours that do not exist \u2014 the rest is search, and more ' +
-            'restarts keep chipping at it.'
-          : 'no week is over capacity on paper, so these are a limit of the search rather ' +
-            'than of the building \u2014 more restarts keep chipping at them.') +
-        '</p><p style="margin-bottom:0">Either way they are <strong>named</strong>, not hidden: ' +
-        'every one is visible on the rebuilt tab and on Explore moves, which is the difference ' +
-        'from finding out in week one.</p></div>'),
-
-      // ---------------------------------------------------------------- 1
-      '<h2>1. How the current timetable is built</h2>',
-      '<p class="small muted">Not documented anywhere we have — but a process leaves ',
-      'fingerprints, and these are the ones in the spring 2026 data.</p>',
+      // ------------------------------------------------ why it always clashes
+      '<h2>Why the current method will always clash</h2>',
       '<ul>',
-      '<li><strong>One booking at a time.</strong> Each school books its own modules into ',
-      'whatever is still free.</li>',
-      '<li><strong>Last year’s slot is the starting point.</strong> Modules keep the day and ',
-      'hour they had, so the calendar is inherited rather than chosen.</li>',
-      '<li><strong>Rooms are attached per booking, not per class.</strong> ' +
-      fmtN(TODAY.splitBookings) + ' of ' + fmtN(TODAY.bookings) + ' bookings sit in two or more ',
-      'rooms — one in ' + TODAY.maxRooms + ' — because no single room was free.</li>',
-      '<li><strong>Nothing already placed is moved.</strong> A conflict is resolved by finding ',
-      'somewhere else for the <em>new</em> booking, never by relocating the one in the way.</li>',
-      '<li><strong>The day stretches to absorb the overflow.</strong> ' + fmtN(TODAY.outside) +
-      ' of ' + fmtN(TODAY.outsideOf) + ' room-bookings fall outside 9–5, and ' +
-      fmtN(TODAY.at0815) + ' start at 08:15.</li>',
-      '<li><strong>Whatever is still broken is settled by hand,</strong> in the weeks before ',
-      'term, one email at a time.</li>',
-      '</ul>',
-
-      // ---------------------------------------------------------------- 2
-      '<h2>2. Why that will always clash</h2>',
-      '<ul>',
-      '<li><strong>Order decides outcome.</strong> The same set of classes produces a different ',
-      'timetable depending on who books first — and whoever books last gets what is left.</li>',
-      '<li><strong>A first-fit choice cannot be undone.</strong> One booking taking the last big ',
+      '<li><strong>Order decides the outcome.</strong> The same set of classes gives a different ',
+      'timetable depending on who books first \u2014 and whoever books last gets what is left.</li>',
+      '<li><strong>A choice once made is never undone.</strong> One booking taking the last big ',
       'room at 11am can make a later lecture unplaceable, and by then the first one is fixed.</li>',
-      '<li><strong>Nobody holds the whole picture.</strong> A school can see its own clashes. ',
-      'It cannot see that its 2pm booking is what forces another school’s cohort into an ',
-      '08:15 start.</li>',
-      '<li><strong>Pressure lands on the scarcest rooms.</strong> Belfast has ' + bigRooms.length +
-      ' rooms seating 150 or more and one seating over 250. A mid-sized class parked in a big ',
-      'theatre is not a waste of space — it is the reason the big lecture has nowhere to go.</li>',
-      '<li><strong>The rules bend before the calendar does.</strong> When nothing fits, the ',
-      'timetable splits a class across rooms (' + fmtN(TODAY.splitBookings) + ' bookings), ',
-      'double-books a room (' + TODAY.doubleBooked + ' pairs), or opens a gap between a lecture ',
-      'and its seminar (' + gappy + ' of ' + groups + ' linked pairs).</li>',
-      '<li><strong>So the scramble is structural, not bad luck.</strong> It recurs every year ',
-      'because the method, not the term, produces it.</li>',
+      '<li><strong>Nobody holds the whole picture.</strong> A school sees its own clashes. It ',
+      'cannot see that its 2pm booking is what forces another school\u2019s cohort to 08:15.</li>',
+      '<li><strong>So the rules bend instead of the calendar.</strong> When nothing fits, a class ',
+      'is split across rooms (' + fmtN(TODAY.splitBookings) + ' of ' + fmtN(TODAY.bookings) +
+      ' bookings, one across ' + TODAY.maxRooms + '), a room is double-booked (' +
+      TODAY.doubleBooked + ' pairs), or a gap opens between a lecture and its seminar (' +
+      gappy + ' of ' + groups + ').</li>',
+      '<li><strong>And the day stretches.</strong> ' + fmtN(TODAY.outside) + ' of ' +
+      fmtN(TODAY.outsideOf) + ' room-bookings fall outside 9\u20135; ' + fmtN(TODAY.at0815) +
+      ' start at 08:15.</li>',
+      '<li><strong>The rest is settled by hand</strong> in the weeks before term, one email at ',
+      'a time. It recurs every year because the method produces it, not the term.</li>',
       '</ul>',
+
+      stripeGraphic(),
 
       '<h3>The modules most exposed</h3>',
-      '<p class="small muted">Scored from this term’s own data: how few rooms can hold the ',
-      'class, whether it is already split or running long, and how many other classes cannot ',
-      'run alongside it. These are the ones a late change is most likely to break.</p>',
+      '<p class="small muted">Scored from this term\u2019s own data: how few rooms can hold the ',
+      'class, whether it is already split or running long, and how many other classes cannot run ',
+      'alongside it.</p>',
       '<div class="scroll"><table><thead><tr><th>Module</th><th>Why it is exposed</th></tr></thead>',
       '<tbody>' + riskRows + '</tbody></table></div>',
 
-      // ---------------------------------------------------------------- graphic
-      graphic(),
+      // ------------------------------------------------ the result
+      '<h2>The rebuilt timetable</h2>',
+      (fixed.total === 0
+        ? '<div class="note good"><p style="margin:0"><strong>Every hard rule holds.</strong> ' +
+          'Checked in your browser on load, by the same code that built it.</p></div>'
+        : '<div class="note warn"><p style="margin:0"><strong>' + fixed.total +
+          ' placement' + (fixed.total === 1 ? '' : 's') + ' could not be resolved</strong> \u2014 ' +
+          breakdown(fixed.counts) + ', against ' + now.total + ' today. ' +
+          (tight && tight.over > 0
+            ? 'In week ' + tight.week + ', classes needing ' + tight.seats + '+ seats ask for ' +
+              Math.round(tight.need) + ' room-hours and the ' + tight.rooms + ' rooms that size ' +
+              'offer ' + tight.hours + '. '
+            : 'No week is over capacity on paper, so this is the search rather than the building. ') +
+          'Named, not hidden: it is on the rebuilt tab and on Explore moves.</p></div>'),
 
-      // ---------------------------------------------------------------- 3
-      '<h2>3. How the rebuilt timetable is built</h2>',
-      '<ul>',
-      '<li><strong>A lecture and its seminar are one object.</strong> They are stored with a ',
-      'fixed offset — the seminar starts exactly when the lecture ends — so placing one ',
-      'places both. Back-to-back is not a rule to satisfy; it is a property of the ',
-      'representation, and cannot be broken.</li>',
-      '<li><strong>Every class starts on the board at once,</strong> at the slot it holds today, ',
-      'so the rebuild begins from a real timetable rather than an empty grid. Nothing is ',
-      'pinned there: keeping today’s time is the lowest priority in the whole model, below ',
-      'every hard rule and every soft goal.</li>',
-      '<li><strong>Find a class breaking a rule, and try rooms first.</strong> Belfast’s rooms ',
-      'are about two-thirds empty, so most conflicts clear with a room swap nobody notices.</li>',
-      '<li><strong>Take the smallest room that fits.</strong> Big rooms are rationed to the ',
-      'classes that cannot go anywhere else.</li>',
-      '<li><strong>If no room works, move the whole group</strong> to the best day and time — ',
-      'and if nothing is better, to the least bad one anyway, displacing other classes.</li>',
-      '<li><strong>The displaced classes are then repaired in turn.</strong> Being allowed to ',
-      'move something already placed is the step the current method does not have.</li>',
-      '<li><strong>Every room is re-allocated from scratch when the search sticks.</strong> ',
-      'Hardest class first, smallest room that fits — the way a timetabler would do it by ',
-      'hand, and the step that keeps the big theatres free for the lectures with nowhere ',
-      'else to go.</li>',
-      '<li><strong>At the end, the region around each surviving clash is torn up and rebuilt.</strong> ',
-      'Some knots need four classes moved together; no search that moves one at a time can ',
-      'untie them.</li>',
-      '<li><strong>Repeat until nothing is broken,</strong> then polish the soft goals — ',
-      'emptying 9–10am and 4–5pm, and closing gap days in a cohort’s week — with ',
-      'moves that break nothing.</li>',
-      '<li><strong>Restart from many beginnings and keep the best.</strong> The search settles ',
-      'within seconds, so trying many starting points beats grinding one.</li>',
-      '</ul>',
-
-      // ---------------------------------------------------------------- 4
-      '<h2>4. Why that removes the clashes</h2>',
-      '<ul>',
-      '<li><strong>No booking order to be unlucky in.</strong> Every class is placed against ',
-      'every other, so no school is penalised for booking late.</li>',
-      '<li><strong>Early decisions are reversible.</strong> A class that took the last big room ',
-      'can be moved when a class that needs it more turns up — the move the current process ',
-      'cannot make.</li>',
-      '<li><strong>The rules are checked, not hoped for.</strong> All eight hard rules are ',
-      're-checked in your browser on load, by the same code that built the timetable.</li>',
-      '<li><strong>Splitting is no longer the escape hatch.</strong> Every class gets one room ',
-      '— exams aside, where several rooms are legitimate — so a shortage shows up as a ',
-      'move to make, not as a class quietly cut in two.</li>',
-      '<li><strong>The day no longer absorbs the overflow.</strong> Nothing starts before 09:15 ',
-      'or ends after 17:15, so pressure surfaces as a conflict to resolve instead of an 08:15 ',
-      'start for somebody’s first years.</li>',
-      '<li><strong>Nothing is left for the scramble.</strong> The exposed modules above are ',
-      'placed under the same rules as everything else, in advance, rather than negotiated in ',
-      'the last fortnight.</li>',
-      '</ul>',
-
-      '<h3>The hard rules, today and rebuilt</h3>',
       '<div class="scroll"><table><thead><tr><th>Hard rule</th><th>Today</th><th>Rebuilt</th></tr></thead>',
       '<tbody>' + ruleRows + '</tbody></table></div>',
-      '<p class="small muted">Counts are broken rules, judged against a 09:15–17:15 day. ',
-      'Today’s column reads high partly because this model gives each class a single room, ',
-      'while the current timetable splits ' + fmtN(TODAY.splitBookings) + ' bookings across ',
-      'several — a split class and the class next to it both want the same room here.</p>',
+      '<p class="small muted">' + fmtN(mv.untouched) + ' of ' + fmtN(mv.total) + ' classes keep ',
+      'their slot. ' + blocks + ' block sessions stay on campus. Gap days in cohorts\u2019 weeks: ' +
+      (meta.gapDaysBefore != null ? meta.gapDaysBefore + ' \u2192 ' + meta.gapDays : 'n/a') + '.</p>',
 
-      '<h3>The soft goals</h3>',
-      '<div class="stats">',
-      tile(softNow.edge + ' → ' + soft.edge, 'classes in 9–10am / 4–5pm edge slots', 'good'),
-      (meta.gapDays != null ? tile(meta.gapDaysBefore + ' → ' + meta.gapDays,
-        'gap days in cohorts’ teaching weeks', 'good') : ''),
-      tile(softNow.wedPm + ' → ' + soft.wedPm, 'classes on Wednesday afternoon', 'warn'),
-      '</div>',
-      '<p class="small muted">A <strong>gap day</strong> is an empty day sitting between two ',
-      'teaching days: a cohort taught Mon/Wed/Fri has two, one taught Mon/Tue/Wed has none. ',
-      'Wednesday afternoons were not optimised for, and did get slightly busier.</p>',
-
-      // ---------------------------------------------------------------- caveats
-      '<h2>Before you rely on this</h2>',
-
-      '<div class="note warn"><p style="margin:0"><strong>The clash data is inferred, not ',
-      'authoritative.</strong> "These two classes share students" was derived from the current ',
-      'timetable — same programme and year for a student clash, and same school plus shared ',
-      'room plus never currently overlapping as a proxy for the same lecturer. Re-run this ',
-      'against real enrolment and staff-assignment data before acting on it.</p></div>',
-
-      '<div class="note warn"><p style="margin:0"><strong>This timetable depends on that ',
-      'pruning.</strong> Under a 09:15–17:15 day the full inferred graph leaves ',
-      '<strong>117</strong> violations that no amount of searching removes; with the unevidenced ',
-      'edges dropped the same search reaches <strong>' +
-      (meta.hardViolations === 0 ? 'zero' : String(meta.hardViolations)) + '</strong>. ',
-      'The published result is solved against <strong>' + (meta.clashEdges || '?') + ' of ' +
-      (meta.clashEdgesTotal || '?') + '</strong> clash edges: it assumes a cohort that already ',
-      'runs two of its own classes at once is split into groups, and so is not obliged to keep ',
-      'every other pair apart. Real enrolment data would settle it.</p></div>',
-
-      '<div class="note warn"><p style="margin:0"><strong>Class sizes are room capacities, not ',
-      'headcounts.</strong> Only 17 of ' + fmtN(model.classes.length) + ' rows carry a real ',
-      'number, so the room a class sits in today is taken as a fair estimate of its cohort, ',
-      'give or take 10%. A room with no capacity recorded is treated as unknown, not as ',
-      'unlimited — which is what stops a 350-seat lecture being offered a design studio.</p></div>',
-
-      '<div class="note"><p style="margin:0"><strong>Exams are not normal classes.</strong> ',
-      'Each multi-room exam keeps the number of rooms it uses today, in distinct rooms at one ',
-      'slot. Bookings marked "do NOT edit or remove" — exam set-up, Estates, IT maintenance, ',
-      'applicant days — are pinned where they are. One-off <code>BK</code> bookings are ',
-      'excluded entirely.</p></div>',
+      // ------------------------------------------------ caveats
+      '<h2>Before you rely on it</h2>',
+      '<div class="note warn"><p style="margin:0"><strong>The clash data is inferred.</strong> ',
+      '"These two share students" was read off the current timetable, and the result is solved ',
+      'against <strong>' + (meta.clashEdges || '?') + ' of ' + (meta.clashEdgesTotal || '?') +
+      '</strong> inferred pairs \u2014 those it actually evidences. Real enrolment data would ',
+      'settle it.</p></div>',
+      '<div class="note warn"><p style="margin:0"><strong>Most class sizes are room capacities, ',
+      'not headcounts.</strong> Where timetabling has confirmed a real number it is used exactly; ',
+      'everywhere else the room a class sits in stands in for its cohort, give or take 12%.</p></div>',
+      '<div class="note"><p style="margin:0"><strong>Exams and evenings are different.</strong> ',
+      'A multi-room exam keeps its several rooms. Anything taught after 17:15 stays there \u2014 ',
+      'nineteen modules are evening-only, nearly all part-time. One-off bookings are excluded.</p></div>',
 
       '<h2>Reproducing it</h2>',
       '<pre class="card pad mono small" style="overflow-x:auto"><code>node timetable/test.js\n',
-      'node timetable/solve.js --seeds 30 --clashes evidenced --out docs/data\n',
-      'node timetable/export.js</code></pre>',
-      '<p class="small muted">No dependencies. <code>constraints.js</code> and ',
-      '<code>suggest.js</code> are pure and run unchanged in node and the browser, so this page ',
-      'checks the rules with the same code that enforced them. Data generated ' +
+      'node timetable/solve.js --seeds 30 --clashes evidenced --out docs/data</code></pre>',
+      '<p class="small muted"><code>constraints.js</code> runs unchanged in node and the browser, ',
+      'so this page checks the rules with the same code that enforced them. Data generated ' +
       (meta.generated || 'unknown') + '.</p>',
 
       '</div>',
