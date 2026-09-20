@@ -26,20 +26,21 @@
   <div id="banner"></div>
 
   <div class="card pad" id="filters" style="margin-bottom:16px">
-    <div>
-      <label class="fld" for="f-prog">Programme <span class="muted" style="font-weight:400">— start here</span></label>
-      <input type="search" id="f-prog" placeholder="Type a degree, e.g. BSc Computing Science…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="prog-list">
-      <div id="prog-list" class="drop" role="listbox"></div>
-      <div class="chips" id="prog-chips" style="margin-top:8px"></div>
+    <div class="ms" id="ms-prog">
+      <label class="fld" for="in-prog">Programme <span class="muted" style="font-weight:400">— start here; tick as many as you like</span></label>
+      <div class="box"><input id="in-prog" type="search" placeholder="Type a degree, or click to browse…" autocomplete="off" role="combobox" aria-expanded="false"></div>
+      <div class="drop" role="listbox" aria-multiselectable="true"></div>
     </div>
     <div class="grid3" style="margin-top:14px">
-      <div>
-        <label class="fld" for="f-module">Module</label>
-        <input type="search" id="f-module" placeholder="Code or title" autocomplete="off">
+      <div class="ms" id="ms-mod">
+        <label class="fld" for="in-mod">Module</label>
+        <div class="box"><input id="in-mod" type="search" placeholder="Code or title…" autocomplete="off" role="combobox" aria-expanded="false"></div>
+        <div class="drop" role="listbox" aria-multiselectable="true"></div>
       </div>
-      <div>
-        <label class="fld" for="f-room">Room</label>
-        <input type="search" id="f-room" placeholder="e.g. BC-03-123" autocomplete="off">
+      <div class="ms" id="ms-room">
+        <label class="fld" for="in-room">Room</label>
+        <div class="box"><input id="in-room" type="search" placeholder="e.g. BC-03…" autocomplete="off" role="combobox" aria-expanded="false"></div>
+        <div class="drop" role="listbox" aria-multiselectable="true"></div>
       </div>
       <div>
         <label class="fld" for="f-week">Week</label>
@@ -53,7 +54,7 @@
         <button class="chip" data-f="changed" aria-pressed="false" id="chip-changed" hidden>Moved only</button>
         <button class="chip" data-f="split" aria-pressed="false" id="chip-split" hidden>Split across rooms</button>
       </div>
-      <button id="f-clear" style="margin-left:auto">Clear</button>
+      <button id="f-clear" style="margin-left:auto">Clear all</button>
     </div>
   </div>
 
@@ -111,7 +112,7 @@
   var TABS = ['autumn', 'springNow', 'springNew', 'method'];
 
   var H = null, tab = 'autumn', view = 'grid';
-  var state = { progs: new Set(), module: '', room: '', week: '', days: new Set(), changed: false, split: false };
+  var state = { progs: new Set(), modules: new Set(), rooms: new Set(), week: '', days: new Set(), changed: false, split: false };
 
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (ch) {
@@ -121,23 +122,16 @@
 
   function rows() { return H.terms[tab] ? H.terms[tab].rows : []; }
 
-  function matches(r) {
-    if (state.progs.size) {
+  // `skip` names one filter to ignore, so each picker can count how many
+  // bookings each of its options would give under the *other* filters.
+  function matches(r, skip) {
+    if (skip !== 'progs' && state.progs.size) {
       var hit = false;
       for (var i = 0; i < r.progs.length; i++) if (state.progs.has(r.progs[i])) { hit = true; break; }
       if (!hit) return false;
     }
-    if (state.module) {
-      var q = state.module.toLowerCase();
-      var title = (H.model.modTitles[r.module] || '').toLowerCase();
-      if ((r.module || '').toLowerCase().indexOf(q) < 0 &&
-          (r.title || '').toLowerCase().indexOf(q) < 0 &&
-          title.indexOf(q) < 0) return false;
-    }
-    if (state.room) {
-      var rm = H.model.rooms[r.room];
-      if (!rm || rm.name.toLowerCase().indexOf(state.room.toLowerCase()) < 0) return false;
-    }
+    if (skip !== 'modules' && state.modules.size && !state.modules.has(r.module)) return false;
+    if (skip !== 'rooms' && state.rooms.size && !state.rooms.has(r.room)) return false;
     if (state.days.size && !state.days.has(r.day)) return false;
     if (state.week && !(r.weeks & (1 << (Number(state.week) - 1)))) return false;
     if (state.changed && !r.changed) return false;
@@ -341,63 +335,193 @@
     if (view === 'grid') drawGrid(list); else drawList(list);
   }
 
-  // ---------------- programme picker ----------------
-  function setupProgrammes() {
-    var input = document.getElementById('f-prog');
-    var drop = document.getElementById('prog-list');
-    var chips = document.getElementById('prog-chips');
+  // ---------------- multi-select pickers ----------------
+  //
+  // One control, used for programmes, modules and rooms. Ticking keeps the list
+  // open so several can be chosen without retyping, and each option carries the
+  // number of bookings it would add under whatever else is already filtered —
+  // so an option showing 0 is visibly not worth ticking.
 
-    // Only offer programmes that actually appear in the current tab.
-    function available() {
-      var seen = new Set();
-      rows().forEach(function (r) { r.progs.forEach(function (p) { seen.add(p); }); });
-      return seen;
+  function makeMulti(rootId, cfg) {
+    var root = document.getElementById(rootId);
+    var box = root.querySelector('.box');
+    var input = root.querySelector('input');
+    var drop = root.querySelector('.drop');
+    var sel = cfg.selection;
+
+    function isOpen() { return drop.classList.contains('open'); }
+
+    function close() {
+      drop.classList.remove('open');
+      input.setAttribute('aria-expanded', 'false');
     }
 
     function drawChips() {
-      chips.innerHTML = [...state.progs].map(function (p) {
-        return '<button class="chip" aria-pressed="true" data-p="' + p + '">' +
-          esc(H.model.programmes[p]) + ' ✕</button>';
-      }).join('');
-      chips.querySelectorAll('.chip').forEach(function (b) {
-        b.onclick = function () { state.progs.delete(Number(b.dataset.p)); drawChips(); render(); };
+      box.querySelectorAll('.chip').forEach(function (c) { c.remove(); });
+      [...sel].forEach(function (v) {
+        var chip = document.createElement('span');
+        chip.className = 'chip on';
+        chip.innerHTML = '<span>' + esc(cfg.label(v)) + '</span>' +
+                         '<button type="button" aria-label="Remove ' + esc(cfg.label(v)) + '">\u00d7</button>';
+        chip.querySelector('button').onclick = function (e) {
+          e.stopPropagation();
+          sel.delete(v);
+          drawChips();
+          if (isOpen()) drawOptions();
+          onChange();
+        };
+        box.insertBefore(chip, input);
       });
     }
 
-    function drawDrop() {
+    function drawOptions() {
       var q = input.value.trim().toLowerCase();
-      if (!q) { drop.classList.remove('open'); input.setAttribute('aria-expanded', 'false'); return; }
-      var avail = available();
-      var hits = [];
-      for (var i = 0; i < H.model.programmes.length && hits.length < 60; i++) {
-        if (!avail.has(i) || state.progs.has(i)) continue;
-        if (H.model.programmes[i].toLowerCase().indexOf(q) >= 0) hits.push(i);
-      }
-      drop.innerHTML = hits.length
-        ? hits.map(function (i) { return '<div class="opt" role="option" data-p="' + i + '">' + esc(H.model.programmes[i]) + '</div>'; }).join('')
-        : '<div class="opt muted" style="cursor:default">No programme matches, in this term</div>';
-      drop.querySelectorAll('.opt[data-p]').forEach(function (o) {
-        o.onclick = function () {
-          state.progs.add(Number(o.dataset.p));
-          input.value = '';
-          drop.classList.remove('open');
-          input.setAttribute('aria-expanded', 'false');
-          drawChips(); render();
+      var counts = cfg.counts();
+      var items = cfg.options().filter(function (v) {
+        return !q || cfg.match(v, q);
+      });
+      // Ticked first, then busiest, so what is chosen stays visible.
+      items.sort(function (a, b) {
+        var sa = sel.has(a) ? 0 : 1, sb = sel.has(b) ? 0 : 1;
+        if (sa !== sb) return sa - sb;
+        var ca = counts.get(a) || 0, cb = counts.get(b) || 0;
+        if (ca !== cb) return cb - ca;
+        return String(cfg.label(a)).localeCompare(String(cfg.label(b)));
+      });
+      var shown = items.slice(0, 200);
+
+      drop.innerHTML = shown.length
+        ? shown.map(function (v) {
+            var on = sel.has(v);
+            var n = counts.get(v) || 0;
+            return '<div class="opt' + (on ? ' on' : '') + '" role="option" aria-selected="' + on + '" data-v="' + esc(String(v)) + '">' +
+              '<span class="tick" aria-hidden="true">' + (on ? '\u2713' : '') + '</span>' +
+              '<span class="txt">' + cfg.optionHtml(v) + '</span>' +
+              '<span class="cnt">' + n + '</span></div>';
+          }).join('') + (items.length > shown.length
+            ? '<div class="opt muted" style="cursor:default">' + (items.length - shown.length) + ' more — keep typing to narrow</div>'
+            : '')
+        : '<div class="opt muted" style="cursor:default">Nothing matches, in this term</div>';
+
+      drop.querySelectorAll('.opt[data-v]').forEach(function (o) {
+        o.onclick = function (e) {
+          e.stopPropagation();
+          var v = cfg.parse(o.dataset.v);
+          if (sel.has(v)) sel.delete(v); else sel.add(v);
+          drawChips();
+          drawOptions();   // stays open, so several can be ticked in a row
+          onChange();
+          input.focus();
         };
       });
+
       drop.classList.add('open');
       input.setAttribute('aria-expanded', 'true');
     }
 
-    input.oninput = drawDrop;
-    input.onfocus = drawDrop;
-    document.addEventListener('click', function (e) {
-      if (!e.target.closest('#f-prog') && !e.target.closest('#prog-list')) {
-        drop.classList.remove('open');
-        input.setAttribute('aria-expanded', 'false');
+    function onChange() { render(); refreshAll(rootId); }
+
+    input.addEventListener('focus', drawOptions);
+    input.addEventListener('input', drawOptions);
+    box.addEventListener('click', function (e) {
+      if (e.target.closest('button')) return;
+      input.focus();
+      drawOptions();
+    });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { close(); input.blur(); }
+      // Backspace on an empty box removes the last chip, as chip inputs do.
+      if (e.key === 'Backspace' && !input.value && sel.size) {
+        var last = [...sel].pop();
+        sel.delete(last);
+        drawChips(); drawOptions(); onChange();
       }
     });
-    return { drawChips: drawChips };
+    document.addEventListener('click', function (e) {
+      if (!root.contains(e.target)) close();
+    });
+
+    return {
+      id: rootId,
+      refresh: function () { drawChips(); if (isOpen()) drawOptions(); },
+      redrawOptions: function () { if (isOpen()) drawOptions(); },
+      clear: function () { sel.clear(); input.value = ''; close(); drawChips(); },
+    };
+  }
+
+  var pickers = [];
+  // After any filter changes, the other pickers' counts are stale.
+  function refreshAll(exceptId) {
+    pickers.forEach(function (p) { if (p.id !== exceptId) p.redrawOptions(); });
+  }
+
+  function countBy(skip, keyOf) {
+    var counts = new Map();
+    rows().forEach(function (r) {
+      if (!matches(r, skip)) return;
+      var k = keyOf(r);
+      if (k === undefined || k === null || k === '') return;
+      if (Array.isArray(k)) k.forEach(function (x) { counts.set(x, (counts.get(x) || 0) + 1); });
+      else counts.set(k, (counts.get(k) || 0) + 1);
+    });
+    return counts;
+  }
+
+  // Options are limited to what the current tab actually contains, so a picker
+  // never offers something that would give nothing.
+  function presentIn(keyOf) {
+    var seen = new Set();
+    rows().forEach(function (r) {
+      var k = keyOf(r);
+      if (k === undefined || k === null || k === '') return;
+      if (Array.isArray(k)) k.forEach(function (x) { seen.add(x); });
+      else seen.add(k);
+    });
+    return [...seen];
+  }
+
+  function setupPickers() {
+    pickers = [
+      makeMulti('ms-prog', {
+        selection: state.progs,
+        options: function () { return presentIn(function (r) { return r.progs; }); },
+        counts: function () { return countBy('progs', function (r) { return r.progs; }); },
+        label: function (v) { return H.model.programmes[v]; },
+        optionHtml: function (v) { return esc(H.model.programmes[v]); },
+        match: function (v, q) { return H.model.programmes[v].toLowerCase().indexOf(q) >= 0; },
+        parse: Number,
+      }),
+      makeMulti('ms-mod', {
+        selection: state.modules,
+        options: function () { return presentIn(function (r) { return r.module; }); },
+        counts: function () { return countBy('modules', function (r) { return r.module; }); },
+        label: function (v) { return v; },
+        optionHtml: function (v) {
+          var t = H.model.modTitles[v] || '';
+          return '<b class="mono">' + esc(v) + '</b>' + (t ? ' <span class="muted">' + esc(t) + '</span>' : '');
+        },
+        match: function (v, q) {
+          return v.toLowerCase().indexOf(q) >= 0 ||
+                 (H.model.modTitles[v] || '').toLowerCase().indexOf(q) >= 0;
+        },
+        parse: String,
+      }),
+      makeMulti('ms-room', {
+        selection: state.rooms,
+        options: function () { return presentIn(function (r) { return r.room; }); },
+        counts: function () { return countBy('rooms', function (r) { return r.room; }); },
+        label: function (v) { return (H.model.rooms[v] || {}).name || String(v); },
+        optionHtml: function (v) {
+          var rm = H.model.rooms[v] || {};
+          return '<span class="tag ' + (TYPE_CLASS[rm.type] || 't-general') + '"></span>' + esc(rm.name || v);
+        },
+        match: function (v, q) {
+          return ((H.model.rooms[v] || {}).name || '').toLowerCase().indexOf(q) >= 0;
+        },
+        parse: Number,
+      }),
+    ];
+    pickers.forEach(function (p) { p.refresh(); });
   }
 
   // ---------------- tabs ----------------
@@ -423,7 +547,11 @@
       key === 'springNew' ? 'Dashed edge = moved from today' : 'Outlined = same room double-booked';
 
     drawBanner();
-    if (!isMethod) render();
+    if (!isMethod) {
+      // A different term has a different set of programmes, modules and rooms.
+      pickers.forEach(function (p) { p.refresh(); });
+      render();
+    }
   }
 
   function drawBanner() {
@@ -486,7 +614,7 @@
       tabsEl.appendChild(b);
     });
 
-    var progUI = setupProgrammes();
+    setupPickers();
 
     var dayWrap = document.getElementById('f-days');
     ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].forEach(function (d, i) {
@@ -496,7 +624,7 @@
         var on = b.getAttribute('aria-pressed') !== 'true';
         b.setAttribute('aria-pressed', String(on));
         if (on) state.days.add(i); else state.days.delete(i);
-        render();
+        render(); refreshAll();
       };
       dayWrap.appendChild(b);
     });
@@ -507,17 +635,14 @@
       o.value = String(w); o.textContent = 'Week ' + w;
       wk.appendChild(o);
     }
-    wk.onchange = function () { state.week = wk.value; render(); };
-
-    document.getElementById('f-module').oninput = function (e) { state.module = e.target.value.trim(); render(); };
-    document.getElementById('f-room').oninput = function (e) { state.room = e.target.value.trim(); render(); };
+    wk.onchange = function () { state.week = wk.value; render(); refreshAll(); };
 
     document.querySelectorAll('#f-flags .chip').forEach(function (b) {
       b.onclick = function () {
         var on = b.getAttribute('aria-pressed') !== 'true';
         b.setAttribute('aria-pressed', String(on));
         state[b.dataset.f] = on;
-        render();
+        render(); refreshAll();
       };
     });
 
@@ -538,18 +663,14 @@
     };
 
     document.getElementById('f-clear').onclick = function () {
-      state.progs.clear();
-      state.module = state.room = state.week = '';
+      pickers.forEach(function (p) { p.clear(); });
+      state.week = '';
       state.days.clear();
       state.changed = state.split = false;
-      document.getElementById('f-prog').value = '';
-      document.getElementById('f-module').value = '';
-      document.getElementById('f-room').value = '';
       document.getElementById('f-week').value = '';
       document.querySelectorAll('#f-days .chip, #f-flags .chip').forEach(function (b) {
         b.setAttribute('aria-pressed', 'false');
       });
-      progUI.drawChips();
       render();
     };
 

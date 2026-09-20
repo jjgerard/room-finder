@@ -9,6 +9,13 @@
 // The model supplies everything that does not change: duration, weeks,
 // candidate rooms, and the pair lists.
 
+// The teaching day. Nothing may start before this or end after it — 09:15 to
+// 17:15 is the 9-to-5 the data's :15 grid actually uses. The first and last
+// hours are the unpopular "edge" slots the soft goals try to empty.
+const DAY_START = 9 * 60 + 15;
+const DAY_END = 17 * 60 + 15;
+const DAY_WIDTH = DAY_END - DAY_START;
+
 const HARD = [
   'roomClash',      // two classes in one room at once in a shared week
   'timeClash',      // same cohort or staff in two places at once
@@ -43,8 +50,8 @@ function placementOf(assignment, id) {
  */
 function check(model, assign, opts) {
   opts = opts || {};
-  const dayStart = opts.dayStart == null ? 9 * 60 : opts.dayStart;
-  const dayEnd = opts.dayEnd == null ? 21 * 60 : opts.dayEnd;
+  const dayStart = opts.dayStart == null ? DAY_START : opts.dayStart;
+  const dayEnd = opts.dayEnd == null ? DAY_END : opts.dayEnd;
   const strictBackToBack = opts.strictBackToBack !== false;
   const strictRoomFit = opts.strictRoomFit === true;
 
@@ -59,8 +66,19 @@ function check(model, assign, opts) {
   for (const c of model.classes) {
     const p = at(c.id);
     if (!p) continue;
-    if (p.start < dayStart || p.start + c.dur > dayEnd || p.day < 0 || p.day > 4) {
-      add('window', { a: c.id, start: p.start, day: p.day });
+    // A handful of sessions are longer than the teaching day — 9, 12 and 13
+    // hours — so they cannot both start after 09:15 and finish by 17:15. They
+    // still may not start early; they overflow at the end, because there is no
+    // other option. `windowExempt` is set by components.js on the whole
+    // component, since a linked group can be too wide even when its members
+    // are not.
+    var tooLongToFit = c.windowExempt || c.dur > DAY_WIDTH;
+    // Pinned bookings are not ours to move, so the window is not held against
+    // them — several institutional reservations run to 21:15 by design.
+    if (!c.isFixed &&
+        (p.day < 0 || p.day > 4 || p.start < dayStart ||
+        (!tooLongToFit && p.start + c.dur > dayEnd))) {
+      add('window', { a: c.id, start: p.start, day: p.day, tooLong: !!tooLongToFit });
     }
     // Staying in the room a class already occupies is always legal: 507 classes
     // (24%) sit in a room outside their own candidate set today, almost always
@@ -188,6 +206,7 @@ function softScore(model, assign) {
   return { edge, wedPm };
 }
 
-const api = { HARD, check, movement, softScore, overlaps, sharesWeek };
+const api = { HARD, check, movement, softScore, overlaps, sharesWeek,
+  DAY_START, DAY_END, DAY_WIDTH };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 if (typeof window !== 'undefined') window.TTConstraints = api;

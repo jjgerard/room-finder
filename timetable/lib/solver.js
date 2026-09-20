@@ -17,19 +17,21 @@
 
 const { build } = require('./components');
 
+const { DAY_START, DAY_END, DAY_WIDTH } = require('./constraints');
+
 const DAY_COUNT = 5;
 const SLOT_MIN = 60;
-const FIRST_START = 7 * 60 + 15;
-const LAST_START = 19 * 60 + 15;
-const STARTS = [];
-for (let t = FIRST_START; t <= LAST_START; t += SLOT_MIN) STARTS.push(t);
 
-// Hard bounds match what the data already does; preference for civilised hours
-// is expressed as soft cost instead, so a long block session stays placeable.
-const HARD_MIN = FIRST_START;
-const HARD_MAX = 23 * 60 + 15;
-const PREF_MIN = 9 * 60 + 15;
-const PREF_MAX = 18 * 60 + 15;
+// The teaching day is 09:15-17:15, so the legal starts are 09:15 to 16:15 —
+// eight slots, not the thirteen the raw data happens to use.
+const STARTS = [];
+for (let t = DAY_START; t + SLOT_MIN <= DAY_END; t += SLOT_MIN) STARTS.push(t);
+
+const HARD_MIN = DAY_START;
+const HARD_MAX = DAY_END;
+// The unpopular ends of the day: first hour and last hour.
+const EDGE_EARLY = DAY_START + 60;
+const EDGE_LATE = DAY_END - 60;
 
 function mulberry32(seed) {
   return function () {
@@ -204,32 +206,41 @@ class Solver {
     let v = 0;
     const d = this.day[id], s = this.start[id], du = this.dur[id], w = this.weeks[id], r = this.room[id];
 
-    if (s < HARD_MIN || s + du > HARD_MAX) v++;
+    const cls0 = this.model.byId.get(id);
+    if (!cls0.isFixed && (s < HARD_MIN || (!cls0.windowExempt && s + du > HARD_MAX))) v++;
 
     const cls = this.model.byId.get(id);
     if (!(r === cls.origRoom) && !this.candSet.get(id).has(r)) v++;
 
+    // The dedupe key carries the RULE as well as the pair. Two classes can
+    // break two rules at once — sharing a room while also sharing a cohort —
+    // and that is two violations, not one. Keying on the pair alone made the
+    // solver blind to whichever it counted second, so it optimised a total
+    // lower than the real one.
     for (const other of this.occ[r * DAY_COUNT + d]) {
       if (other === id) continue;
-      if (seen && seen.has(pairKey(id, other))) continue;
+      const k = ROOM_RULE + pairKey(id, other);
+      if (seen && seen.has(k)) continue;
       if (s < this.start[other] + this.dur[other] && this.start[other] < s + du && (w & this.weeks[other])) {
         v++;
-        if (seen) seen.add(pairKey(id, other));
+        if (seen) seen.add(k);
       }
     }
     for (const other of this.timePartners.get(id)) {
       if (this.day[other] !== d) continue;
-      if (seen && seen.has(pairKey(id, other))) continue;
+      const k = TIME_RULE + pairKey(id, other);
+      if (seen && seen.has(k)) continue;
       if (s < this.start[other] + this.dur[other] && this.start[other] < s + du && (w & this.weeks[other])) {
         v++;
-        if (seen) seen.add(pairKey(id, other));
+        if (seen) seen.add(k);
       }
     }
     for (const other of this.dayPartners.get(id)) {
       if (this.day[other] !== d) continue;
-      if (seen && seen.has(pairKey(id, other))) continue;
+      const k = DAY_RULE + pairKey(id, other);
+      if (seen && seen.has(k)) continue;
       v++;
-      if (seen) seen.add(pairKey(id, other));
+      if (seen) seen.add(k);
     }
     return v;
   }
@@ -240,8 +251,10 @@ class Solver {
     let v = 0;
     const s = this.start[id], d = this.day[id];
     if (cls.attended) {
-      if (s < PREF_MIN || s + this.dur[id] > PREF_MAX) v += o.wOutside;
-      else if (s < 10 * 60 + 15 || s >= 16 * 60 + 15) v += o.wEdge;
+      // Inside a 09:15-17:15 day the only soft timing goal left is to keep the
+      // first and last hours as empty as possible.
+      if (s < EDGE_EARLY || s >= EDGE_LATE) v += o.wEdge;
+      if (!cls.windowExempt && s + this.dur[id] > HARD_MAX) v += o.wOutside;
       if (o.wWedPm && d === 2 && s >= 13 * 60) v += o.wWedPm;
     }
     if (d !== cls.origDay) v += o.wMoveDay;
@@ -326,10 +339,13 @@ class Solver {
       ids.forEach((i, k) => this.setRoom(i, origRooms[k]));
     };
 
+    const wide = comp.span > DAY_WIDTH;
     for (let d = 0; d < DAY_COUNT; d++) {
       for (const s of STARTS) {
         if (d === origDay && s === origStart) continue;
-        if (s + comp.span > HARD_MAX) continue;
+        // A component wider than the day can only start at the very beginning
+        // of it; everything else must finish inside it.
+        if (wide ? s !== DAY_START : s + comp.span > HARD_MAX) continue;
         this.moveComponent(comp, d, s);
         // Greedily give each member the best room available at the new time.
         for (const i of ids) this.tryRoomRepair(i);
@@ -345,8 +361,8 @@ class Solver {
     if (!best && mode === 'random') {
       // Sideways/uphill step to escape a local minimum.
       const d = Math.floor(this.rand() * DAY_COUNT);
-      const s = STARTS[Math.floor(this.rand() * STARTS.length)];
-      if (s + comp.span <= HARD_MAX) {
+      const s = wide ? DAY_START : STARTS[Math.floor(this.rand() * STARTS.length)];
+      if (wide || s + comp.span <= HARD_MAX) {
         this.moveComponent(comp, d, s);
         for (const i of ids) this.tryRoomRepair(i);
         return true;
@@ -368,8 +384,35 @@ class Solver {
    * scan for violations is paid once per round and amortised over the ~300
    * repairs it finds, instead of once per repair.
    */
+  /**
+   * Place every component that starts outside the teaching day at its
+   * least-conflicted legal slot, before min-conflicts begins.
+   *
+   * Today's timetable piles 557 bookings into 09:15 and spills another 120
+   * outside 09:15-17:15 altogether. Handing that to min-conflicts as a starting
+   * point means it spends its whole budget digging out of a pile-up rather than
+   * resolving genuine conflicts, and it plateaus well short of clean.
+   */
+  seedWindow() {
+    const wide = c => c.span > DAY_WIDTH;
+    const needs = this.components.filter(comp => {
+      if (comp.fixed) return false;
+      const s = comp.start;
+      return s < HARD_MIN || (!wide(comp) && s + comp.span > HARD_MAX);
+    });
+    // Hardest first: a component with few legal slots should choose before the
+    // flexible ones have filled them.
+    needs.sort((a, b) => b.span - a.span);
+    let placed = 0;
+    for (const comp of needs) {
+      if (this.tryTimeRepair(comp.members[0].cls.id, 'minconflict')) placed++;
+    }
+    return placed;
+  }
+
   run(report) {
     const o = this.opts;
+    this.seedWindow();
     let best = this.snapshot(), bestHard = this.totalHard();
     let iter = 0, round = 0, stall = 0;
 
@@ -441,8 +484,8 @@ class Solver {
           const cls = m.cls;
           const s = this.start[cls.id];
           if (cls.attended) {
-            const outside = s < PREF_MIN || s + this.dur[cls.id] > PREF_MAX;
-            const edge = s < 10 * 60 + 15 || s >= 16 * 60 + 15;
+            const outside = s < HARD_MIN || (!cls.windowExempt && s + this.dur[cls.id] > HARD_MAX);
+            const edge = s < EDGE_EARLY || s >= EDGE_LATE;
             if (outside || edge) { want = true; break; }
           }
           if (this.classProgs.get(cls.id).some(p => gappy.has(p))) { want = true; break; }
@@ -465,10 +508,11 @@ class Solver {
         const od = comp.day, os = comp.start;
         let best = null;
         let bestScore = before.hard * 1000 + before.soft + o.wSpread * beforeSpread;
+        const wide = comp.span > DAY_WIDTH;
         for (let d = 0; d < DAY_COUNT; d++) {
           for (const s of STARTS) {
             if (d === od && s === os) continue;
-            if (s + comp.span > HARD_MAX) continue;
+            if (wide ? s !== DAY_START : s + comp.span > HARD_MAX) continue;
             this.moveComponent(comp, d, s);
             const c = this.costOf(ids);
             const score = c.hard * 1000 + c.soft + o.wSpread * this.spreadPenalty(progs);
@@ -514,6 +558,11 @@ class Solver {
   }
 }
 
+// Distinct prefixes so the same pair can be recorded once per rule it breaks.
+const ROOM_RULE = 'r';
+const TIME_RULE = 't';
+const DAY_RULE = 'd';
+
 function pairKey(a, b) { return a < b ? a * 100000 + b : b * 100000 + a; }
 
-module.exports = { Solver, STARTS, DAY_COUNT, HARD_MIN, HARD_MAX, PREF_MIN, PREF_MAX };
+module.exports = { Solver, STARTS, DAY_COUNT, HARD_MIN, HARD_MAX, EDGE_EARLY, EDGE_LATE };

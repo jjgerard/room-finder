@@ -117,10 +117,12 @@ function load(dir, opts) {
       attended: r.is_teaching === '1' || splitList(r.programmes).length > 0,
       isBlock: r.is_block_teaching === '1',
       recommendOffsite: r.recommend_offsite === '1',
-      // The data marks some bookings as not to be touched — the semester exam
-      // set-up reservation, which carries no module, cohort or clash edge and
-      // is not teaching. Those are honoured rather than rescheduled.
-      isFixed: /do not edit or remove/i.test(r.title || ''),
+      // The data marks some bookings as not to be touched: the semester exam
+      // set-up reservation, Estates exams, IT maintenance windows and applicant
+      // days. They carry no module, cohort or clash edge, and the title says so
+      // outright. Matching the phrase loosely catches all five wordings —
+      // "Do NOT Edit or Remove booking", "- do Not Edit", "*do Not edit*".
+      isFixed: /do\s*not\s*edit/i.test(r.title || ''),
       isShadow: false,
       linked: r.linked_group || '',
       order: r.group_order === '' ? null : Number(r.group_order),
@@ -165,6 +167,29 @@ function load(dir, opts) {
     c.roomsNeeded = c.nRooms;
   }
   classes.push(...shadows);
+
+  // Computer labs can host ordinary teaching — they are rooms with desks — and
+  // sit at about a third of their capacity. Opening them to general classes
+  // widens the tightest room category at no cost to the classes that genuinely
+  // need a lab, since those keep first claim through their own candidate sets.
+  // `openRooms` lists the room types general classes may borrow.
+  const openRooms = opts.openRooms === undefined ? ['computer'] : opts.openRooms;
+  let borrowed = 0;
+  if (openRooms.length) {
+    const borrowable = rooms.filter(r => openRooms.includes(r.type));
+    for (const c of classes) {
+      if (c.roomType !== 'general') continue;
+      const have = new Set(c.cand);
+      for (const r of borrowable) {
+        // Same capacity rule as everywhere else: an unrecorded capacity is
+        // "unknown", not "too small", so it does not disqualify the room.
+        if (have.has(r.id)) continue;
+        if (r.capacityKnown && r.capacity < c.size) continue;
+        c.cand.push(r.id);
+        borrowed++;
+      }
+    }
+  }
 
   const byId = new Map(classes.map(c => [c.id, c]));
 
@@ -294,6 +319,7 @@ function load(dir, opts) {
     rooms, roomByName, classes, byId,
     cannotShareTime, cannotShareDay, cannotShareDayRaw,
     preservedAdjacency, preservedSlot, examRooms,
+    openRooms, borrowedRoomOptions: borrowed,
     clashMode, edgeStats, splitCohorts,
     shadowCount: shadows.length,
     linkedGroups: [...linkedGroups.entries()].map(([key, members]) => ({ key, members })),

@@ -11,6 +11,8 @@
 // component once and the members follow, which makes strict back-to-back true
 // by construction rather than something to repair afterwards.
 
+const { DAY_WIDTH } = require('./constraints');
+
 // Union-find carrying, for each node, its start offset from the set's root.
 function makeUF(n) {
   const parent = new Int32Array(n);
@@ -80,6 +82,10 @@ function build(model) {
     members.sort((x, y) => x.off - y.off);
     const span = Math.max(...members.map(m => m.off + m.cls.dur));
     const anchor = members[0].cls;
+    // Too wide for the teaching day: the members are allowed to overflow past
+    // the end, but still never to start before it.
+    const tooWide = span > DAY_WIDTH;
+    for (const m of members) m.cls.windowExempt = tooWide;
     components.push({
       id: components.length,
       members,                       // [{cls, off}]
