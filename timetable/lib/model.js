@@ -48,7 +48,17 @@ function splitList(s) {
   return String(s || '').split(';').map(x => x.trim()).filter(Boolean);
 }
 
-function load(dir) {
+/**
+ * @param opts.clashes  which cannot_share_time edges to trust:
+ *   'all'      — every edge as given (the default).
+ *   'evidenced'— drop edges whose only shared cohorts are ones already proven
+ *                to run overlapping classes today. A cohort that overlaps
+ *                itself is split into groups, so "same cohort, so they cannot
+ *                overlap" is not supported by that cohort's own behaviour.
+ *   'cohort'   — 'evidenced', and also drop the staff-room proxy edges.
+ */
+function load(dir, opts) {
+  opts = opts || {};
   dir = dir || path.join(__dirname, '..', 'data');
   const rd = f => readCsv(fs.readFileSync(path.join(dir, f), 'utf8'));
 
@@ -119,8 +129,52 @@ function load(dir) {
     .map(r => [Number(r.class_id_a), Number(r.class_id_b)])
     .filter(([a, b]) => byId.has(a) && byId.has(b));
 
-  const cannotShareTime = pairFile('conflicts_cannot_share_time.csv');
+  let cannotShareTime = pairFile('conflicts_cannot_share_time.csv');
   const cannotShareDayRaw = pairFile('cannot_share_day.csv');
+
+  // Overlap in the current timetable is positive proof: two classes running at
+  // the same time cannot share a lecturer, and cannot be attended by the same
+  // students. Absence of overlap proves nothing — with 5 days and 13 slots most
+  // pairs miss each other by coincidence. So overlap is used to REMOVE edges,
+  // never to add them.
+  const overlapsToday = (a, b) =>
+    a.origDay === b.origDay &&
+    a.origStart < b.origStart + b.dur &&
+    b.origStart < a.origStart + a.dur &&
+    (a.weeks & b.weeks) !== 0;
+
+  const splitCohorts = new Set();
+  const byProgramme = new Map();
+  for (const c of classes) {
+    for (const p of c.programmes) {
+      if (!byProgramme.has(p)) byProgramme.set(p, []);
+      byProgramme.get(p).push(c);
+    }
+  }
+  for (const [p, cs] of byProgramme) {
+    outer: for (let i = 0; i < cs.length; i++) {
+      for (let j = i + 1; j < cs.length; j++) {
+        if (overlapsToday(cs[i], cs[j])) { splitCohorts.add(p); break outer; }
+      }
+    }
+  }
+
+  const clashMode = opts.clashes || 'all';
+  const edgeStats = { total: cannotShareTime.length, dropped: 0, staffDropped: 0 };
+  if (clashMode !== 'all') {
+    cannotShareTime = cannotShareTime.filter(([x, y]) => {
+      const a = byId.get(x), b = byId.get(y);
+      const shared = a.programmes.filter(p => b.programmes.includes(p));
+      if (!shared.length) {
+        // No shared cohort: this edge exists only because of the same-school,
+        // shared-room staff proxy, which rests entirely on never overlapping.
+        if (clashMode === 'cohort') { edgeStats.staffDropped++; return false; }
+        return true;
+      }
+      if (shared.every(p => splitCohorts.has(p))) { edgeStats.dropped++; return false; }
+      return true;
+    });
+  }
 
   // Rule 5 is "no NEW same-day pairings" — a pair already sharing a day today
   // is grandfathered. 2,469 of 12,854 are, so this matters a lot.
@@ -194,6 +248,7 @@ function load(dir) {
     rooms, roomByName, classes, byId,
     cannotShareTime, cannotShareDay, cannotShareDayRaw,
     preservedAdjacency, preservedSlot,
+    clashMode, edgeStats, splitCohorts,
     linkedGroups: [...linkedGroups.entries()].map(([key, members]) => ({ key, members })),
   };
 }

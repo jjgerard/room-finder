@@ -149,6 +149,51 @@ test('model: preserved pairs really are adjacent today', () => {
   }
 });
 
+test('model: overlap today is used only to remove clash edges, never add', () => {
+  // Two classes running at the same time cannot share students or a lecturer.
+  // So no edge in the list may name a pair that currently overlaps.
+  for (const [x, y] of model.cannotShareTime) {
+    const a = model.byId.get(x), b = model.byId.get(y);
+    if (a.origDay !== b.origDay) continue;
+    if (!(a.weeks & b.weeks)) continue;
+    assert.ok(!(a.origStart < b.origStart + b.dur && b.origStart < a.origStart + a.dur),
+      'a listed clash pair overlaps in the current timetable');
+  }
+});
+
+test('model: clash modes drop edges and never add them', () => {
+  const all = load(null, { clashes: 'all' });
+  const ev = load(null, { clashes: 'evidenced' });
+  const co = load(null, { clashes: 'cohort' });
+  assert.ok(ev.cannotShareTime.length < all.cannotShareTime.length);
+  assert.ok(co.cannotShareTime.length < ev.cannotShareTime.length);
+  const key = ([a, b]) => (a < b ? a + ':' + b : b + ':' + a);
+  const allSet = new Set(all.cannotShareTime.map(key));
+  for (const e of co.cannotShareTime) assert.ok(allSet.has(key(e)), 'cohort mode invented an edge');
+  for (const e of ev.cannotShareTime) assert.ok(allSet.has(key(e)), 'evidenced mode invented an edge');
+});
+
+test('model: a cohort is split only if its own classes overlap today', () => {
+  const m = load(null, { clashes: 'evidenced' });
+  const byProg = new Map();
+  for (const c of m.classes) for (const p of c.programmes) {
+    if (!byProg.has(p)) byProg.set(p, []);
+    byProg.get(p).push(c);
+  }
+  for (const p of m.splitCohorts) {
+    const cs = byProg.get(p) || [];
+    let found = false;
+    for (let i = 0; i < cs.length && !found; i++) {
+      for (let j = i + 1; j < cs.length; j++) {
+        const a = cs[i], b = cs[j];
+        if (a.origDay === b.origDay && (a.weeks & b.weeks) &&
+            a.origStart < b.origStart + b.dur && b.origStart < a.origStart + a.dur) { found = true; break; }
+      }
+    }
+    assert.ok(found, 'cohort marked split without overlapping classes: ' + p);
+  }
+});
+
 // ---------------------------------------------------------------- components
 const { components, conflicts } = build(model);
 

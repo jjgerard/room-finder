@@ -235,7 +235,7 @@ achieve and then defend against its own later repairs.
 Node 18+, no dependencies.
 
 ```
-node timetable/test.js                              # 53 checks
+node timetable/test.js                              # 56 checks
 node timetable/solve.js --seeds 30 --out docs/data  # rebuild the timetable
 node timetable/export.js                            # pack the data the site loads
 ```
@@ -282,6 +282,30 @@ fixed first, and all three are properties of the source data rather than the sol
 - **138 of 228 rooms have no recorded capacity**, which is why 507 classes currently sit
   in a room outside their own candidate set, and why a class staying put is exempt from
   the room-fit rule while a class that moves is not.
+
+### How much does the inferred clash graph matter?
+
+Overlap in the current timetable is *positive proof* — two classes running at the same
+time cannot share a lecturer or an audience. Absence of overlap proves nothing, since
+across 5 days and 13 slots most pairs miss each other by coincidence. So overlap is used
+only to **remove** edges, never to add them.
+
+Applied consistently, that is damning on paper: **353 of 948 cohorts already run their own
+classes overlapping today** (so they are split into groups), and **12,702 of 16,246 clash
+edges rest only on such cohorts**. Only 2,595 edges are backed by a cohort that never
+overlaps internally.
+
+So it was tested rather than argued about — re-solving with the doubtful edges dropped:
+
+| Clash edges trusted | Hard | Edge slots | Gap-days | Moved |
+|---|---|---|---|---|
+| All 16,246, as given | 0 | 255 | 205 | 620 |
+| 3,544 — drop the unevidenced | 0 | 222 | 194 | 594 |
+| 2,595 — also drop the staff proxy | 0 | 211 | 189 | 622 |
+
+**Dropping 84% of the clash constraints barely changes the answer.** The weakest part of
+the data is not what binds the problem — room availability and the back-to-back rule are.
+Reproduce with `--clashes evidenced` or `--clashes cohort`.
 
 Exams deserve their own warning: some currently run across 26 rooms, and the size proxy
 reads only the dominant one. Putting such an exam in a single room is almost certainly

@@ -1,7 +1,7 @@
 'use strict';
 
 // Build a spring timetable that obeys the hard rules, moving as little as
-// possible. Run:  node timetable/solve.js [--seeds 40] [--out site/data]
+// possible. Run:  node timetable/solve.js [--seeds 40] [--out docs/data] [--clashes all|evidenced|cohort]
 //
 // Restarts matter more than a longer single run: the search plateaus within a
 // couple of seconds, so trying many starting points finds a clean solution
@@ -19,11 +19,16 @@ function arg(name, dflt) {
 }
 const SEEDS = Number(arg('seeds', 40));
 const OUT = arg('out', '');
+const CLASHES = arg('clashes', 'all');   // all | evidenced | cohort
 const CHECK_OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
 
-const model = load();
+const model = load(null, { clashes: CLASHES });
 console.log(`Belfast spring: ${model.classes.length} classes (BK bookings excluded), ` +
             `${model.rooms.length} rooms, ${model.linkedGroups.length} linked groups`);
+console.log(`clash edges: ${model.cannotShareTime.length} of ${model.edgeStats.total} ` +
+            `(mode "${model.clashMode}")` +
+            (model.edgeStats.dropped ? `, ${model.edgeStats.dropped} dropped as unevidenced` : '') +
+            (model.edgeStats.staffDropped ? `, ${model.edgeStats.staffDropped} staff-proxy dropped` : ''));
 
 const baseline = new Map(model.classes.map(c =>
   [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom }]));

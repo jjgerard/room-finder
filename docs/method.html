@@ -133,8 +133,46 @@
     <p><strong>The clash graph is inferred from the current timetable.</strong> A student
     clash means "same programme and year"; a staff clash is a proxy — same school, shared
     dominant room, never currently overlapping. This both over-constrains and
-    under-constrains, and it is the single biggest reason to treat this as a feasibility
-    study rather than a timetable to publish.</p>
+    under-constrains, and it is why this is a feasibility study rather than a timetable
+    to publish.</p>
+  </div>
+
+  <h3>How over-constrained, and does it matter?</h3>
+  <p>
+    Overlap in the current timetable is <em>positive proof</em>: two classes running at
+    the same time cannot share a lecturer, and cannot be attended by the same students.
+    Absence of overlap proves nothing — across 5 days and 13 slots, most pairs miss each
+    other by coincidence. So overlap can only ever be used to <strong>remove</strong>
+    edges, never to add them.
+  </p>
+  <p>
+    Applying that consistently: <strong>353 of 948 cohorts already run their own classes
+    overlapping today</strong>, which means those cohorts are split into groups, so
+    "same cohort, therefore they cannot overlap" is not true of them.
+    <strong>12,702 of 16,246 clash edges rest only on such cohorts.</strong> A further
+    949 are the staff-room proxy with no shared cohort at all. Just 2,595 edges are
+    backed by a cohort that never overlaps internally.
+  </p>
+  <p>
+    That sounds fatal, so it was tested by re-solving with the doubtful edges removed:
+  </p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Clash edges trusted</th><th>Hard violations</th><th>Edge slots</th><th>Gap-days</th><th>Classes moved</th></tr></thead>
+      <tbody>
+        <tr><td>All 16,246, as given</td><td>0</td><td>255</td><td>205</td><td>620</td></tr>
+        <tr><td>3,544 — drop the unevidenced</td><td>0</td><td>222</td><td>194</td><td>594</td></tr>
+        <tr><td>2,595 — also drop the staff proxy</td><td>0</td><td>211</td><td>189</td><td>622</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note good">
+    <p style="margin:0"><strong>Dropping 84% of the clash constraints barely changes the
+    answer.</strong> The inferred graph — much the weakest part of the data — is not what
+    binds this problem; room availability and the back-to-back rule are. The result
+    therefore survives a large share of those inferences being wrong, which is the
+    strongest thing that can be said for it without real enrolment data.
+    Reproduce with <code>--clashes evidenced</code> or <code>--clashes cohort</code>.</p>
   </div>
 
   <div class="note warn">
