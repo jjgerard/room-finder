@@ -854,6 +854,31 @@ test('export: the browser is given the grandfathered sharing pairs', () => {
     'the export ships a different number of sharing pairs than the model has');
 });
 
+test('sizes: a cohort figure never inflates a teaching group', () => {
+  // The dangerous direction. A module's confirmed size is the whole cohort;
+  // applying it to "SEM Group C" would put 220 students in a seminar of 60.
+  // Capping is the default and only a lecture or exam with no group marker
+  // takes the figure outright.
+  const groupish = model.classes.filter(c =>
+    /\b(gp|grp|group)\s*[0-9a-z]?/i.test(c.title || ''));
+  assert.ok(groupish.length > 20, 'expected plenty of group-titled classes');
+  for (const c of groupish) {
+    assert.ok(!c.sizeConfirmed,
+      c.title + ' was treated as the whole cohort');
+  }
+  // BMG632 is the case capping alone could not fix: 100 students, 90-seat room.
+  const bmg = model.classes.find(c => c.module === 'BMG632');
+  if (bmg) {
+    eq(bmg.size, 100, 'BMG632 should carry its real cohort, above its proxy');
+    assert.ok(bmg.sizeConfirmed);
+  }
+  // And an unrecorded size stays unrecorded even when the module has a figure.
+  for (const c of model.classes) {
+    if (!c.sizeConfirmed) continue;
+    assert.ok(c.size > 0);
+  }
+});
+
 test('sizes: a confirmed size gets no capacity tolerance', () => {
   // The tolerance is there because a size is normally the capacity of the
   // room a class sits in today. A real headcount gets no such benefit: 225

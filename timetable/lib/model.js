@@ -90,6 +90,36 @@ function load(dir, opts) {
     }
   } catch (e) { /* no confirmed sizes available */ }
 
+  // Deciding what a module's cohort figure means for one of its classes.
+  //
+  // Capping is the safe default and was the original rule: a class is never
+  // inflated, because a seminar group is a subdivision and cannot be larger
+  // than the whole. But capping alone cannot correct a proxy that is too
+  // SMALL — BMG632 teaches 100 in a room of 90 — so a class that is plainly
+  // the whole cohort takes the figure exactly, up or down.
+  //
+  // "Plainly the whole cohort" is drawn narrowly: a lecture or an exam whose
+  // title carries no group marker. Everything else caps. Getting that wrong in
+  // the cautious direction only means keeping a proxy; getting it wrong the
+  // other way would inflate ECO109's "SEM Group C" to all 220 students, which
+  // is how the first version of this went astray.
+  const isGroup = title => /\b(gp|grp|group)\s*[0-9a-z]?/i.test(String(title || ''));
+  const wholeCohort = r =>
+    (r.activity === 'LEC' || r.activity === 'EXM') && !isGroup(r.title);
+  const sizeFor = r => {
+    const proxy = Number(r.size_estimate) || 0;
+    const cohort = trueSizes.get(String(r.module || '').trim());
+    if (cohort == null) return proxy;
+    if (proxy === 0) return 0;                       // unrecorded stays unrecorded
+    if (wholeCohort(r)) return cohort;
+    return Math.min(proxy, cohort);
+  };
+  const sizeConfirmedFor = r => {
+    const cohort = trueSizes.get(String(r.module || '').trim());
+    if (cohort == null || !(Number(r.size_estimate) > 0)) return false;
+    return wholeCohort(r);
+  };
+
   // Capacities the room inventory does not carry, read out of Ulster's own
   // Resource Booker. Five CEBE IT labs, the CAD lab and the two MARCS rooms
   // are in daily teaching use and have no seat count anywhere in the handoff
@@ -174,20 +204,18 @@ function load(dir, opts) {
       title: r.title || '',
       programmes: splitList(r.programmes),
       yearLevel: r.year_level,
-      // A confirmed cohort size caps the room-capacity proxy; see trueSizes.
-      size: Math.min(Number(r.size_estimate) || 0,
-        trueSizes.has(String(r.module || '').trim())
-          ? trueSizes.get(String(r.module || '').trim())
-          : Infinity),
-      // True where the number above IS the confirmed figure rather than the
-      // proxy — which is only when the cap actually bound. A module's seminar
-      // groups keep their own proxy sizes, and an unrecorded size stays
-      // unrecorded.
-      sizeConfirmed: trueSizes.get(String(r.module || '').trim()) ===
-        Math.min(Number(r.size_estimate) || 0,
-          trueSizes.has(String(r.module || '').trim())
-            ? trueSizes.get(String(r.module || '').trim())
-            : Infinity),
+      // A confirmed figure is the module's COHORT. What that means for a
+      // given class depends on whether the class is the whole cohort or one
+      // group of it, and the title says which: PUP531 teaches "LEC Gp1" and
+      // "SEM Gp2", BMG632 teaches "LEC/SEM" to everyone.
+      //
+      //   * a whole-cohort class takes the figure exactly, up or down —
+      //     BMG632 is 100 where its room implied 90, and a 100-person class
+      //     does not go in a 90-seat room;
+      //   * a group keeps its own proxy, capped by the cohort, since a group
+      //     is a subdivision and cannot be larger than the whole.
+      size: sizeFor(r),
+      sizeConfirmed: sizeConfirmedFor(r),
       sizeKnown: r.size_basis === 'known_headcount',
       day: DAYS.indexOf(r.current_day),
       start,
