@@ -1,7 +1,8 @@
 name: Deploy site to GitHub Pages
 
-# Publishes docs/ to GitHub Pages. This workflow cannot turn Pages on by
-# itself — do that once at Settings → Pages → Source: "GitHub Actions".
+# Publishes docs/ to GitHub Pages. The configure-pages step below turns Pages
+# on the first time it runs (enablement: true), so there is nothing to switch
+# on by hand; it needs the `pages: write` permission granted further down.
 #
 # It also runs the solver's tests first, so a deploy never ships a site whose
 # constraint code is broken. The site re-checks the timetable in the visitor's
@@ -40,7 +41,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Run the solver tests
         run: node timetable/test.js
@@ -58,6 +59,10 @@ jobs:
           fi
 
       - uses: actions/configure-pages@v5
+        with:
+          # Turns Pages on and points it at GitHub Actions if it is not already
+          # configured, instead of failing with "Get Pages site failed".
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
