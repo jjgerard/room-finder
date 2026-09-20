@@ -407,7 +407,7 @@
       '</div>',
 
       // ------------------------------------------------ why it always clashes
-      '<h2>Why the current method will always clash</h2>',
+      '<h2>The current method will always clash</h2>',
       '<ul>',
       '<li><strong>Order decides the outcome.</strong> The same set of classes gives a different ',
       'timetable depending on who books first \u2014 and whoever books last gets what is left.</li>',
