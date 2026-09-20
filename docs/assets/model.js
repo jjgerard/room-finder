@@ -99,6 +99,11 @@
       byId: byId,
       programmes: packed.programmes,
       modTitles: packed.modTitles || {},
+      // Pairs grandfathered to share a room, in the shape constraints.js wants:
+      // a Set of "a:b" with the smaller id first.
+      mayShareRoom: new Set(unflat(packed.sharePairs || []).map(function (p) {
+        return p[0] < p[1] ? p[0] + ':' + p[1] : p[1] + ':' + p[0];
+      })),
       cannotShareTime: unflat(packed.timePairs),
       cannotShareDay: unflat(packed.dayPairs),
       preservedAdjacency: unflat(packed.adjPairs),

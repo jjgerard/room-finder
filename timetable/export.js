@@ -116,6 +116,11 @@ const packed = {
     ];
   }),
   cand: model.classes.map(c => c.cand),
+  // Pairs already sharing a room today, which may keep doing so. Without
+  // these the browser counts all 160 of them as double-bookings and reports a
+  // timetable as far worse than the checker that produced it found it: the
+  // site said 29 violations where the solver said 9.
+  sharePairs: flat([...model.mayShareRoom].map(k => k.split(':').map(Number))),
   timePairs: flat(model.cannotShareTime),
   dayPairs: flat(model.cannotShareDay),
   adjPairs: flat(model.preservedAdjacency),

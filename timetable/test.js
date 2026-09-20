@@ -820,6 +820,21 @@ test('rooms: the CEBE labs are offered to the classes that need machines', () =>
   }
 });
 
+test('export: the browser is given the grandfathered sharing pairs', () => {
+  // The site runs the same checker as the solver, so anything the checker
+  // consults has to be shipped. mayShareRoom was not, and the site reported
+  // 29 violations where the solver had found 9 — every grandfathered pair
+  // counted as a double-booking.
+  const fs = require('fs');
+  const path = require('path');
+  const file = path.join(__dirname, '..', 'docs', 'data', 'timetable.json');
+  if (!fs.existsSync(file)) return;               // not exported yet; CI exports first
+  const packed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.ok(Array.isArray(packed.sharePairs), 'sharePairs is missing from the export');
+  eq(packed.sharePairs.length / 2, model.mayShareRoom.size,
+    'the export ships a different number of sharing pairs than the model has');
+});
+
 test('rooms: a School lab favours the School it belongs to', () => {
   // CEBE's labs go to computing and engineering first, read from what has
   // actually been taught in each one rather than from a list of codes.
