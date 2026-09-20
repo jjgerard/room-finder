@@ -13,6 +13,7 @@
     teaching: 7, block: 8, multiRoom: 9, nRooms: 10, roomType: 11, size: 12,
     origDay: 13, origStart: 14, origRoom: 15,
     day: 16, start: 17, room: 18, changed: 19,
+    attended: 20, shadowOf: 21, fixed: 22,
   };
 
   function fmt(v) {
@@ -47,6 +48,12 @@
         origDay: row[I.origDay], origStart: row[I.origStart], origRoom: row[I.origRoom],
         day: row[I.day], start: row[I.start], room: row[I.room],
         changed: row[I.changed] || '',
+        // Soft goals count every class a cohort attends, not just the ones
+        // flagged as teaching — see timetable/lib/model.js.
+        attended: !!row[I.attended],
+        shadowOf: row[I.shadowOf] >= 0 ? row[I.shadowOf] : null,
+        isShadow: row[I.shadowOf] >= 0,
+        isFixed: !!row[I.fixed],
         cand: packed.cand[i],
       };
     });

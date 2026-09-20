@@ -62,6 +62,10 @@ class Solver {
 
     const { components, conflicts } = build(model);
     this.components = components;
+    // A component holding a pinned booking cannot move at all — the data marks
+    // it "do not edit or remove", and it carries no cohort or clash information
+    // to reschedule it against.
+    for (const comp of components) comp.fixed = comp.members.some(m => m.cls.isFixed);
     this.buildConflicts = conflicts;
 
     const n = Math.max(...model.classes.map(c => c.id)) + 1;
@@ -235,7 +239,7 @@ class Solver {
     const o = this.opts;
     let v = 0;
     const s = this.start[id], d = this.day[id];
-    if (cls.isTeaching) {
+    if (cls.attended) {
       if (s < PREF_MIN || s + this.dur[id] > PREF_MAX) v += o.wOutside;
       else if (s < 10 * 60 + 15 || s >= 16 * 60 + 15) v += o.wEdge;
       if (o.wWedPm && d === 2 && s >= 13 * 60) v += o.wWedPm;
@@ -279,6 +283,7 @@ class Solver {
 
   /** Try to repair `id` by moving only its room. Returns true if it improved. */
   tryRoomRepair(id) {
+    if (this.model.byId.get(id).isFixed) return false;
     const before = this.costOf([id]);
     const cur = this.room[id];
     let best = null, bestScore = before.hard * 1000 + before.soft;
@@ -303,6 +308,7 @@ class Solver {
    */
   tryTimeRepair(id, mode) {
     const comp = this.components[this.compOf[id]];
+    if (comp.fixed) return false;
     const ids = comp.members.map(m => m.cls.id);
     const before = this.costOf(ids);
     const origDay = comp.day, origStart = comp.start;
@@ -434,7 +440,7 @@ class Solver {
         for (const m of comp.members) {
           const cls = m.cls;
           const s = this.start[cls.id];
-          if (cls.isTeaching) {
+          if (cls.attended) {
             const outside = s < PREF_MIN || s + this.dur[cls.id] > PREF_MAX;
             const edge = s < 10 * 60 + 15 || s >= 16 * 60 + 15;
             if (outside || edge) { want = true; break; }
@@ -451,6 +457,7 @@ class Solver {
 
       let movedThisRound = 0;
       for (const comp of targets) {
+        if (comp.fixed) continue;
         const ids = comp.members.map(m => m.cls.id);
         const progs = this.progsOf(ids);
         const before = this.costOf(ids);

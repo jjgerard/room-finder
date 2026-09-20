@@ -34,7 +34,7 @@
     Belfast's current spring timetable puts hundreds of classes in more than one room —
     a class runs in room A in most weeks and room B in the rest, because something else
     took room A that week. Give each of those classes a single room and the conflicts
-    become visible: <strong id="n-roomclash">309</strong> pairs of classes then want the
+    become visible: <strong id="n-roomclash">328</strong> pairs of classes then want the
     same room at the same time.
   </p>
   <p>
@@ -150,7 +150,7 @@
     overlapping today</strong>, which means those cohorts are split into groups, so
     "same cohort, therefore they cannot overlap" is not true of them.
     <strong>12,702 of 16,246 clash edges rest only on such cohorts.</strong> A further
-    949 are the staff-room proxy with no shared cohort at all. Just 2,595 edges are
+    949 are the staff-room proxy with no shared cohort at all. Only about 2,300 edges are
     backed by a cohort that never overlaps internally.
   </p>
   <p>
@@ -160,14 +160,14 @@
     <table>
       <thead><tr><th>Clash edges trusted</th><th>Hard violations</th><th>Edge slots</th><th>Gap-days</th><th>Classes moved</th></tr></thead>
       <tbody>
-        <tr><td>All 16,246, as given</td><td>0</td><td>255</td><td>205</td><td>620</td></tr>
-        <tr><td>3,544 — drop the unevidenced</td><td>0</td><td>222</td><td>194</td><td>594</td></tr>
-        <tr><td>2,595 — also drop the staff proxy</td><td>0</td><td>211</td><td>189</td><td>622</td></tr>
+        <tr><td>All 16,246, as given</td><td>0</td><td>332</td><td>188</td><td>761</td></tr>
+        <tr><td>3,278 — drop the unevidenced</td><td>0</td><td>256</td><td>173</td><td>736</td></tr>
+        <tr><td>2,329 — also drop the staff proxy</td><td>0</td><td>259</td><td>185</td><td>743</td></tr>
       </tbody>
     </table>
   </div>
   <div class="note good">
-    <p style="margin:0"><strong>Dropping 84% of the clash constraints barely changes the
+    <p style="margin:0"><strong>Dropping 86% of the clash constraints barely changes the
     answer.</strong> The inferred graph — much the weakest part of the data — is not what
     binds this problem; room availability and the back-to-back rule are. The result
     therefore survives a large share of those inferences being wrong, which is the
@@ -190,11 +190,32 @@
     choice, and it can be switched off.</p>
   </div>
 
+  <h3>Exams are not normal classes</h3>
+  <p>
+    The one-room-per-class rule does not apply to an exam: a single sitting may
+    legitimately occupy several rooms at once. Each multi-room exam is modelled as
+    several sub-classes pinned to the same slot, so they move together and the ordinary
+    room-clash rule stops two of them landing in the same room. All
+    <strong id="n-multiexam">15</strong> of them keep the number of rooms they use
+    today, in distinct rooms.
+  </p>
   <div class="note">
-    <p style="margin:0"><strong>Exam sizes are the least trustworthy of all.</strong>
-    Some exams currently run across 26 rooms, and the size proxy reads only the dominant
-    one. Putting such an exam in a single room is almost certainly wrong, and those rows
-    need real candidate numbers before anyone acts on them.</p>
+    <p style="margin:0"><strong>The exam set-up reservation is left alone.</strong>
+    Ten rows titled <em>"z Exams *Do NOT Edit or Remove booking* Sem2 Exam Set Up
+    Week"</em> block 26 rooms all day, Monday to Friday, in weeks 15 and 16. They carry
+    no module, no cohort and no clash edge, and the data says not to touch them — so they
+    are pinned: never moved in day, time or room. Only their dominant room is recorded,
+    so the other 25 are not reserved against, and room availability in weeks 15–16 is
+    correspondingly optimistic.</p>
+  </div>
+
+  <div class="note warn">
+    <p style="margin:0"><strong><code>is_teaching=0</code> does not mean nobody
+    attends.</strong> All 66 exams are flagged 0, as are 136 lectures — yet 281 such rows
+    carry a cohort. Scoring the soft goals on the teaching flag made those rows free to
+    place, and exams were duly pushed into Friday evening at no cost. The soft goals
+    count every class a cohort attends instead, which is why the edge-slot baseline
+    here reads higher than a teaching-only count would.</p>
   </div>
 
   <h2>7. Reproducing it</h2>
@@ -216,8 +237,9 @@ node timetable/export.js                        # pack the data this site loads<
         is the weakest part of the model.</li>
     <li><strong>Real headcounts and room capacities</strong> — lets room fit be enforced
         properly instead of exempted.</li>
-    <li><strong>A policy on exams</strong> — whether a large exam may occupy several
-        rooms, which the current one-room-per-class rule forbids.</li>
+    <li><strong>The room list for multi-room bookings</strong> — only the dominant
+        room is recorded, so the exam set-up reservation's other 25 rooms cannot be
+        reserved against.</li>
   </ul>
 
 </main>

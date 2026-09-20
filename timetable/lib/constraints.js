@@ -179,7 +179,9 @@ function softScore(model, assign) {
   let edge = 0, wedPm = 0;
   for (const c of model.classes) {
     const p = placementOf(assign, c.id);
-    if (!p || !c.isTeaching) continue;
+    // Counts every class a cohort attends, not just the is_teaching ones —
+    // otherwise exams and 136 non-flagged lectures are invisible here.
+    if (!p || !(c.attended === undefined ? c.isTeaching : c.attended)) continue;
     if (p.start < 10 * 60 || p.start >= 16 * 60) edge++;
     if (p.day === 2 && p.start >= 13 * 60) wedPm++;
   }

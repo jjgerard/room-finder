@@ -23,11 +23,12 @@
 
 <main class="wrap narrow">
 
-  <h2>Every class in one room, no clashes, nothing moved off campus</h2>
+  <h2>One room per class, no clashes, nothing moved off campus</h2>
   <p class="lead">
     Spring 2026 at Belfast splits hundreds of classes across two or more rooms. This is a
-    rebuilt timetable that gives every class a single room and breaks none of the hard
-    rules, and improves both soft goals on top — <span id="leadmove">while leaving most of
+    rebuilt timetable that gives every class a single room — exams excepted, since a
+    sitting may legitimately fill several — breaks none of the hard rules, and improves
+    both soft goals on top — <span id="leadmove">while leaving most of
     the timetable where it is</span>.
   </p>
 
@@ -131,6 +132,15 @@
   </div>
 
   <div class="note">
+    <p><strong>Exams may use several rooms; the exam set-up block is left alone.</strong>
+    An exam is not a normal class, so the one-room rule does not apply to it — each
+    multi-room exam keeps the number of rooms it uses today, in distinct rooms at one
+    slot. Ten rows marked <em>"Do NOT Edit or Remove booking"</em> reserving rooms for
+    the exam weeks are pinned and never moved; only their dominant room is in the data,
+    so weeks 15–16 availability is optimistic.</p>
+  </div>
+
+  <div class="note">
     <p><strong>One-off room bookings were excluded.</strong> The source data carries 540
     <code>BK</code> rows — a named person booking a room on a specific date, with no
     module, no cohort and no place in the clash graph. They were specific to spring 2026
@@ -189,7 +199,21 @@
         parts.join(', ') + '). This timetable is not yet clean.</p>';
     }
 
-    var multi = model.classes.filter(function (c) { return c.isMultiRoom; }).length;
+    // Exams are allowed several rooms by design, so they are not counted as
+    // splits either before or after.
+    var multi = model.classes.filter(function (c) {
+      return c.isMultiRoom && c.activity !== 'EXM';
+    }).length;
+    var stillSplit = 0;
+    var roomsPerSlot = new Map();
+    model.classes.forEach(function (c) {
+      if (c.activity === 'EXM') return;
+      var p = a.solved.get(c.id);
+      var key = c.id;
+      if (!roomsPerSlot.has(key)) roomsPerSlot.set(key, new Set());
+      roomsPerSlot.get(key).add(p.room);
+    });
+    roomsPerSlot.forEach(function (set) { if (set.size > 1) stillSplit++; });
     var b2b = 0;
     model.linkedGroups.forEach(function (g) {
       var ok = true;
@@ -203,8 +227,8 @@
     var blocks = model.classes.filter(function (c) { return c.isBlock; }).length;
 
     document.getElementById('stats').innerHTML =
-      tile(multi.toLocaleString(), 'classes split across 2+ rooms today', 'warn') +
-      tile('0', 'classes split across rooms in the rebuild', 'good') +
+      tile(multi.toLocaleString(), 'non-exam classes split across 2+ rooms today', 'warn') +
+      tile(String(stillSplit), 'non-exam classes still split in the rebuild', 'good') +
       tile(b2b + '/' + model.linkedGroups.length, 'lecture+seminar pairs back-to-back', 'good') +
       tile(blocks.toLocaleString(), 'block sessions kept on campus', 'good');
 
@@ -212,7 +236,7 @@
     document.getElementById('blockcount').textContent = blocks;
 
     var labels = {
-      roomClash: 'No two classes in one room at once',
+      roomClash: 'No two classes in one room at once (exam rooms aside)',
       timeClash: 'No cohort or lecturer in two places at once',
       roomFit: 'Right room type, big enough',
       linkedOrder: 'Lecture &amp; seminar same day, back-to-back, in order',

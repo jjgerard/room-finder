@@ -209,19 +209,19 @@ ends.
 
 ## The result
 
-Starting from a spring timetable with **309 room double-bookings** (once every
+Starting from a spring timetable with **328 room double-bookings** (once every
 multi-room class is collapsed into a single room) and **75 lecture/seminar pairs running
 with a gap**:
 
 | | Today | Rebuilt |
 |---|---|---|
-| Room double-bookings | 309 | **0** |
+| Room double-bookings | 328 | **0** |
 | Cohort / staff clashes | 0 | **0** |
 | Lecture+seminar back-to-back | 73 of 146 | **146 of 146** |
 | Block teaching sent off campus | — | **none** |
-| Classes in 9–10am / 4–5pm edge slots | 391 | **255** |
-| Cohort gap-days | 399 | **205** |
-| Classes left untouched | — | 912 of 1,532 |
+| Classes in 9–10am / 4–5pm edge slots | 585 | **328** |
+| Cohort gap-days | 399 | **191** |
+| Classes left untouched | — | 810 of 1,556 |
 
 Two results contradict the earlier analysis this work started from, which concluded that
 ~27 modules could never be back-to-back and that three all-day sessions had to move
@@ -248,6 +248,7 @@ seconds — restarts buy far more than a longer single run.
 | File | What it is |
 |---|---|
 | `timetable/data/` | The source CSVs: classes, rooms, and the two pairwise conflict files. |
+| `timetable/export.js` | Packs the model + solution into what the site loads, and copies the shared pure modules into `docs/assets`. |
 | `timetable/lib/model.js` | CSVs → in-memory model. Also where the exam and same-day rules are derived. |
 | `timetable/lib/components.js` | Union-find with offsets: groups classes that cannot move independently. |
 | `timetable/lib/constraints.js` | The rules. Pure — runs in node and in the browser. |
@@ -292,22 +293,44 @@ only to **remove** edges, never to add them.
 
 Applied consistently, that is damning on paper: **353 of 948 cohorts already run their own
 classes overlapping today** (so they are split into groups), and **12,702 of 16,246 clash
-edges rest only on such cohorts**. Only 2,595 edges are backed by a cohort that never
+edges rest only on such cohorts**. Only about 2,300 are backed by a cohort that never
 overlaps internally.
 
 So it was tested rather than argued about — re-solving with the doubtful edges dropped:
 
 | Clash edges trusted | Hard | Edge slots | Gap-days | Moved |
 |---|---|---|---|---|
-| All 16,246, as given | 0 | 255 | 205 | 620 |
-| 3,544 — drop the unevidenced | 0 | 222 | 194 | 594 |
-| 2,595 — also drop the staff proxy | 0 | 211 | 189 | 622 |
+| All 16,246, as given | 0 | 332 | 188 | 761 |
+| 3,278 — drop the unevidenced | 0 | 256 | 173 | 736 |
+| 2,329 — also drop the staff proxy | 0 | 259 | 185 | 743 |
 
-**Dropping 84% of the clash constraints barely changes the answer.** The weakest part of
+**Dropping 86% of the clash constraints barely changes the answer.** The weakest part of
 the data is not what binds the problem — room availability and the back-to-back rule are.
 Reproduce with `--clashes evidenced` or `--clashes cohort`.
 
-Exams deserve their own warning: some currently run across 26 rooms, and the size proxy
-reads only the dominant one. Putting such an exam in a single room is almost certainly
-wrong. One-off `BK` room bookings are excluded entirely — they were specific to spring
-2026 and carry no module, cohort or clash information.
+### Exams
+
+An exam is not a normal class, so the one-room-per-class rule does not apply to it. Each
+multi-room exam is modelled as several sub-classes pinned to the same slot, which reuses
+the component machinery — they move together, and the ordinary room-clash rule stops two
+of them landing in the same room. All 15 keep the number of rooms they use today, in
+distinct rooms.
+
+Ten further rows titled `z Exams *Do NOT Edit or Remove booking* Sem2 Exam Set Up Week`
+block 26 rooms all day, Monday to Friday, in weeks 15–16. They carry no module, no cohort
+and no clash edge, and the data says not to touch them, so they are **pinned** — never
+moved in day, time or room. Only their dominant room is recorded, so the other 25 are not
+reserved against and weeks 15–16 availability is optimistic.
+
+### `is_teaching=0` does not mean nobody attends
+
+All 66 exams carry `is_teaching=0`, as do 136 lectures — yet **281 such rows have a cohort
+attached**. Scoring the soft goals on the teaching flag made all of them free to place,
+and exams were duly pushed into Friday evening at no cost. The soft goals count every
+class a cohort attends instead, which is why the edge-slot baseline reads 585 here rather
+than the 391 a teaching-only count gives.
+
+One-off `BK` room bookings are excluded entirely — 540 rows where a named person booked
+a room on a specific date, with no module, cohort or place in the clash graph. They were
+specific to spring 2026 and are not rescheduled, so their rooms are not reserved here
+either.

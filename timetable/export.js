@@ -45,6 +45,11 @@ const packed = {
       s ? s.start : c.origStart,
       s ? s.room : c.origRoom,
       s ? s.changed : '',
+      // `attended` drives the soft-goal counts, and is NOT is_teaching: all 66
+      // exams and 136 lectures are flagged non-teaching yet carry a cohort.
+      c.attended ? 1 : 0,
+      c.isShadow ? c.shadowOf : -1,
+      c.isFixed ? 1 : 0,
     ];
   }),
   cand: model.classes.map(c => c.cand),

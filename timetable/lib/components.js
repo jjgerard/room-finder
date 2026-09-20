@@ -61,6 +61,8 @@ function build(model) {
   }
   // An exam in its module's usual slot keeps that slot (starts together).
   for (const [a, b] of model.preservedSlot) tie(a, b, 0, 'exam in usual slot');
+  // Every room of a multi-room exam runs at the same moment as the exam itself.
+  for (const [a, b] of model.examRooms || []) tie(a, b, 0, 'another room of the same exam');
 
   // Collect members per root.
   const groups = new Map();

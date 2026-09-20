@@ -111,8 +111,17 @@ function load(dir, opts) {
       weeksText: r.weeks,
       nWeeks: Number(r.n_weeks) || 0,
       isTeaching: r.is_teaching === '1',
+      // is_teaching=0 does not mean nobody attends. All 66 exams are flagged 0,
+      // as are 136 lectures, yet 281 such rows carry a cohort. Soft goals key on
+      // this instead, or exams get pushed into Friday evening for free.
+      attended: r.is_teaching === '1' || splitList(r.programmes).length > 0,
       isBlock: r.is_block_teaching === '1',
       recommendOffsite: r.recommend_offsite === '1',
+      // The data marks some bookings as not to be touched — the semester exam
+      // set-up reservation, which carries no module, cohort or clash edge and
+      // is not teaching. Those are honoured rather than rescheduled.
+      isFixed: /do not edit or remove/i.test(r.title || ''),
+      isShadow: false,
       linked: r.linked_group || '',
       order: r.group_order === '' ? null : Number(r.group_order),
       cand,
@@ -122,6 +131,40 @@ function load(dir, opts) {
       origRoom: homeRoom === undefined ? null : homeRoom,
     };
   });
+
+  // An exam is not a normal class: it may legitimately occupy several rooms at
+  // once, so the one-room-per-class rule does not apply to it. It is modelled as
+  // several sub-classes pinned to the same slot, which reuses the component
+  // machinery — they move together, and the ordinary room-clash rule already
+  // stops two of them landing in the same room.
+  //
+  // Pinned bookings are left alone: their room list is not in the data (only the
+  // dominant room is), so inventing 25 more rooms for the exam set-up
+  // reservation would be fabricating occupancy rather than modelling it.
+  const shadows = [];
+  let nextShadowId = 10000;
+  for (const c of classes) {
+    if (c.activity !== 'EXM' || c.nRooms < 2 || c.isFixed) continue;
+    const taken = new Set([c.homeRoom]);
+    for (let k = 1; k < c.nRooms; k++) {
+      const room = c.cand.find(r => !taken.has(r));
+      if (room === undefined) break; // not enough candidate rooms to go round
+      taken.add(room);
+      shadows.push(Object.assign({}, c, {
+        id: nextShadowId++,
+        isShadow: true,
+        shadowOf: c.id,
+        roomIndex: k,
+        homeRoom: room,
+        homeRoomName: rooms[room].name,
+        origRoom: room,
+        nRooms: 1,
+        isMultiRoom: false,
+      }));
+    }
+    c.roomsNeeded = c.nRooms;
+  }
+  classes.push(...shadows);
 
   const byId = new Map(classes.map(c => [c.id, c]));
 
@@ -235,6 +278,9 @@ function load(dir, opts) {
     }
   }
 
+  // Each sub-class of a multi-room exam starts exactly when its parent does.
+  const examRooms = shadows.map(sh => [sh.shadowOf, sh.id]);
+
   // Linked groups, ordered by group_order: same day, contiguous, in order.
   const linkedGroups = new Map();
   for (const c of classes) {
@@ -247,8 +293,9 @@ function load(dir, opts) {
   return {
     rooms, roomByName, classes, byId,
     cannotShareTime, cannotShareDay, cannotShareDayRaw,
-    preservedAdjacency, preservedSlot,
+    preservedAdjacency, preservedSlot, examRooms,
     clashMode, edgeStats, splitCohorts,
+    shadowCount: shadows.length,
     linkedGroups: [...linkedGroups.entries()].map(([key, members]) => ({ key, members })),
   };
 }
