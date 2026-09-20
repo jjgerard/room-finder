@@ -168,26 +168,77 @@ function load(dir, opts) {
   }
   classes.push(...shadows);
 
-  // Computer labs can host ordinary teaching — they are rooms with desks — and
-  // sit at about a third of their capacity. Opening them to general classes
-  // widens the tightest room category at no cost to the classes that genuinely
-  // need a lab, since those keep first claim through their own candidate sets.
-  // `openRooms` lists the room types general classes may borrow.
-  const openRooms = opts.openRooms === undefined ? ['computer'] : opts.openRooms;
-  let borrowed = 0;
-  if (openRooms.length) {
-    const borrowable = rooms.filter(r => openRooms.includes(r.type));
-    for (const c of classes) {
-      if (c.roomType !== 'general') continue;
-      const have = new Set(c.cand);
-      for (const r of borrowable) {
-        // Same capacity rule as everywhere else: an unrecorded capacity is
-        // "unknown", not "too small", so it does not disqualify the room.
-        if (have.has(r.id)) continue;
-        if (r.capacityKnown && r.capacity < c.size) continue;
-        c.cand.push(r.id);
-        borrowed++;
+  // ---- room candidates, rebuilt ------------------------------------------
+  //
+  // The `candidate_rooms` column cannot be used as given. It offers a class
+  // only rooms of a type it does not need: a studio class in the Illustration
+  // Space is offered 69 seminar rooms and no studio at all, and a computing
+  // class is offered no computer lab. Room fit therefore never failed, because
+  // the list it checked against was wrong — and 70 classes in an earlier solve
+  // were moved into rooms that cannot serve them.
+  //
+  // So the candidate set is derived here instead:
+  //
+  //   * a class may use rooms of its own type;
+  //   * a specialist room may only take classes from a subject already
+  //     scheduled in it. Averaged over both terms a specialist room serves 1.6
+  //     subjects against 15.3 for a general room, so they are dedicated spaces
+  //     and the booking history is the only record of to what. A specialist
+  //     room with no history is offered to nobody;
+  //   * computer labs are shared space in practice (9.8 subjects each), so
+  //     general classes may borrow them — but a computing class may NOT be put
+  //     in a room without computers;
+  //   * a lecture may use a theatre, and a theatre class may use a general room
+  //     big enough to hold it;
+  //   * a recorded capacity must be big enough; an unrecorded one is unknown,
+  //     not zero, so it does not disqualify the room;
+  //   * a class may always stay where it already is.
+  const subjectOf = code => String(code || '').replace(/[0-9].*$/, '');
+  const roomSubjects = new Map();
+  try {
+    const terms = JSON.parse(fs.readFileSync(path.join(dir, 'terms.json'), 'utf8'));
+    for (const key of ['autumn', 'springCurrent']) {
+      for (const row of (terms[key] || {}).rows || []) {
+        const subj = subjectOf(row[0]);
+        if (!subj) continue;
+        if (!roomSubjects.has(row[6])) roomSubjects.set(row[6], new Set());
+        roomSubjects.get(row[6]).add(subj);
       }
+    }
+  } catch (e) { /* no history available */ }
+  for (const c of classes) {
+    const subj = subjectOf(c.module);
+    if (!subj || c.homeRoom == null) continue;
+    if (!roomSubjects.has(c.homeRoom)) roomSubjects.set(c.homeRoom, new Set());
+    roomSubjects.get(c.homeRoom).add(subj);
+  }
+
+  const openRooms = opts.openRooms === undefined ? ['computer'] : opts.openRooms;
+  const rebuild = opts.rebuildCandidates !== false;
+  const sourceCand = new Map(classes.map(c => [c.id, c.cand.slice()]));
+
+  if (rebuild) {
+    for (const c of classes) {
+      const subj = subjectOf(c.module);
+      const allowed = [];
+      for (const room of rooms) {
+        let ok = false;
+        if (room.type === c.roomType) {
+          ok = room.type !== 'specialist'
+            ? true
+            : !!(subj && roomSubjects.get(room.id) && roomSubjects.get(room.id).has(subj));
+        } else if (c.roomType === 'general') {
+          // A lecture is content with a theatre, and with a lab if labs are open.
+          ok = room.type === 'theatre' || openRooms.includes(room.type);
+        } else if (c.roomType === 'theatre') {
+          ok = room.type === 'general';
+        }
+        if (!ok) continue;
+        if (room.capacityKnown && c.size > 0 && room.capacity < c.size) continue;
+        allowed.push(room.id);
+      }
+      if (c.homeRoom != null && !allowed.includes(c.homeRoom)) allowed.push(c.homeRoom);
+      c.cand = allowed;
     }
   }
 
@@ -319,7 +370,7 @@ function load(dir, opts) {
     rooms, roomByName, classes, byId,
     cannotShareTime, cannotShareDay, cannotShareDayRaw,
     preservedAdjacency, preservedSlot, examRooms,
-    openRooms, borrowedRoomOptions: borrowed,
+    openRooms, roomSubjects, sourceCand, rebuiltCandidates: rebuild,
     clashMode, edgeStats, splitCohorts,
     shadowCount: shadows.length,
     linkedGroups: [...linkedGroups.entries()].map(([key, members]) => ({ key, members })),

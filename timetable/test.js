@@ -199,6 +199,68 @@ test('model: a cohort is split only if its own classes overlap today', () => {
   }
 });
 
+test('rooms: a class is only ever offered rooms that can serve it', () => {
+  // The source candidate_rooms column offers a studio class 69 seminar rooms
+  // and no studio, and a computing class no computer lab at all. Rebuilding the
+  // candidates is what stops the solver moving a class somewhere useless.
+  for (const c of model.classes) {
+    for (const id of c.cand) {
+      if (id === c.homeRoom) continue;          // staying put is always allowed
+      const t = model.rooms[id].type;
+      if (c.roomType === 'specialist') eq(t, 'specialist', (c.module || c.activity) + ' offered a ' + t + ' room');
+      if (c.roomType === 'computer') eq(t, 'computer', (c.module || c.activity) + ' offered a ' + t + ' room');
+      if (c.roomType === 'theatre') assert.ok(t === 'theatre' || t === 'general');
+      if (c.roomType === 'general') assert.ok(t !== 'specialist',
+        (c.module || c.activity) + ' offered a specialist room');
+    }
+  }
+});
+
+test('rooms: a specialist room only takes subjects already scheduled in it', () => {
+  const subjectOf = code => String(code || '').replace(/[0-9].*$/, '');
+  for (const c of model.classes) {
+    if (c.roomType !== 'specialist') continue;
+    for (const id of c.cand) {
+      if (id === c.homeRoom) continue;
+      const subs = model.roomSubjects.get(id);
+      assert.ok(subs && subs.has(subjectOf(c.module)),
+        (c.module || c.activity) + ' offered ' + model.rooms[id].name + ', not its subject');
+    }
+  }
+});
+
+test('rooms: a recorded capacity is respected, an unrecorded one is not a bar', () => {
+  let unknownOffered = 0;
+  for (const c of model.classes) {
+    if (!c.size) continue;
+    for (const id of c.cand) {
+      if (id === c.homeRoom) continue;
+      const r = model.rooms[id];
+      if (r.capacityKnown) {
+        assert.ok(r.capacity >= c.size,
+          (c.module || c.activity) + ' (' + c.size + ') offered ' + r.name + ' (' + r.capacity + ')');
+      } else unknownOffered++;
+    }
+  }
+  assert.ok(unknownOffered > 0, 'rooms of unknown capacity should still be offered');
+});
+
+test('rooms: opening computer labs widens general classes but not computing ones', () => {
+  const open = load();
+  const shut = load(null, { openRooms: [] });
+  const sum = (m, t) => m.classes.filter(c => c.roomType === t)
+    .reduce((a, c) => a + c.cand.length, 0);
+  assert.ok(sum(open, 'general') > sum(shut, 'general'), 'opening computer labs added no options');
+  const labs = new Set(open.rooms.filter(r => r.type === 'computer').map(r => r.id));
+  for (const c of open.classes) {
+    if (c.roomType !== 'computer') continue;
+    for (const r of c.cand) {
+      if (r === c.homeRoom) continue;
+      assert.ok(labs.has(r), (c.module || c.activity) + ' offered a room with no computers');
+    }
+  }
+});
+
 // ---------------------------------------------------------------- components
 const { components, conflicts } = build(model);
 
