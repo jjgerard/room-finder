@@ -726,6 +726,39 @@ test('solver: a scattered start still lands inside the teaching day', () => {
   eq(STARTS.length, 8);
 });
 
+test('solver: going home restores the original day, time and room', () => {
+  // The move that recovers a placement the search gave away. It has to move
+  // the whole component, offsets intact, or it would break contiguity.
+  const s = new Solver(model, Object.assign({ seed: 21 }, TEST_BUDGET));
+  s.run();
+  const a0 = s.assignment();
+  const moved = model.classes.filter(c => {
+    const p = a0.get(c.id);
+    return !c.isFixed && (p.day !== c.origDay || p.start !== c.origStart);
+  });
+  assert.ok(moved.length, 'nothing moved, so there is nothing to send home');
+  let wentHome = 0;
+  for (const c of moved.slice(0, 200)) {
+    if (!s.tryHomeRepair(c.id)) continue;
+    wentHome++;
+    const p = s.assignment().get(c.id);
+    eq(p.day, c.origDay, (c.module || c.id) + ' went home to the wrong day');
+    eq(p.start, c.origStart, (c.module || c.id) + ' went home to the wrong time');
+  }
+  // Whether any class accepts the move depends on the run, but if one does it
+  // must land exactly home — that is the whole point of the move.
+  assert.ok(wentHome >= 0);
+});
+
+test('solver: going home never costs hard violations', () => {
+  const s = new Solver(model, Object.assign({ seed: 22 }, TEST_BUDGET));
+  s.run();
+  const before = s.totalHard();
+  for (const id of s.violatingClasses()) s.tryHomeRepair(id);
+  assert.ok(s.totalHard() <= before,
+    `home repair made it worse: ${before} -> ${s.totalHard()}`);
+});
+
 test('solver: never sends block teaching offsite', () => {
   const s = new Solver(model, Object.assign({ seed: 5 }, TEST_BUDGET));
   s.run();

@@ -417,6 +417,50 @@ class Solver {
   }
 
   /**
+   * Try to repair `id` by putting it back exactly where it sits today.
+   *
+   * Today's timetable is a working arrangement for most of the term, and the
+   * search throws that away: it moves a class for a soft gain, something else
+   * takes the vacated slot, and the original placement — which was provably
+   * fine — becomes unreachable through the ordinary moves, because each of
+   * them is judged one at a time.
+   *
+   * Five lectures that can only use Lecture Theatre 1 sit across the week
+   * today without touching each other; a search that had never considered
+   * going home stacked three of them on top of each other. So home is tried
+   * first, before any room swap or time move.
+   */
+  tryHomeRepair(id) {
+    const cls = this.model.byId.get(id);
+    if (cls.isFixed) return false;
+    const comp = this.components[this.compOf[id]];
+    if (comp.fixed) return false;
+    // The component must move as one, so home for the class means home for
+    // everything attached to it, offsets intact.
+    const off = comp.members.find(mm => mm.cls.id === id).off;
+    const day = cls.origDay, start = cls.origStart - off;
+    if (day === comp.day && start === comp.start &&
+        comp.members.every(mm => this.room[mm.cls.id] === mm.cls.origRoom)) return false;
+    if (start < HARD_MIN) return false;
+    if (comp.span <= DAY_WIDTH && start + comp.span > HARD_MAX) return false;
+
+    const ids = comp.members.map(mm => mm.cls.id);
+    const before = this.costOf(ids);
+    const oldDay = comp.day, oldStart = comp.start;
+    const oldRooms = ids.map(i => this.room[i]);
+
+    this.moveComponent(comp, day, start);
+    for (const mm of comp.members) this.setRoom(mm.cls.id, mm.cls.origRoom);
+    const after = this.costOf(ids);
+    if (after.hard < before.hard ||
+        (after.hard === before.hard && after.soft < before.soft)) return true;
+
+    this.moveComponent(comp, oldDay, oldStart);
+    ids.forEach((i, k) => this.setRoom(i, oldRooms[k]));
+    return false;
+  }
+
+  /**
    * Try to repair by moving the whole component of `id` to another day/time,
    * reassigning rooms greedily at the destination.
    */
@@ -597,6 +641,7 @@ class Solver {
         if (iter >= o.maxIters) break;
         if (this.hardOf(id, null) === 0) continue; // an earlier repair got it
         const noisy = this.rand() < o.noise;
+        if (!noisy && this.tryHomeRepair(id)) { iter++; continue; }
         if (!noisy && this.tryRoomRepair(id)) { iter++; continue; }
         if (!noisy && this.tryRoomSwap(id)) { iter++; continue; }
         if (this.tryTimeRepair(id, 'improve')) { iter++; continue; }
@@ -637,6 +682,15 @@ class Solver {
     }
 
     if (this.totalHard() > bestHard) this.restore(best);
+    // One last sweep home. By this point the timetable has stopped moving, so
+    // a slot that was taken when a class first looked may well be free again.
+    for (let pass = 0; pass < 3; pass++) {
+      const bad = this.violatingClasses();
+      if (!bad.length) break;
+      let moved = 0;
+      for (const id of bad) if (this.tryHomeRepair(id)) moved++;
+      if (!moved) break;
+    }
     return { iters: iter, rounds: round, hard: this.totalHard() };
   }
 
@@ -701,6 +755,7 @@ class Solver {
         for (const id of ids) {
           if (this.hardOf(id, null) === 0) continue;
           any = true;
+          if (this.tryHomeRepair(id)) continue;
           if (this.tryRoomRepair(id)) continue;
           if (this.tryRoomSwap(id)) continue;
           if (this.tryTimeRepair(id, 'improve')) continue;
