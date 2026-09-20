@@ -836,6 +836,25 @@ test('export: the browser is given the grandfathered sharing pairs', () => {
     'the export ships a different number of sharing pairs than the model has');
 });
 
+test('sizes: a confirmed cohort size caps the room-capacity proxy', () => {
+  // COM663 and BME104 are booked into the 215-seat Conor Lecture Theatre and
+  // take about 100, so the proxy had them competing for the three biggest
+  // rooms on campus for no reason.
+  for (const c of model.classes) {
+    if (c.module !== 'COM663' && c.module !== 'BME104') continue;
+    assert.ok(c.size <= 100, (c.module || '') + '/' + c.activity + ' is still sized ' + c.size);
+  }
+  // And it is a cap, not a floor: a seminar group must not be inflated to the
+  // whole cohort, and an unrecorded size stays unrecorded.
+  const seminars = model.classes.filter(c => c.module === 'BMG350' && c.size > 0 && c.size < 250);
+  assert.ok(seminars.length, 'BMG350 should still have a smaller group');
+  const unknown = model.classes.filter(c => c.module === 'COM663' && c.size === 0);
+  eq(unknown.length, 1, 'an unrecorded size should stay unrecorded');
+  // The modules confirmed as genuinely large keep their size.
+  const big = model.classes.filter(c => c.module === 'BMG403' && c.size === 250);
+  assert.ok(big.length, 'BMG403 should still need 250 seats');
+});
+
 test('rooms: a 90-seat class may use the 80-seat CEBE lab', () => {
   // The one-seat case the tolerance exists for. Six of the last nine
   // unresolved clashes were nominal-90 classes that missed the largest CEBE

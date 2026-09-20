@@ -71,6 +71,25 @@ function load(dir, opts) {
     capacity: Number(r.capacity) || 0,
     capacityKnown: Number(r.capacity) > 0,
   }));
+  // Real cohort sizes, where somebody has told us one.
+  //
+  // Every other size in this model is the capacity of the room the class sits
+  // in today, which is only as good as the original room choice. COM663 and
+  // BME104 are booked into the 215-seat Conor Lecture Theatre and take about
+  // 100 students, so the proxy had them competing for the three biggest rooms
+  // on campus for no reason. PPD428, BMG350 and BMG403 really do need 250.
+  //
+  // Applied as a cap, never a floor: a module's seminar groups are
+  // subdivisions of its cohort, so a figure for the module must not inflate
+  // them. A size of 0 means "not recorded" and stays that way.
+  const trueSizes = new Map();
+  try {
+    for (const row of rd('class_sizes.csv')) {
+      const n = Number(row.size);
+      if (row.module && n > 0) trueSizes.set(row.module.trim(), n);
+    }
+  } catch (e) { /* no confirmed sizes available */ }
+
   // Capacities the room inventory does not carry, read out of Ulster's own
   // Resource Booker. Five CEBE IT labs, the CAD lab and the two MARCS rooms
   // are in daily teaching use and have no seat count anywhere in the handoff
@@ -155,7 +174,11 @@ function load(dir, opts) {
       title: r.title || '',
       programmes: splitList(r.programmes),
       yearLevel: r.year_level,
-      size: Number(r.size_estimate) || 0,
+      // A confirmed cohort size caps the room-capacity proxy; see trueSizes.
+      size: Math.min(Number(r.size_estimate) || 0,
+        trueSizes.has(String(r.module || '').trim())
+          ? trueSizes.get(String(r.module || '').trim())
+          : Infinity),
       sizeKnown: r.size_basis === 'known_headcount',
       day: DAYS.indexOf(r.current_day),
       start,
