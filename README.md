@@ -193,3 +193,97 @@ so only its date/time core is covered, pulled out of the file between its banner
 comments: UTC-to-London either side of the October clock change, the half-open overlap
 test, events past midnight, and weekday generation across a term. That is the part that
 goes wrong quietly.
+
+---
+
+# Belfast Spring timetable
+
+A second, self-contained piece of work in this repository: a solver that rebuilds
+Ulster Belfast's Spring 2026 timetable so that **every class has one room and no hard
+rule is broken**, plus a companion site that shows the result and lets you try moves of
+your own.
+
+The extension answers *"is this room free?"* against live booking data. This answers
+*"could the whole term be arranged better?"* against a snapshot. Same problem, opposite
+ends.
+
+## The result
+
+Starting from a spring timetable with **309 room double-bookings** (once every
+multi-room class is collapsed into a single room) and **75 lecture/seminar pairs running
+with a gap**:
+
+| | Today | Rebuilt |
+|---|---|---|
+| Room double-bookings | 309 | **0** |
+| Cohort / staff clashes | 0 | **0** |
+| Lecture+seminar back-to-back | 73 of 146 | **146 of 146** |
+| Block teaching sent off campus | — | **none** |
+| Classes in 9–10am / 4–5pm edge slots | 391 | **255** |
+| Cohort gap-days | 399 | **205** |
+| Classes left untouched | — | 912 of 1,532 |
+
+Two results contradict the earlier analysis this work started from, which concluded that
+~27 modules could never be back-to-back and that three all-day sessions had to move
+offsite. Both turned out to be achievable. The difference is not a better search — it is
+that a linked group is represented as **one object with a fixed internal offset**, so
+contiguity is a property of the representation rather than something a search has to
+achieve and then defend against its own later repairs.
+
+## Running it
+
+Node 18+, no dependencies.
+
+```
+node timetable/test.js                              # 53 checks
+node timetable/solve.js --seeds 30 --out docs/data  # rebuild the timetable
+node timetable/export.js                            # pack the data the site loads
+```
+
+`solve.js` restarts from many seeds and keeps the best, because the search plateaus in
+seconds — restarts buy far more than a longer single run.
+
+## Layout
+
+| File | What it is |
+|---|---|
+| `timetable/data/` | The source CSVs: classes, rooms, and the two pairwise conflict files. |
+| `timetable/lib/model.js` | CSVs → in-memory model. Also where the exam and same-day rules are derived. |
+| `timetable/lib/components.js` | Union-find with offsets: groups classes that cannot move independently. |
+| `timetable/lib/constraints.js` | The rules. Pure — runs in node and in the browser. |
+| `timetable/lib/suggest.js` | "Where else could this go, and what's blocking it?" Pure. |
+| `timetable/lib/solver.js` | Min-conflicts local search. |
+| `timetable/test.js` | The tests. |
+| `docs/` | The GitHub Pages site. `docs/assets/constraints.js` and `suggest.js` are **generated copies** — edit the originals. |
+
+## The site
+
+Four pages, served from `docs/` via GitHub Pages (Settings → Pages → source: the
+development branch, `/docs` folder):
+
+- **The result** — what holds and what it cost. The rules are re-checked **in the
+  browser on page load**, so the headline claim is verified rather than asserted.
+- **Timetable** — week grid and list, current vs rebuilt, filterable.
+- **Explore moves** — pick a class, see every slot it could legally move to, and for the
+  ones it can't, exactly what is in the way. Same idea as the extension's alternatives
+  engine, applied to a whole term.
+- **Method** — how it works and where the numbers are soft.
+
+## What this is not
+
+It is a feasibility study, not a publishable timetable. Three things would have to be
+fixed first, and all three are properties of the source data rather than the solver:
+
+- **The clash graph is inferred from the current timetable**, not from enrolment or staff
+  records. A student clash means "same programme and year"; a staff clash is a proxy
+  (same school, shared dominant room, never currently overlapping). It both
+  over-constrains and under-constrains.
+- **Class sizes are room capacities, not headcounts** — for all but 17 of 1,532 rows.
+- **138 of 228 rooms have no recorded capacity**, which is why 507 classes currently sit
+  in a room outside their own candidate set, and why a class staying put is exempt from
+  the room-fit rule while a class that moves is not.
+
+Exams deserve their own warning: some currently run across 26 rooms, and the size proxy
+reads only the dominant one. Putting such an exam in a single room is almost certainly
+wrong. One-off `BK` room bookings are excluded entirely — they were specific to spring
+2026 and carry no module, cohort or clash information.

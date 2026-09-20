@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Belfast Spring Timetable</title>
+<meta name="description" content="A Spring 2026 timetable for Ulster's Belfast campus that satisfies every hard constraint, with the rules re-checked in your browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="appbar">
+  <span class="mark" aria-hidden="true"></span>
+  <h1>Belfast Spring Timetable</h1>
+  <nav>
+    <a href="index.html" aria-current="page">The result</a>
+    <a href="timetable.html">Timetable</a>
+    <a href="explore.html">Explore moves</a>
+    <a href="method.html">Method</a>
+  </nav>
+</header>
+
+<main class="wrap narrow">
+
+  <h2>Every class in one room, no clashes, nothing moved off campus</h2>
+  <p class="lead">
+    Spring 2026 at Belfast splits hundreds of classes across two or more rooms. This is a
+    rebuilt timetable that gives every class a single room and breaks none of the hard
+    rules, and improves both soft goals on top — <span id="leadmove">while leaving most of
+    the timetable where it is</span>.
+  </p>
+
+  <div id="verdict" class="note">Checking the timetable in your browser…</div>
+
+  <div class="stats" id="stats"></div>
+
+  <p class="small muted" id="checkedline"></p>
+
+  <h2>What the rules are</h2>
+  <p>
+    Five hard rules, all of which hold in the result. They are checked live on this page
+    by the same code that built the timetable — if any were broken, the box above would
+    say so.
+  </p>
+
+  <div class="scroll">
+    <table id="rules">
+      <thead><tr><th>Hard rule</th><th>Today</th><th>Rebuilt</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>What it cost</h2>
+  <p id="costline">…</p>
+  <div class="stats" id="movestats"></div>
+  <p class="small muted">
+    A changed room is invisible to students beyond the room number on their timetable.
+    A changed time or day is what people actually notice, which is why the search tries
+    every room swap before it moves anything in time.
+  </p>
+
+  <h2>The soft goals, which also improved</h2>
+  <p>
+    Fitting the hard rules did not come at the cost of the week students actually
+    experience. Both soft goals are better than the timetable running today.
+  </p>
+  <div class="stats" id="softstats"></div>
+  <p class="small muted">
+    A <strong>gap day</strong> is a day with no classes sitting between two days that
+    have them — a cohort taught Mon/Wed/Fri has two; one taught Mon/Tue/Wed has none.
+    Wednesday afternoons were not optimised for, and did get slightly busier.
+  </p>
+
+  <h2>Two findings worth knowing</h2>
+
+  <div class="grid2">
+    <div class="card pad">
+      <h3 style="margin-top:0">Back-to-back was said to be impossible. It isn't.</h3>
+      <p class="small">
+        The earlier analysis concluded that about 27 modules could never have their
+        lecture and seminar back-to-back, because no free four-hour window existed on
+        any day. It reached 95 of 136 pairs and recommended falling back to
+        "same day, with a gap".
+      </p>
+      <p class="small" style="margin-bottom:0">
+        <strong>All <span id="b2bcount">146</span> linked groups here are strictly
+        back-to-back, in their current order.</strong> The difference is not a better
+        search — it is that contiguity is built into how a group is represented, so it
+        is never something the search has to repair and then protect.
+      </p>
+    </div>
+    <div class="card pad">
+      <h3 style="margin-top:0">No block teaching had to go off campus.</h3>
+      <p class="small">
+        The earlier analysis found three all-day sessions (NUS762, NUS767, BUS506) that
+        had to move offsite to reach a clean solution.
+      </p>
+      <p class="small" style="margin-bottom:0">
+        <strong>All <span id="blockcount">327</span> block-teaching sessions stay on
+        campus here</strong>, those three included. Belfast's rooms are empty enough to
+        absorb them once the classes around them are free to shuffle.
+      </p>
+    </div>
+  </div>
+
+  <h2>Before you rely on this</h2>
+
+  <div class="note warn">
+    <p><strong>The clash data is inferred, not authoritative.</strong> "These two classes
+    share students" was derived from the current timetable — same programme and year for
+    a student clash, and same school plus shared room plus never currently overlapping as
+    a proxy for the same lecturer. It will both over-constrain (two cohorts that never
+    really meet) and under-constrain (a genuinely shared lecturer the proxy missed).
+    Re-run this against real enrolment and staff-assignment data before acting on it.</p>
+  </div>
+
+  <div class="note warn">
+    <p><strong>Class sizes are room capacities, not headcounts.</strong>
+    <span id="proxyline"></span> Every "this class fits that room" judgement inherits
+    that. A class whose current room is generous looks bigger than it is, and one in a
+    room that is too small looks smaller.</p>
+  </div>
+
+  <div class="note warn">
+    <p><strong>Most specialist rooms have no recorded capacity.</strong>
+    <span id="capline"></span> Those rooms are recorded as capacity 0, which means
+    "unknown", not "no seats". Because of that a class already sitting in one is allowed
+    to stay there, and capacity is only enforced on a class that moves. Tighten this once
+    real capacities exist.</p>
+  </div>
+
+  <div class="note">
+    <p><strong>One-off room bookings were excluded.</strong> The source data carries 540
+    <code>BK</code> rows — a named person booking a room on a specific date, with no
+    module, no cohort and no place in the clash graph. They were specific to spring 2026
+    and are not rescheduled, so they are not part of this timetable and their rooms are
+    not reserved in it.</p>
+  </div>
+
+  <p>
+    <a href="timetable.html">See the timetable</a> ·
+    <a href="explore.html">Try moving a class yourself</a> ·
+    <a href="method.html">How it was built</a>
+  </p>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Built from a snapshot of the Spring 2026 Belfast timetable.
+    Source, solver and tests: <a href="https://github.com/jjgerard/room-finder">jjgerard/room-finder</a>.
+  </div>
+</footer>
+
+<script src="assets/model.js"></script>
+<script src="assets/constraints.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.TTConstraints, M = window.TTModel;
+  var OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
+
+  function tile(v, k, cls) {
+    return '<div class="stat ' + (cls || '') + '"><div class="v">' + v + '</div>' +
+           '<div class="k">' + k + '</div></div>';
+  }
+
+  M.loadTimetable().then(function (h) {
+    var model = h.model, a = h.assign;
+    var now = C.check(model, a.current, OPTS);
+    var fixed = C.check(model, a.solved, OPTS);
+    var mv = C.movement(model, a.solved);
+
+    // Headline claim, verified here rather than asserted.
+    var v = document.getElementById('verdict');
+    if (fixed.total === 0) {
+      v.className = 'note good';
+      v.innerHTML = '<p style="margin:0"><strong>Checked just now, in this browser: ' +
+        '0 violations across all ' + model.classes.length.toLocaleString() +
+        ' classes.</strong> Every hard rule holds — no room double-booked, no cohort or ' +
+        'lecturer in two places, every lecture and seminar back-to-back, and no new ' +
+        'same-day pairings.</p>';
+    } else {
+      v.className = 'note warn';
+      var parts = Object.keys(fixed.counts).filter(function (k) { return fixed.counts[k]; })
+        .map(function (k) { return fixed.counts[k] + ' ' + k; });
+      v.innerHTML = '<p style="margin:0"><strong>' + fixed.total + ' hard violations remain</strong> (' +
+        parts.join(', ') + '). This timetable is not yet clean.</p>';
+    }
+
+    var multi = model.classes.filter(function (c) { return c.isMultiRoom; }).length;
+    var b2b = 0;
+    model.linkedGroups.forEach(function (g) {
+      var ok = true;
+      for (var i = 0; i + 1 < g.members.length; i++) {
+        var x = g.members[i], y = g.members[i + 1];
+        var px = a.solved.get(x.id), py = a.solved.get(y.id);
+        if (px.day !== py.day || px.start + x.dur !== py.start) ok = false;
+      }
+      if (ok) b2b++;
+    });
+    var blocks = model.classes.filter(function (c) { return c.isBlock; }).length;
+
+    document.getElementById('stats').innerHTML =
+      tile(multi.toLocaleString(), 'classes split across 2+ rooms today', 'warn') +
+      tile('0', 'classes split across rooms in the rebuild', 'good') +
+      tile(b2b + '/' + model.linkedGroups.length, 'lecture+seminar pairs back-to-back', 'good') +
+      tile(blocks.toLocaleString(), 'block sessions kept on campus', 'good');
+
+    document.getElementById('b2bcount').textContent = model.linkedGroups.length;
+    document.getElementById('blockcount').textContent = blocks;
+
+    var labels = {
+      roomClash: 'No two classes in one room at once',
+      timeClash: 'No cohort or lecturer in two places at once',
+      roomFit: 'Right room type, big enough',
+      linkedOrder: 'Lecture &amp; seminar same day, back-to-back, in order',
+      examSlot: 'Exams keep their module’s slot',
+      adjacency: 'Exams stay attached to the class they follow',
+      dayPairing: 'No new same-day pairing for a cohort',
+      window: 'Inside the teaching day',
+    };
+    var tb = document.querySelector('#rules tbody');
+    tb.innerHTML = Object.keys(labels).map(function (k) {
+      var a0 = now.counts[k] || 0, a1 = fixed.counts[k] || 0;
+      return '<tr><td>' + labels[k] + '</td>' +
+        '<td>' + (a0 ? '<span class="pill no">' + a0 + ' broken</span>' : '<span class="pill ok">holds</span>') + '</td>' +
+        '<td>' + (a1 ? '<span class="pill no">' + a1 + ' broken</span>' : '<span class="pill ok">holds</span>') + '</td></tr>';
+    }).join('');
+
+    var moved = mv.total - mv.untouched;
+    document.getElementById('costline').innerHTML =
+      '<strong>' + moved.toLocaleString() + ' of ' + mv.total.toLocaleString() +
+      ' classes changed in some way; ' + mv.untouched.toLocaleString() +
+      ' are untouched.</strong> Most changes are a room swap, which is the cheapest kind.';
+    document.getElementById('movestats').innerHTML =
+      tile(mv.untouched.toLocaleString(), 'completely unchanged', 'good') +
+      tile(mv.movedRoom.toLocaleString(), 'changed room') +
+      tile(mv.movedTime.toLocaleString(), 'changed time of day', 'warn') +
+      tile(mv.movedDay.toLocaleString(), 'changed day', 'warn');
+
+    var proxy = model.classes.filter(function (c) { return c.size > 0; }).length;
+    document.getElementById('proxyline').textContent =
+      'Of ' + model.classes.length.toLocaleString() + ' classes, all but a handful use the ' +
+      'seat count of their current room as a stand-in for how many students attend.';
+
+    var unknown = model.rooms.filter(function (r) { return !r.capacityKnown; }).length;
+    document.getElementById('capline').textContent =
+      unknown + ' of ' + model.rooms.length + ' rooms have no capacity recorded — almost ' +
+      'all of them studios, workshops and specialist labs.';
+
+    var soft = C.softScore(model, a.solved);
+    var softNow = C.softScore(model, a.current);
+    var meta = model.meta || {};
+    var gaps = meta.gapDays, gapsWas = meta.gapDaysBefore;
+    document.getElementById('softstats').innerHTML =
+      tile(softNow.edge + ' \u2192 ' + soft.edge, 'teaching classes in 9\u201310am / 4\u20135pm edge slots', 'good') +
+      (gaps != null
+        ? tile(gapsWas + ' \u2192 ' + gaps, 'gap days in cohorts\u2019 teaching weeks', 'good')
+        : '') +
+      tile(softNow.wedPm + ' \u2192 ' + soft.wedPm, 'classes on Wednesday afternoon', 'warn');
+
+    document.getElementById('leadmove').textContent =
+      'while leaving ' + mv.untouched.toLocaleString() + ' of ' +
+      mv.total.toLocaleString() + ' classes exactly where they are';
+
+    document.getElementById('checkedline').textContent =
+      'Data generated ' + (model.meta && model.meta.generated ? model.meta.generated : 'unknown') +
+      ' · ' + model.classes.length.toLocaleString() + ' classes · ' + model.rooms.length + ' rooms' +
+      ' · rules re-checked in your browser on page load.';
+  }).catch(function (e) {
+    document.getElementById('verdict').className = 'note warn';
+    document.getElementById('verdict').textContent = e.message;
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Method · Belfast Spring</title>
+<meta name="description" content="How the rebuilt Belfast Spring 2026 timetable was produced, what it assumes, and how to reproduce it.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="appbar">
+  <span class="mark" aria-hidden="true"></span>
+  <h1>Belfast Spring Timetable</h1>
+  <nav>
+    <a href="index.html">The result</a>
+    <a href="timetable.html">Timetable</a>
+    <a href="explore.html">Explore moves</a>
+    <a href="method.html" aria-current="page">Method</a>
+  </nav>
+</header>
+
+<main class="wrap narrow">
+
+  <h2>How it was built</h2>
+  <p class="lead">
+    Short version: represent a lecture and its seminar as one object that cannot come
+    apart, then repair room conflicts by swapping rooms before ever moving a time.
+  </p>
+
+  <h2>1. The problem, stated precisely</h2>
+  <p>
+    Belfast's current spring timetable puts hundreds of classes in more than one room —
+    a class runs in room A in most weeks and room B in the rest, because something else
+    took room A that week. Give each of those classes a single room and the conflicts
+    become visible: <strong id="n-roomclash">309</strong> pairs of classes then want the
+    same room at the same time.
+  </p>
+  <p>
+    That, plus closing the gaps in lecture/seminar pairs, is the whole problem. Nothing
+    else about the timetable is wrong.
+  </p>
+
+  <h2>2. What counts as a hard rule</h2>
+  <ol>
+    <li><strong>No room double-booked</strong> — two classes may not share a room at
+        overlapping times in a week they both run.</li>
+    <li><strong>No cohort or lecturer in two places</strong> — the pairs listed as
+        unable to share a time must not overlap.</li>
+    <li><strong>Room fit</strong> — right type, enough seats. With one deliberate
+        exemption, below.</li>
+    <li><strong>Lecture and seminar back-to-back</strong> — same day, contiguous, in the
+        order they run today.</li>
+    <li><strong>No new same-day pairings</strong> — a cohort that does not have two
+        given modules on one day today must not acquire that.</li>
+  </ol>
+  <p>
+    Two rules were added because the source data does not express them:
+    an <strong>exam that runs straight after one of its module's classes</strong> keeps
+    doing so, and an <strong>exam sitting in its module's usual slot</strong> keeps that
+    slot. Only 12 of 51 exams are in their module's usual slot and only 7 follow a class
+    directly, so each exam keeps whatever relationship it has rather than being forced
+    into a convention the timetable does not actually follow.
+  </p>
+
+  <h2>3. Soft goals, in priority order</h2>
+  <ol>
+    <li>Fewer classes in the 9–10am and 4–5pm edge slots.</li>
+    <li>Each cohort's teaching days consecutive, without gap days.</li>
+    <li>Move as little as possible — <em>last</em>, deliberately. Keeping the timetable
+        still is ranked below both goals above, so the search will accept extra movement
+        to buy a better week for students.</li>
+  </ol>
+
+  <h2>4. The one idea that made it work</h2>
+  <div class="note">
+    <p><strong>A linked group is a single movable object, not several classes that need
+    keeping together.</strong></p>
+    <p style="margin-bottom:0">
+      A lecture and its seminar are stored as one component with a fixed internal offset:
+      the seminar starts exactly when the lecture ends. Placing the component places both.
+      Back-to-back is then not a rule the search has to satisfy, notice breaking, and
+      repair — it is a property of how the timetable is represented, and cannot be
+      violated at all.
+    </p>
+  </div>
+  <p>
+    This is why all <strong id="n-groups">146</strong> linked groups are back-to-back
+    here, where the earlier attempt reached 95 of 136 and concluded the rest were
+    impossible. The earlier search treated contiguity as something to achieve and then
+    protect; every later repair could break it again, so it settled where it could.
+  </p>
+  <p>
+    Couplings chain — an exam pinned to a seminar that must follow a lecture — so
+    components are built with a union-find that carries each class's offset from the
+    group's anchor, and contradictory couplings are rejected rather than silently
+    resolved.
+  </p>
+
+  <div class="note warn">
+    <p style="margin:0"><strong>A rule that looked sensible and was not.</strong>
+    An earlier version preserved <em>any</em> two same-module classes that are adjacent
+    today. That welded whole days together: modules run parallel tutorial groups, so
+    group 1 ending as group 2 begins is a packed day, not a relationship. Chained
+    transitively it produced rigid eight-class trains that could not move at all. It is
+    now restricted to exams, one partner each, no chaining.</p>
+  </div>
+
+  <h2>5. The search</h2>
+  <ol>
+    <li>Start from the current timetable, pulled into component geometry — which by
+        itself closes the <strong>73</strong> lecture/seminar gaps and creates some new
+        conflicts to repair.</li>
+    <li>Find a class in conflict. <strong>Try every room first.</strong> Belfast's rooms
+        are about two-thirds empty, so most conflicts resolve with a room swap, which
+        nobody notices.</li>
+    <li>If no room works, move the whole component to the best day and time available.</li>
+    <li>If nothing improves it, move it to the <em>least bad</em> slot anyway and let the
+        classes it displaces be repaired next round. Only accepting improvements is what
+        leaves a search stuck a few violations short.</li>
+    <li>Once nothing is broken, polish the soft goals — but only with moves that add no
+        hard violation.</li>
+  </ol>
+  <p>
+    The search plateaus within seconds, so it is restarted from many random seeds and
+    the best result kept, rather than one run being ground for longer.
+  </p>
+
+  <h2>6. Where the numbers are soft</h2>
+
+  <div class="note warn">
+    <p><strong>The clash graph is inferred from the current timetable.</strong> A student
+    clash means "same programme and year"; a staff clash is a proxy — same school, shared
+    dominant room, never currently overlapping. This both over-constrains and
+    under-constrains, and it is the single biggest reason to treat this as a feasibility
+    study rather than a timetable to publish.</p>
+  </div>
+
+  <div class="note warn">
+    <p><strong>Class sizes are the seat count of the room the class is in today</strong>,
+    not headcounts — with 17 exceptions. Room-fit decisions inherit that error in both
+    directions.</p>
+  </div>
+
+  <div class="note warn">
+    <p><strong>138 of 228 rooms have no capacity recorded</strong> — nearly all studios,
+    workshops and specialist labs. Because of this, <strong>507 classes (24%) currently
+    sit in a room outside their own candidate set.</strong> Enforcing room fit literally
+    would move all of them for a data artefact, so a class staying where it is always
+    passes, and capacity is enforced only on a class that moves. That exemption is a
+    choice, and it can be switched off.</p>
+  </div>
+
+  <div class="note">
+    <p style="margin:0"><strong>Exam sizes are the least trustworthy of all.</strong>
+    Some exams currently run across 26 rooms, and the size proxy reads only the dominant
+    one. Putting such an exam in a single room is almost certainly wrong, and those rows
+    need real candidate numbers before anyone acts on them.</p>
+  </div>
+
+  <h2>7. Reproducing it</h2>
+  <p>No dependencies; Node 18 or newer.</p>
+  <pre class="card pad mono small" style="overflow-x:auto"><code>node timetable/test.js                          # the tests
+node timetable/solve.js --seeds 30 --out docs/data
+node timetable/export.js                        # pack the data this site loads</code></pre>
+  <p class="small muted">
+    <code>timetable/lib/constraints.js</code> and <code>timetable/lib/suggest.js</code>
+    are pure and run unchanged in node and in the browser, so this site checks the rules
+    with the same code that enforced them. <code>docs/assets/</code> holds generated
+    copies — edit the originals.
+  </p>
+
+  <h2>8. What would change the answer</h2>
+  <ul>
+    <li><strong>Real enrolment data</strong> — replaces the inferred student clashes.</li>
+    <li><strong>Real staff assignments</strong> — replaces the room-sharing proxy, which
+        is the weakest part of the model.</li>
+    <li><strong>Real headcounts and room capacities</strong> — lets room fit be enforced
+        properly instead of exempted.</li>
+    <li><strong>A policy on exams</strong> — whether a large exam may occupy several
+        rooms, which the current one-room-per-class rule forbids.</li>
+  </ul>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Source, solver and tests: <a href="https://github.com/jjgerard/room-finder">jjgerard/room-finder</a>.
+  </div>
+</footer>
+
+<script src="assets/model.js"></script>
+<script src="assets/constraints.js"></script>
+<script>
+(function () {
+  'use strict';
+  window.TTModel.loadTimetable().then(function (h) {
+    var C = window.TTConstraints;
+    var now = C.check(h.model, h.assign.current, { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 });
+    var el = document.getElementById('n-roomclash');
+    if (el) el.textContent = now.counts.roomClash;
+    var g = document.getElementById('n-groups');
+    if (g) g.textContent = h.model.linkedGroups.length;
+  }).catch(function () { /* the page reads fine without the live numbers */ });
+})();
+</script>
+</body>
+</html>

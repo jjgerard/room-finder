@@ -1,0 +1,126 @@
+'use strict';
+
+// Build a spring timetable that obeys the hard rules, moving as little as
+// possible. Run:  node timetable/solve.js [--seeds 40] [--out site/data]
+//
+// Restarts matter more than a longer single run: the search plateaus within a
+// couple of seconds, so trying many starting points finds a clean solution
+// where grinding one does not.
+
+const fs = require('fs');
+const path = require('path');
+const { load, DAYS, fmtMin } = require('./lib/model');
+const C = require('./lib/constraints');
+const { Solver } = require('./lib/solver');
+
+function arg(name, dflt) {
+  const i = process.argv.indexOf('--' + name);
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt;
+}
+const SEEDS = Number(arg('seeds', 40));
+const OUT = arg('out', '');
+const CHECK_OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
+
+const model = load();
+console.log(`Belfast spring: ${model.classes.length} classes (BK bookings excluded), ` +
+            `${model.rooms.length} rooms, ${model.linkedGroups.length} linked groups`);
+
+const baseline = new Map(model.classes.map(c =>
+  [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom }]));
+const base = C.check(model, baseline, CHECK_OPTS);
+console.log(`today's timetable, judged against the hard rules: ${base.total} violations ` +
+            `(${base.counts.roomClash} room, ${base.counts.linkedOrder} lecture/seminar)\n`);
+
+let best = null;
+for (let seed = 1; seed <= SEEDS; seed++) {
+  const s = new Solver(model, { seed, maxIters: 200000, noise: 0.03 });
+  s.run();
+  s.polish(4);
+  const a = s.assignment();
+  const chk = C.check(model, a, CHECK_OPTS);
+  const mv = C.movement(model, a);
+  const soft = C.softScore(model, a);
+  const gaps = s.spreadPenalty();
+  const moved = mv.total - mv.untouched;
+  // Hard violations first, then the soft goals, and movement last — the order
+  // the constraints were given in.
+  const rank = chk.total * 1e6 + soft.edge * 10 + gaps * 8 + moved;
+  const line = `seed ${String(seed).padStart(3)}  hard ${String(chk.total).padStart(3)}  ` +
+               `edge ${String(soft.edge).padStart(3)}  gaps ${String(gaps).padStart(3)}  ` +
+               `moved ${String(moved).padStart(4)}`;
+  if (!best || rank < best.rank) {
+    best = { rank, seed, chk, mv, soft, gaps, assign: a };
+    console.log(line + '   <- best so far');
+  } else if (seed % 10 === 0) {
+    console.log(line);
+  }
+
+}
+
+const { chk, mv, soft, gaps, assign } = best;
+console.log(`\n=== best (seed ${best.seed}) ===`);
+console.log(`hard violations: ${chk.total}`);
+for (const [k, v] of Object.entries(chk.counts)) if (v) console.log(`   ${k.padEnd(12)} ${v}`);
+console.log(`movement: ${mv.total - mv.untouched} of ${mv.total} classes changed ` +
+            `(${mv.movedDay} day, ${mv.movedTime} time, ${mv.movedRoom} room); ` +
+            `${mv.untouched} untouched`);
+const baseSoft = C.softScore(model, baseline);
+const baseGaps = new Solver(model, { seed: 1, maxIters: 0 }).spreadPenalty();
+console.log(`soft: ${soft.edge} teaching classes in edge slots (today ${baseSoft.edge}), ` +
+            `${gaps} cohort gap-days (today ${baseGaps}), ` +
+            `${soft.wedPm} on Wednesday afternoon (today ${baseSoft.wedPm})`);
+
+// Every linked group back-to-back, and no block teaching sent offsite?
+let b2b = 0, notB2b = 0;
+for (const g of model.linkedGroups) {
+  let ok = true;
+  for (let i = 0; i + 1 < g.members.length; i++) {
+    const a = g.members[i], b = g.members[i + 1];
+    const pa = assign.get(a.id), pb = assign.get(b.id);
+    if (pa.day !== pb.day || pa.start + a.dur !== pb.start) ok = false;
+  }
+  if (ok) b2b++; else notB2b++;
+}
+console.log(`lecture+seminar back-to-back: ${b2b} of ${model.linkedGroups.length} groups` +
+            (notB2b ? ` (${notB2b} NOT satisfied)` : ' — all of them'));
+console.log(`block teaching kept on campus: ${model.classes.filter(c => c.isBlock).length} sessions, ` +
+            `none moved offsite`);
+
+if (chk.total) {
+  console.log('\nunresolved:');
+  for (const v of chk.violations.slice(0, 20)) {
+    const A = model.byId.get(v.a), B = v.b != null ? model.byId.get(v.b) : null;
+    console.log(`   ${v.kind}: ${A.module || A.activity}/${A.activity}` +
+                (B ? ` vs ${B.module || B.activity}/${B.activity}` : ''));
+  }
+}
+
+if (OUT) {
+  const dir = path.resolve(OUT);
+  fs.mkdirSync(dir, { recursive: true });
+  const rows = model.classes.map(c => {
+    const p = assign.get(c.id);
+    const flags = (p.day !== c.origDay ? 'd' : '') + (p.start !== c.origStart ? 't' : '') +
+                  (p.room !== c.origRoom ? 'r' : '');
+    return {
+      id: c.id, module: c.module, activity: c.activity, title: c.title,
+      day: p.day, start: p.start, dur: c.dur, room: p.room,
+      weeks: c.weeksText, teaching: c.isTeaching ? 1 : 0, block: c.isBlock ? 1 : 0,
+      was: { day: c.origDay, start: c.origStart, room: c.origRoom },
+      changed: flags,
+    };
+  });
+  fs.writeFileSync(path.join(dir, 'solution.json'), JSON.stringify({
+    meta: {
+      campus: 'Belfast', term: 'Spring 2026', generated: new Date().toISOString().slice(0, 10),
+      seed: best.seed, hardViolations: chk.total,
+      moved: mv.total - mv.untouched, untouched: mv.untouched,
+      backToBack: b2b, linkedGroups: model.linkedGroups.length,
+      edge: soft.edge, edgeBefore: baseSoft.edge,
+      gapDays: gaps, gapDaysBefore: baseGaps,
+    },
+    rooms: model.rooms.map(r => ({ id: r.id, name: r.name, type: r.type, capacity: r.capacity })),
+    rows,
+  }));
+  console.log(`\nwrote ${path.join(dir, 'solution.json')}`);
+}

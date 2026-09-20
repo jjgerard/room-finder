@@ -1,0 +1,229 @@
+room_id,room_name,type,capacity
+0,BA-00-008 (35),general,35
+1,BA-00-016_Illustration Space,specialist,0
+2,BA-00-020_TADF Print workshop,specialist,0
+3,BA-00-020A_TADF Print workshop,specialist,0
+4,BA-00-020B_TADF Print workshop,specialist,0
+5,BA-00-021 (50),general,50
+6,BA-00-022 (40),general,40
+7,BA-00-035 (50),general,50
+8,BA-01-002_TADF,general,0
+9,BA-01-004_TADF Knit Studio,specialist,0
+10,BA-01-007_TADF Knit,specialist,0
+11,BA-01-009 (215) Conor Lecture Theatre,theatre,215
+12,BA-01-015_TADF Studio,specialist,0
+13,BA-01-016_TADF Weave,specialist,0
+14,BA-01-016A_TADF Dye Hub,specialist,0
+15,BA-01-019_TADF Fashion w/s,specialist,0
+16,BA-01-019B_TADF Fashion w/s,specialist,0
+17,BA-01-020_TADF Large Shared Studio,specialist,0
+18,BA-01-020A_TADF Embroidery,specialist,0
+19,BA-02-037 (12),general,12
+20,BA-02-038 (12),general,12
+21,BA-03-001_Game Design Studio,specialist,0
+22,BA-03-002 _Game Design Studio,specialist,0
+23,BA-03-003_Games Design Studio,specialist,0
+24,BA-03-005_Games Design Studio,specialist,0
+25,BA-03-007_Interaction Design,general,0
+26,BA-03-009_Animation Lab,specialist,0
+27,BA-03-010_Animation Lab,specialist,0
+28,BA-03-018_Animation Lab,specialist,0
+29,BA-03-019 (36),general,36
+30,BA-03-021 (20),general,20
+31,BA-03-022 (20),general,20
+32,BA-03-023 (20),general,20
+33,BA-03-024 - MAC Central computing Lab,computer,0
+34,BA-03-026 - Central computing Lab,computer,0
+35,BA-03-027_Masters Hub,specialist,0
+36,BA-03-028_Masters Hub,specialist,0
+37,BA-03-029_Master Hub,specialist,0
+38,"BA-04-001_Photography Lecture,Tutorial, Practical",specialist,0
+39,BA-04-011_PhotographyAHSS(35),specialist,35
+40,BA-04-011A_PhotographyAHSS(16),specialist,16
+41,BA-04-011D_PhotographyAHSS(8),specialist,8
+42,BA-04-012_Illustration Studio,specialist,0
+43,BA-04-013_Graphics Studio (60),specialist,60
+44,BA-04-014_Graphic Design Studio,specialist,0
+45,BA-04-016_Foundation Open Studio,specialist,0
+46,BA-04-017_Foundation PC/Mac Lab,specialist,0
+47,BA-04-018_Foundation Studio/Workshop,specialist,0
+48,BA-04-019_Foundation Studio/Workshop,specialist,0
+49,"BA-04-020_Photography, Tutorial, Practical",specialist,0
+50,BA-04-023_Open workshop area,specialist,0
+51,BA-04-025_AHSS(15),general,15
+52,BA-04-027_Photography,specialist,0
+53,BA-05-002-Media-  leads through to BA-05-004,general,0
+54,BA-05-005-Media,general,0
+55,BA-05-008 VP Studio(30),specialist,30
+56,BA-05-011_SS Urban Planning Office,specialist,0
+57,BA-05-015 (44) ATM Design Studio,specialist,44
+58,BA-05-ARC Studio,specialist,0
+59,BB-00-01 CST Studio(20),specialist,20
+60,BB-03-004_Life Model RoomAHSS(15),specialist,15
+61,BB-03-010_Fine Art Print,specialist,0
+62,BB-03-010B_Fine Art PrintAHSS(10),specialist,10
+63,BB-03-010C_Fine Art Print,specialist,0
+64,BB-03-010D_Fine Art Print,specialist,0
+65,BB-03-010E_Studio/Workshop,specialist,0
+66,BB-03-011_Fine Art Print,specialist,0
+67,BB-03-011A,general,0
+68,BB-04-001 Ceramics shared(45),specialist,45
+69,BB-04-008 Ceramics shared,specialist,0
+70,BB-05-002B Silversmith and Jewellery(15),specialist,15
+71,BB-05-002D Silversmith and Jewellery(8),specialist,8
+72,BB-05-006(21),general,21
+73,BB-05-008_Fine Art AV Edit Suite,general,0
+74,BB-05-009_Studio Workshop,specialist,0
+75,BB-05-009A_Studio/Workshop,specialist,0
+76,BB-05-010_Studio/Workshop,specialist,0
+77,BB-05-011_MFA Fine Art Space,general,0
+78,BB-05-011A(5),general,5
+79,BB-06-003_FA Sculpture/Lens,specialist,0
+80,BB-06-003B_FA Sculpture/Lens,specialist,0
+81,BB-06-003D_FA Sculpture/Lens,specialist,0
+82,BB-06-004(20),general,20
+83,BB-06-006,general,0
+84,BB-06-007_Woodwork,specialist,0
+85,BB-06-008,general,0
+86,BB-06-009_Metal work,specialist,0
+87,BB-06-010,general,0
+88,BB-06-011,general,0
+89,BB-06-012,general,0
+90,BB-07-002_Painting Studio,specialist,0
+91,BC-00-306 (50),general,50
+92,BC-00-307 (96) (Lecture Theatre 3),theatre,96
+93,BC-00-414_SS CONCRETE LAB,specialist,0
+94,BC-00-416_SS concrete lab,specialist,0
+95,BC-00-418_SS ASPHALT LAB,specialist,0
+96,BC-01-308 (38)***Library Comp,computer,38
+97,BC-02-303 - CEBE - IT Lab - School of Computing,computer,0
+98,BC-02-308 (158),general,158
+99,BC-02-403_SS CNC,specialist,0
+100,BC-02-404 (SS),specialist,0
+101,BC-02-404_SS ADVANCED METAL FORMING,specialist,0
+102,BC-02-407_SS,specialist,0
+103,BC-02-408_SS,specialist,0
+104,BC-02-409_SS,specialist,0
+105,BC-02-411_SS,specialist,0
+106,BC-02-412_HYDRAULICS_SS,specialist,0
+107,BC-02-413_SS Soils Lab,specialist,0
+108,BC-02-415_SS,specialist,0
+109,BC-02-416_SS Soils,specialist,0
+110,BC-02-417_SS,specialist,0
+111,BC-02-419_SS,specialist,0
+112,BC-02-420_SS POLYMER,specialist,0
+113,BC-02-420A_SS,specialist,0
+114,BC-02-421_SS,specialist,0
+115,BC-02-422_SS,specialist,0
+116,BC-02-424_SS,specialist,0
+117,BC-02-425 - Engineering Practical Teaching Space,general,0
+118,BC-02-426 (48) Central Computing Lab,computer,48
+119,BC-03-102 (66),general,66
+120,BC-03-103 (24),general,24
+121,BC-03-104 (28),general,28
+122,BC-03-104A (36),general,36
+123,BC-03-109 (26),general,26
+124,BC-03-111 (24),general,24
+125,BC-03-112 (12),general,12
+126,BC-03-115. (90),general,90
+127,BC-03-115A (90),general,90
+128,BC-03-120 (20),general,20
+129,BC-03-121 (14),general,14
+130,BC-03-122 (28),general,28
+131,BC-03-123. (60),general,60
+132,BC-03-123A (70),general,70
+133,BC-03-125 (72),general,72
+134,BC-03-202 (24),general,24
+135,BC-03-203 (48),general,48
+136,BC-03-206 (60),general,60
+137,BC-03-206A (70),general,70
+138,BC-03-213 (64),general,64
+139,BC-03-302 (49) Central Computing Lab,computer,49
+140,BC-03-303 - CEBE - IT Lab - School of Computing,computer,0
+141,BC-03-305 - CEBE - IT Lab - School of Computing,computer,0
+142,BC-03-307 - CEBE - MARCS room,computer,0
+143,BC-03-308 - CEBE - MARCS B,computer,0
+144,BC-03-309 - CEBE - IT Lab - School of Computing,computer,0
+145,BC-03-311 - CEBE - IT Lab - School of Computing,computer,0
+146,BC-03-401 -Engineering Practical Teaching,general,0
+147,BC-03-403_SS,specialist,0
+148,BC-03-404_SS NIBEC,specialist,0
+149,BC-03-405_SS,specialist,0
+150,BC-03-405A_SS,specialist,0
+151,BC-03-407_SS,specialist,0
+152,BC-03-408_SS,specialist,0
+153,BC-03-410_SS,specialist,0
+154,BC-03-412_SS,specialist,0
+155,BC-03-413_SS,specialist,0
+156,BC-03-414_SS,specialist,0
+157,BC-03-416_SS,specialist,0
+158,BC-03-419A_SS,specialist,0
+159,BC-03-420A_SS,specialist,0
+160,BC-03-420B_SS,specialist,0
+161,BC-03-421_SS,specialist,0
+162,BC-04-205_SS,specialist,0
+163,BC-04-206_SS,specialist,0
+164,BC-04-304_SS Engineering Practical Lab (Authorised use only),specialist,0
+165,BC-04-308_SS Practical Teaching Lab (Authorised Use Only),specialist,0
+166,BC-04-312_SS,specialist,0
+167,BC-04-314_SS,specialist,0
+168,BC-04-416_SS sports physiology lab,specialist,0
+169,BC-04-419_SS Sport,specialist,0
+170,BC-04-420_SS Sports movement analysis lab,specialist,0
+171,BC-04-423_SS Nursing,specialist,0
+172,BC-04-424_SS Engineering (Authorised Use Only),specialist,0
+173,BC-05-209 (43),general,43
+174,BC-05-302 (48),general,48
+175,BC-05-303 (33),general,33
+176,BC-05-306 - CEBE - CAD Lab - BSABE,computer,0
+177,BC-05-404-Env Health Lab (16),specialist,16
+178,BC-05-407- Public Health Lab (8),specialist,8
+179,BC-05-412_SS,specialist,0
+180,BC-05-413_SS,specialist,0
+181,BC-05-414_SS,specialist,0
+182,BC-06-204 Digital Comms Studio,specialist,0
+183,BC-06-205/205A Comms Lab - Linguistics,specialist,0
+184,BC-06-318 (Health Science and Nursing clinical space),specialist,0
+185,BC-07-101 Law Clinic,specialist,0
+186,BC-07-210/211 Comms Lab 1,specialist,0
+187,BC-07-212/213 Comms Lab 2,specialist,0
+188,BC-07-302/304 Comms Lab 3,specialist,0
+189,BC-07-303/303A Comms Lab 4,specialist,0
+190,BC-07-305/305A Comms Lab 5,specialist,0
+191,BC-07-313 (50) MOOT COURT,general,50
+192,BC-07-314/314A Comms Lab 6,specialist,0
+193,BC-08-101 (20) **Bloomberg,general,20
+194,BC-08-104 / 104A (150),general,150
+195,BC-11-201 (24) - Room Accessed via Lifts in Core B,general,24
+196,BC-LG-208 (12),general,12
+197,BC-LG-209 (12),general,12
+198,BC-LG-211 (350) (Lecture Theatre 1),theatre,350
+199,BC-LG-304 (250) (Lecture Theatre 2),theatre,250
+200,BC-LG-305 (16),general,16
+201,BD Academy,specialist,0
+202,BD Academy Kitchen,specialist,0
+203,BD Academy SSK,specialist,0
+204,BD-00-003 (18),general,18
+205,BD-00-003A (18),general,18
+206,BD-00-011 (60),general,60
+207,BD-00-011A (60),general,60
+208,BD-01-001(8),general,8
+209,BD-01-002 (8),general,8
+210,BD-01-003 (10),general,10
+211,BD-01-006 (100),general,100
+212,BD-01-014 (160),general,160
+213,BD-01-016 (56),general,56
+214,BD-01-018 (48),general,48
+215,BD-01-023 (36),general,36
+216,BD-02-008 (58) (Orpheus),general,58
+217,BD-02-009 (58) (Metropole),general,58
+218,BD-02-032 (12),general,12
+219,BD-02-033 (68),general,68
+220,BD-02-036 (48),general,48
+221,BD-03-002 (56),general,56
+222,BD-03-005 (8),general,8
+223,BD-03-006 (54),general,54
+224,BD-03-007 (8),general,8
+225,BD-03-008 (8),general,8
+226,BD-03-009 (8),general,8
+227,NP_00_001,general,0

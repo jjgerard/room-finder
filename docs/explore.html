@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explore moves · Belfast Spring</title>
+<meta name="description" content="Pick a class and see where else it could go, and exactly what is blocking every slot that it cannot.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="appbar">
+  <span class="mark" aria-hidden="true"></span>
+  <h1>Belfast Spring Timetable</h1>
+  <nav>
+    <a href="index.html">The result</a>
+    <a href="timetable.html">Timetable</a>
+    <a href="explore.html" aria-current="page">Explore moves</a>
+    <a href="method.html">Method</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <h2 style="margin-bottom:6px">Where else could this class go?</h2>
+  <p class="lead">
+    Pick a class and this works out every slot it could legally move to — and for the
+    slots it can't, names exactly what is in the way. Nothing is saved; it is a
+    what-if against the timetable you choose below.
+  </p>
+
+  <div class="card pad" style="margin-bottom:18px">
+    <div class="grid2">
+      <div>
+        <label class="fld" for="q">Find a class</label>
+        <input type="search" id="q" placeholder="Module code, title, or room — e.g. CMM151" autocomplete="off">
+      </div>
+      <div>
+        <label class="fld" for="which">Starting from</label>
+        <select id="which">
+          <option value="solved">The rebuilt timetable</option>
+          <option value="current">The current timetable</option>
+        </select>
+      </div>
+    </div>
+    <div id="results" class="chips" style="margin-top:14px"></div>
+  </div>
+
+  <div id="panel" hidden>
+    <div class="card pad" style="margin-bottom:18px">
+      <h3 style="margin-top:0" id="ptitle"></h3>
+      <p class="small muted" id="pmeta"></p>
+      <div id="pstatus"></div>
+      <div id="pcomp"></div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <h3>Cheapest fixes — same slot, different room</h3>
+        <div id="roomonly"></div>
+
+        <h3>Clear alternative slots</h3>
+        <p class="small muted">Least disruptive first: a different room beats a different time, which beats a different day.</p>
+        <div id="clear"></div>
+      </div>
+      <div>
+        <h3>Slots that are blocked, and why</h3>
+        <p class="small muted">The nearest misses, with the first thing standing in the way of each.</p>
+        <div id="near"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="hint" class="note">
+    <p style="margin:0">Type a module code above to begin — try <strong>CMM151</strong>,
+    <strong>LAW140</strong>, or a room like <strong>BC-03-123</strong>.</p>
+  </div>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Suggestions are computed in your browser with the same constraint code that built the
+    timetable. Moving a class moves everything locked to it — a seminar that must follow
+    its lecture, or an exam pinned to its module's slot.
+  </div>
+</footer>
+
+<script src="assets/model.js"></script>
+<script src="assets/constraints.js"></script>
+<script src="assets/suggest.js"></script>
+<script>
+(function () {
+  'use strict';
+  var M = window.TTModel, S = window.TTSuggest, DAYS = M.DAYS, fmt = M.fmt;
+  var H = null, which = 'solved', selected = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+    });
+  }
+  function assign() { return which === 'solved' ? H.assign.solved : H.assign.current; }
+  function roomName(r) { return H.model.rooms[r] ? H.model.rooms[r].name : 'room ' + r; }
+
+  function search(q) {
+    q = q.trim().toLowerCase();
+    var out = document.getElementById('results');
+    if (q.length < 2) { out.innerHTML = ''; return; }
+    var a = assign();
+    var hits = H.model.classes.filter(function (c) {
+      if ((c.module || '').toLowerCase().indexOf(q) >= 0) return true;
+      if ((c.title || '').toLowerCase().indexOf(q) >= 0) return true;
+      return roomName(a.get(c.id).room).toLowerCase().indexOf(q) >= 0;
+    }).slice(0, 40);
+
+    if (!hits.length) { out.innerHTML = '<span class="small muted">No class matches that.</span>'; return; }
+    out.innerHTML = hits.map(function (c) {
+      var p = a.get(c.id);
+      return '<button class="chip" data-id="' + c.id + '">' +
+        esc(c.module || c.activity) + ' · ' + esc(c.activity) + ' · ' +
+        DAYS[p.day] + ' ' + fmt(p.start) + '</button>';
+    }).join('');
+    out.querySelectorAll('.chip').forEach(function (b) {
+      b.onclick = function () { select(Number(b.dataset.id)); };
+    });
+  }
+
+  function slotLabel(day, start) { return DAYS[day] + ' ' + fmt(start); }
+
+  function renderOption(o, cls) {
+    var moves = o.members.map(function (m) {
+      var c = H.model.byId.get(m.id);
+      return esc(c.module || c.activity) + '/' + esc(c.activity) + ' → ' + esc(roomName(m.room));
+    }).join('<br>');
+    return '<div class="card pad" style="margin-bottom:10px">' +
+      '<div class="row" style="justify-content:space-between">' +
+        '<strong>' + slotLabel(o.day, o.start) + '</strong>' +
+        (cls === 'clear'
+          ? '<span class="pill ok">clear</span>'
+          : '<span class="pill no">' + o.blockers.length + ' blocker' + (o.blockers.length > 1 ? 's' : '') + '</span>') +
+      '</div>' +
+      '<div class="small muted" style="margin-top:6px">' + moves + '</div>' +
+      (cls === 'clear'
+        ? ''
+        : '<ul class="small" style="margin:8px 0 0">' +
+            o.blockers.slice(0, 3).map(function (b) { return '<li>' + esc(b.text) + '</li>'; }).join('') +
+          '</ul>') +
+      '</div>';
+  }
+
+  function select(id) {
+    selected = id;
+    document.getElementById('hint').hidden = true;
+    document.getElementById('panel').hidden = false;
+
+    var c = H.model.byId.get(id);
+    var a = assign();
+    var p = a.get(id);
+    var room = H.model.rooms[p.room];
+
+    document.getElementById('ptitle').textContent =
+      (c.module || c.activity) + ' · ' + c.activity + ' — ' + c.title;
+    document.getElementById('pmeta').innerHTML =
+      DAYS[p.day] + ' ' + fmt(p.start) + '–' + fmt(p.start + c.dur) +
+      ' · ' + esc(room.name) +
+      (room.capacityKnown ? ' (' + room.capacity + ' seats)' : ' (capacity not recorded)') +
+      ' · weeks ' + esc(c.weeksText) +
+      ' · about ' + c.size + ' students' +
+      ' · ' + c.cand.length + ' rooms it could use';
+
+    var t0 = performance.now();
+    var r = S.alternatives(H.model, H.components, a, id, { limit: 8 });
+    var ms = Math.round(performance.now() - t0);
+
+    var st = document.getElementById('pstatus');
+    if (!r.current.blockers.length) {
+      st.innerHTML = '<div class="note good"><p style="margin:0"><strong>Where it sits now is legal.</strong> ' +
+        'Nothing below needs doing — the alternatives are just what else would work.</p></div>';
+    } else {
+      st.innerHTML = '<div class="note warn"><p style="margin:0 0 6px"><strong>Where it sits now breaks ' +
+        r.current.blockers.length + ' rule' + (r.current.blockers.length > 1 ? 's' : '') + ':</strong></p>' +
+        '<ul class="small" style="margin:0">' +
+        r.current.blockers.slice(0, 4).map(function (b) { return '<li>' + esc(b.text) + '</li>'; }).join('') +
+        '</ul></div>';
+    }
+
+    var comp = document.getElementById('pcomp');
+    if (r.component.size > 1) {
+      var names = r.component.ids.map(function (i) {
+        var x = H.model.byId.get(i);
+        return esc((x.module || x.activity) + '/' + x.activity);
+      }).join(', ');
+      comp.innerHTML = '<div class="note"><p style="margin:0"><strong>This class cannot move on its own.</strong> ' +
+        'It is locked to ' + (r.component.size - 1) + ' other' + (r.component.size > 2 ? 's' : '') +
+        ' (' + names + ') which must stay back-to-back with it, so every option below moves all of them together.</p></div>';
+    } else {
+      comp.innerHTML = '';
+    }
+
+    var ro = document.getElementById('roomonly');
+    ro.innerHTML = r.roomOnly.length
+      ? r.roomOnly.map(function (o) {
+          var oc = H.model.byId.get(o.classId);
+          return '<div class="card pad" style="margin-bottom:8px">' +
+            '<div class="row" style="justify-content:space-between">' +
+            '<span><strong>' + esc(oc.module || oc.activity) + '/' + esc(oc.activity) + '</strong> ' +
+            'stays at ' + slotLabel(o.day, o.start) + ', moves to <strong>' +
+            esc(o.roomName) + '</strong></span><span class="pill ok">clear</span></div></div>';
+        }).join('')
+      : '<p class="small muted">No other room is free in this slot. Any fix means moving the time or day.</p>';
+
+    document.getElementById('clear').innerHTML = r.clear.length
+      ? r.clear.map(function (o) { return renderOption(o, 'clear'); }).join('')
+      : '<p class="small muted">No completely clear alternative slot exists.</p>';
+
+    document.getElementById('near').innerHTML = r.near.length
+      ? r.near.map(function (o) { return renderOption(o, 'near'); }).join('')
+      : '<p class="small muted">Nothing to report.</p>';
+
+    document.getElementById('pmeta').innerHTML +=
+      ' · <span class="muted">' + r.counts.clear + ' clear slots, ' +
+      r.counts.blocked + ' blocked, computed in ' + ms + ' ms</span>';
+  }
+
+  M.loadTimetable().then(function (h) {
+    H = h;
+    var q = document.getElementById('q');
+    q.oninput = function () { search(q.value); };
+    document.getElementById('which').onchange = function (e) {
+      which = e.target.value;
+      search(q.value);
+      if (selected !== null) select(selected);
+    };
+  }).catch(function (e) {
+    document.getElementById('hint').className = 'note warn';
+    document.getElementById('hint').textContent = e.message;
+  });
+})();
+</script>
+</body>
+</html>
