@@ -251,8 +251,14 @@ node timetable/export.js                            # pack the site data on its 
 
 Solving into `docs/data` runs the export for you, since `solution.json` and
 `docs/data/timetable.json` are a pair and a stale second one publishes a timetable
-that no longer exists. Run `export.js` by hand after changing the model or the data
-without re-solving — CI fails if the committed `docs/` is not what it produces.
+that no longer exists. Changing the model or the data without re-solving needs the
+export too — CI fails if the committed `docs/` is not what it produces. Run
+
+```
+git config core.hooksPath .githooks
+```
+
+once, and the pre-commit hook does it for you.
 
 `solve.js` restarts from many seeds and keeps the best, because the search plateaus in
 seconds — restarts buy far more than a longer single run.
