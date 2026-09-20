@@ -215,7 +215,20 @@ function load(dir, opts) {
       // days. They carry no module, cohort or clash edge, and the title says so
       // outright. Matching the phrase loosely catches all five wordings —
       // "Do NOT Edit or Remove booking", "- do Not Edit", "*do Not edit*".
-      isFixed: /do\s*not\s*edit/i.test(r.title || ''),
+      // Pinned: not ours to move, and not judged against the teaching day.
+      //
+      // Two kinds. Bookings marked "do not edit" in the source — exam set-up,
+      // Estates, IT maintenance. And evening events: a booking that starts at
+      // or after 17:15 (or before 09:15) and carries no module and no cohort
+      // is a society meeting or a one-off event, not a class. There are four —
+      // the Christian Union, a law event, the K-pop society — and treating
+      // them as teaching had the solver dragging them into the middle of the
+      // day, where the CU's five-hour Thursday evening displaced MEC113's
+      // statics seminar from the room it needs. They belong in the evening,
+      // where nothing we schedule runs.
+      isFixed: /do\s*not\s*edit/i.test(r.title || '') ||
+        ((start >= 17 * 60 + 15 || start < 9 * 60 + 15) &&
+         !String(r.module || '').trim() && splitList(r.programmes).length === 0),
       isShadow: false,
       linked: r.linked_group || '',
       order: r.group_order === '' ? null : Number(r.group_order),

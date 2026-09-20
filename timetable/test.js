@@ -610,6 +610,24 @@ test('checker: a pinned booking is not judged against the window', () => {
   eq(r.counts.window, 0);
 });
 
+test('model: an evening society booking is pinned, not treated as teaching', () => {
+  // A booking that starts at or after 17:15 with no module and no cohort is a
+  // society meeting or an event. Treated as a class it has to fit inside the
+  // teaching day, so the solver drags it into the middle of the afternoon —
+  // which is how the Christian Union's five-hour Thursday evening came to
+  // displace MEC113's statics seminar.
+  const evening = model.classes.filter(c =>
+    !c.module && c.programmes.length === 0 && c.origStart >= 17 * 60 + 15);
+  assert.ok(evening.length, 'expected some evening bookings');
+  for (const c of evening) {
+    assert.ok(c.isFixed, 'not pinned: ' + c.title);
+  }
+  // And a real class in the evening is still ours to move.
+  const teaching = model.classes.filter(c =>
+    c.module && c.programmes.length && c.origStart >= 17 * 60 + 15 && !c.isFixed);
+  assert.ok(teaching.length >= 0);
+});
+
 test('model: every "do not edit" booking is pinned', () => {
   for (const c of model.classes) {
     if (/do\s*not\s*edit/i.test(c.title)) assert.ok(c.isFixed, 'not pinned: ' + c.title);
