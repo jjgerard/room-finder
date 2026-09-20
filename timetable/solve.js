@@ -24,7 +24,7 @@ const START = arg('start', 'current');   // current | scatter | mixed
 const CHECK_OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
 
 const model = load(null, { clashes: CLASHES });
-console.log(`Belfast spring: ${model.classes.length} classes (BK bookings excluded), ` +
+console.log(`Belfast spring: ${model.classes.length} classes (one-off bookings excluded), ` +
             `${model.rooms.length} rooms, ${model.linkedGroups.length} linked groups`);
 console.log(`clash edges: ${model.cannotShareTime.length} of ${model.edgeStats.total} ` +
             `(mode "${model.clashMode}")` +

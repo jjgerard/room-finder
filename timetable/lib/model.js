@@ -97,11 +97,28 @@ function load(dir, opts) {
 
   const roomByName = new Map(rooms.map(r => [r.name, r.id]));
 
-  // BK rows are one-off room bookings by a named person ("260220/BK/A Gribben"):
-  // no module, no programmes, no linked group, not teaching, and absent from the
-  // conflict graph entirely. They were specific to spring 2026 and are not
-  // rescheduled, so they are excluded from the problem rather than solved around.
-  const classRows = rd('belfast_classes.csv').filter(r => r.activity !== 'BK');
+  // One-off bookings are excluded from the problem rather than solved around.
+  // They were specific to spring 2026 and are not being rescheduled, so holding
+  // rooms for them would shrink the building for no reason.
+  //
+  // Two kinds:
+  //   * BK rows — one-off room bookings by a named person ("260220/BK/A
+  //     Gribben"): no module, no programmes, no linked group, not teaching, and
+  //     absent from the conflict graph entirely;
+  //   * anything else carrying no module code and running in a single week:
+  //     applicant days and their set-up, the exam-week room reservations,
+  //     library sessions, course inductions, school meetings, and bookings
+  //     named after a person. 48 of them, 388 room-hours.
+  //
+  // A module code is what separates these from teaching. A single-week booking
+  // WITH one — an MBA block day, a presentation, a class test — is real
+  // teaching that needs a room, and 275 of those are kept. So is a recurring
+  // booking without a module code, such as the fortnightly IT maintenance
+  // window, which is a standing reservation rather than a one-off.
+  const oneOffBooking = r =>
+    !String(r.module || '').trim() && (Number(r.n_weeks) || 0) <= 1;
+  const classRows = rd('belfast_classes.csv')
+    .filter(r => r.activity !== 'BK' && !oneOffBooking(r));
   const classes = classRows.map(r => {
     const start = toMin(r.current_start);
     const dur = Number(r.duration_min);
@@ -219,17 +236,46 @@ function load(dir, opts) {
   //   * a class may always stay where it already is.
   const subjectOf = code => String(code || '').replace(/[0-9].*$/, '');
   const roomSubjects = new Map();
+  // A room that has demonstrably held a class of N students seats at least N.
+  //
+  // 138 rooms carry no capacity, and treating that as "seats nobody" excluded
+  // ten working computing labs — every CEBE IT lab, the MAC lab, the CAD lab —
+  // leaving two labs to carry what twelve carry in practice, and no clean
+  // timetable for the classes that need one. The booking history settles it
+  // where it can: if a class of known size was taught in a room, the room holds
+  // that many. It is a floor read off observation, not an estimate, so it can
+  // only ever understate a room. Rooms with no such evidence stay unknown and
+  // are still offered to nobody with a size.
+  const observedCapacity = new Map();
   try {
     const terms = JSON.parse(fs.readFileSync(path.join(dir, 'terms.json'), 'utf8'));
+    const sizeByTitle = new Map();
+    for (const c of classes) {
+      if (!(c.size > 0)) continue;
+      sizeByTitle.set(c.title, Math.max(sizeByTitle.get(c.title) || 0, c.size));
+    }
     for (const key of ['autumn', 'springCurrent']) {
       for (const row of (terms[key] || {}).rows || []) {
         const subj = subjectOf(row[0]);
-        if (!subj) continue;
-        if (!roomSubjects.has(row[6])) roomSubjects.set(row[6], new Set());
-        roomSubjects.get(row[6]).add(subj);
+        if (subj) {
+          if (!roomSubjects.has(row[6])) roomSubjects.set(row[6], new Set());
+          roomSubjects.get(row[6]).add(subj);
+        }
+        const seen = sizeByTitle.get(row[2]);
+        if (seen) observedCapacity.set(row[6], Math.max(observedCapacity.get(row[6]) || 0, seen));
       }
     }
   } catch (e) { /* no history available */ }
+  let inferredRooms = 0;
+  for (const room of rooms) {
+    if (room.capacityKnown) continue;
+    const seen = observedCapacity.get(room.id);
+    if (!seen) continue;
+    room.capacity = seen;
+    room.capacityKnown = true;
+    room.capacityInferred = true;
+    inferredRooms++;
+  }
   for (const c of classes) {
     const subj = subjectOf(c.module);
     if (!subj || c.homeRoom == null) continue;

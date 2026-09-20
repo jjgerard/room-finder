@@ -118,6 +118,43 @@ test('model: BK bookings are excluded', () => {
   eq(model.classes.filter(c => c.activity === 'BK').length, 0);
 });
 
+test('model: one-off bookings with no module are excluded', () => {
+  // Applicant days, exam-week reservations, library sessions, meetings: they
+  // happen once and are not being rescheduled, so holding rooms for them would
+  // shrink the building for no reason.
+  for (const c of model.classes) {
+    if (c.module) continue;
+    assert.ok(c.nWeeks > 1, 'a one-off booking with no module survived: ' + c.title);
+  }
+});
+
+test('model: single-week teaching is kept', () => {
+  // The rule keys on the module code, not on the week count. An MBA block day
+  // or a class test runs once and still needs a room.
+  const keep = model.classes.filter(c => c.module && c.nWeeks <= 1);
+  assert.ok(keep.length > 200, 'single-week teaching was dropped: only ' + keep.length + ' left');
+});
+
+test('rooms: an inferred capacity is a floor read from what the room has held', () => {
+  // A room with no recorded capacity is offered to nobody with a size, which
+  // excluded ten working computing labs. The booking history settles it where
+  // it can — but it may only ever report what was actually taught there.
+  const inferred = model.rooms.filter(r => r.capacityInferred);
+  assert.ok(inferred.length > 0, 'no capacity was inferred at all');
+  for (const r of inferred) {
+    assert.ok(r.capacity > 0, r.name + ' inferred a capacity of zero');
+    assert.ok(r.capacityKnown, r.name + ' inferred a capacity but is still unknown');
+  }
+});
+
+test('rooms: the computing labs are not down to the three with a number on them', () => {
+  // The bug this guards: 13 labs exist, 3 carry a recorded capacity, and a
+  // strict reading left two of them carrying every sized computing class.
+  const usable = model.rooms.filter(r => r.type === 'computer' && r.capacityKnown);
+  assert.ok(usable.length >= 5,
+    'only ' + usable.length + ' computing labs are offered to a class with a size');
+});
+
 test('model: every class resolved a home room', () => {
   eq(model.classes.filter(c => c.origRoom === null).length, 0);
 });
