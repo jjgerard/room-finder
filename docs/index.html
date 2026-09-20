@@ -13,9 +13,9 @@
 <header class="appbar">
   <span class="mark" aria-hidden="true"></span>
   <h1>Belfast Timetable</h1>
-  <nav>
-    <a href="index.html" aria-current="page">Timetable</a>
-    <a href="explore.html">Explore moves</a>
+  <nav id="appnav">
+    <a href="#" id="nav-about">About</a>
+    <a href="explore.html">Fix a clash</a>
   </nav>
 </header>
 
@@ -720,13 +720,10 @@
     var tabsEl = document.getElementById('tabs');
     tabsEl.innerHTML = '';
 
-    var about = document.createElement('button');
-    about.className = 'tab';
-    about.dataset.k = 'method';
-    about.setAttribute('role', 'tab');
-    about.innerHTML = 'About<span class="sub">how it works, and why</span>';
-    about.onclick = function () { selectTab('method'); };
-    tabsEl.appendChild(about);
+    // About and Fix a clash live in the bar at the top, so the strip below it
+    // carries the one control that needs room to open: the timetable picker.
+    var about = document.getElementById('nav-about');
+    if (about) about.onclick = function (e) { e.preventDefault(); selectTab('method'); };
 
     var wrap = document.createElement('div');
     wrap.className = 'tab-menu';
@@ -765,6 +762,11 @@
       wrap.classList.remove('open');
       trigger.setAttribute('aria-expanded', 'false');
     }
+    // Hover opens it on a pointer, click on everything else. The click handler
+    // stays because hover does not exist on a phone, and because a keyboard
+    // user reaches the trigger with Tab and opens it with Enter.
+    wrap.onmouseenter = function () { if (matchMedia('(hover: hover)').matches) open(); };
+    wrap.onmouseleave = function () { if (matchMedia('(hover: hover)').matches) close(); };
     trigger.onclick = function (e) {
       e.stopPropagation();
       if (wrap.classList.contains('open')) close(); else open();
@@ -780,20 +782,17 @@
     wrap.appendChild(menu);
     tabsEl.appendChild(wrap);
 
-    var fix = document.createElement('a');
-    fix.className = 'tab';
-    fix.href = 'explore.html';
-    fix.innerHTML = 'Fix a clash<span class="sub">what else would fit</span>';
-    tabsEl.appendChild(fix);
-
     markNav();
   }
 
   /** Which nav item reads as current. */
   function markNav() {
     var tabsEl = document.getElementById('tabs');
-    var about = tabsEl.querySelector('.tab[data-k="method"]');
-    if (about) about.setAttribute('aria-selected', String(tab === 'method'));
+    var about = document.getElementById('nav-about');
+    if (about) {
+      if (tab === 'method') about.setAttribute('aria-current', 'page');
+      else about.removeAttribute('aria-current');
+    }
     var trigger = tabsEl.querySelector('.tab-menu > .tab');
     if (trigger) {
       var onTerm = tab !== 'method';

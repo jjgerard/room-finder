@@ -134,7 +134,9 @@ body {
   flex: none;
 }
 .appbar h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: .2px; }
-.appbar nav { margin-left: auto; display: flex; gap: 2px; flex-wrap: wrap; }
+/* The links sit beside the title rather than across the bar: About reads as
+   part of the masthead, and Fix a clash closes the same short row. */
+.appbar nav { margin-left: 14px; display: flex; gap: 2px; flex-wrap: wrap; }
 .appbar nav a {
   color: var(--bar-sub);
   text-decoration: none;

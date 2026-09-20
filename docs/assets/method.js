@@ -15,11 +15,17 @@
     bookings: 2095,          // distinct bookings in spring 2026
     splitBookings: 215,      // of those, using two or more rooms
     maxRooms: 31,            // the worst one, an exam
-    doubleBooked: 114,       // pairs of different classes in one room at once
+    // Pairs of different bookings holding one room at the same time, counted
+    // from the per-room history. All of them are studio teaching — ARC, ART,
+    // HTM, DES — where several year groups share a studio on purpose, so this
+    // is not a fault to be fixed. Nothing else in the term shares a room.
+    sharedRoomPairs: 183,
+    splitExtra: 600,         // room-bookings that exist only because of splitting
     at0915: 862,             // bookings starting at 09:15
     at0815: 397,             // bookings starting at 08:15
     outside: 560,            // room-bookings outside 09:15-17:15
     outsideOf: 3302,
+    roomBookings: 3302,     // one row per class-room booking
   };
 
   function fmtN(n) { return Number(n).toLocaleString(); }
@@ -28,7 +34,7 @@
   // tiles and the rebuild graphic, and the full sentence for the table. They
   // are listed in the order the checker reports them.
   var RULES = [
-    ['roomClash',   'Two classes in one room at once',
+    ['roomClash',   'Two different classes in one room at the same time',
                     'No two classes in one room at once (exam rooms aside)'],
     ['timeClash',   'A cohort or lecturer in two places',
                     'No cohort or lecturer in two places at once'],
@@ -36,16 +42,20 @@
                     'Right room type, big enough'],
     ['linkedOrder', 'Lecture and seminar pulled apart',
                     'Lecture &amp; seminar same day, back-to-back, in order'],
+    // Enforced exactly like the rest, but left out of the graphic's list:
+    // the two exam rules are detail the diagram does not need to carry.
     ['examSlot',    'An exam out of its module\u2019s slot',
-                    'Exams keep their module\u2019s slot'],
+                    'Exams keep their module\u2019s slot', false],
     ['adjacency',   'An exam detached from its class',
-                    'Exams stay attached to the class they follow'],
+                    'Exams stay attached to the class they follow', false],
     ['dayPairing',  'A cohort given a new same-day pairing',
                     'No new same-day pairing for a cohort'],
     ['window',      'A session outside the teaching day',
                     'Inside the teaching day'],
   ];
   var RULE_ORDER = RULES.map(function (r) { return r[0]; });
+  // The subset the algorithm graphic lists; every rule is still checked.
+  var DRAWN_RULES = RULES.filter(function (r) { return r[3] !== false; });
   var TILE_LABELS = {}, ruleLabels = {};
   RULES.forEach(function (r) { TILE_LABELS[r[0]] = r[1]; ruleLabels[r[0]] = r[2]; });
 
@@ -151,7 +161,7 @@
     // variables, sized by viewBox so it holds up at phone width.
     return [
       '<div class="algo-graphic"><div class="algo-inner">',
-      '<svg viewBox="0 0 760 ' + (420 + RULES.length * 18) + '" role="img" ',
+      '<svg viewBox="0 0 760 ' + (420 + DRAWN_RULES.length * 18) + '" role="img" ',
       'aria-label="Left: today’s method places one booking at a time and never revisits ',
       'an earlier one, so the last bookings get whatever is left. Right: the rebuild places ',
       'every class at once and repairs broken rules in a loop, moving earlier classes when needed.">',
@@ -241,10 +251,10 @@
       '<text x="420" y="348" class="g-small g-muted">restart from many random beginnings; keep the best</text>',
 
       // the rules it repairs against, listed in full
-      '<rect x="420" y="364" width="320" height="' + (40 + RULES.length * 18) + '" rx="8" ',
+      '<rect x="420" y="364" width="320" height="' + (40 + DRAWN_RULES.length * 18) + '" rx="8" ',
       'class="g-rules"/>',
       '<text x="436" y="386" class="g-label g-start g-oktext">the rules it repairs against</text>',
-      RULES.map(function (r, i) {
+      DRAWN_RULES.map(function (r, i) {
         return '<text x="436" y="' + (408 + i * 18) + '" class="g-small">\u2022 ' + r[2] + '</text>';
       }).join(''),
       '</g>',
@@ -418,11 +428,24 @@
              '<div class="k">' + k + '</div>' +
              (sub ? '<div class="r">' + sub + '</div>' : '') + '</div>';
     }
-    var ruleTiles = RULE_ORDER.map(function (k) {
-      var a0 = now.counts[k] || 0, a1 = fixed.counts[k] || 0;
-      return tile(fmtN(a0), TILE_LABELS[k],
-                  'rebuilt: ' + fmtN(a1), a0 ? 'warn' : 'good');
-    }).join('');
+    // Only the rules today's timetable actually breaks get a tile; the table
+    // below still lists all eight, so nothing is hidden.
+    //
+    // roomClash is deliberately left out of this comparison. The class file
+    // gives each class ONE dominant room and one week list covering all the
+    // rooms it uses, so two classes whose dominant room coincides look like a
+    // double-booking in weeks when one of them is elsewhere: it reports 288,
+    // and the per-room booking history shows 288 of them are not real. The
+    // room fault today is the splitting itself, which is counted beside it.
+    var brokenNow = RULE_ORDER.filter(function (k) {
+      return k !== 'roomClash' && now.counts[k];
+    });
+    var ruleTiles = brokenNow.map(function (k) {
+      return tile(fmtN(now.counts[k]), TILE_LABELS[k],
+                  'rebuilt: ' + fmtN(fixed.counts[k] || 0), 'warn');
+    }).join('') +
+      tile(fmtN(TODAY.splitBookings), 'One class spread across several rooms',
+           'rebuilt: 0', 'warn');
 
     var riskRows = risky.map(function (x) {
       var name = (model.modTitles || {})[x.code] || '';
@@ -432,9 +455,15 @@
     }).join('');
 
     var ruleRows = RULE_ORDER.map(function (k) {
-      var a0 = now.counts[k] || 0, a1 = fixed.counts[k] || 0;
-      return '<tr><td>' + ruleLabels[k] + '</td>' +
-        '<td>' + (a0 ? '<span class="pill no">' + a0 + '</span>' : '<span class="pill ok">holds</span>') + '</td>' +
+      var a1 = fixed.counts[k] || 0;
+      // The room rule cannot be scored against today's timetable from this
+      // data — see the note beside the tiles — so it says so rather than
+      // printing a number that is not real.
+      var nowCell = k === 'roomClash'
+        ? '<span class="pill neutral">not measurable</span>'
+        : (now.counts[k] ? '<span class="pill no">' + now.counts[k] + '</span>'
+                         : '<span class="pill ok">holds</span>');
+      return '<tr><td>' + ruleLabels[k] + '</td><td>' + nowCell + '</td>' +
         '<td>' + (a1 ? '<span class="pill no">' + a1 + '</span>' : '<span class="pill ok">holds</span>') + '</td></tr>';
     }).join('');
 
@@ -447,18 +476,23 @@
 
       graphic(),
 
-      '<h3>Every hard rule, counted both ways</h3>',
-      '<p class="small muted">The large number is how often Spring 2026 as it stands breaks that ',
-      'rule; underneath it, the same count in the rebuild. ' + fmtN(now.total) + ' broken today, ',
-      fmtN(fixed.total) + ' in the rebuild.</p>',
+      '<h3>What Spring 2026 breaks</h3>',
+      '<p class="small muted">The large number is how often the timetable as it stands breaks ',
+      'that rule; underneath it, the same count in the rebuild. The other ' +
+      (RULE_ORDER.length - brokenNow.length - 1) + ' hard rules already hold today and still do ' +
+      'in the rebuild. The one rule missing here is the room rule: a class in this data carries ',
+      'one dominant room and one week list covering every room it uses, so today cannot be ',
+      'scored against it \u2014 the splitting on the right is the room fault it does have.</p>',
       '<div class="stats">',
       ruleTiles,
       '</div>',
-      '<p class="small muted">Alongside them, two things the rules do not forbid but the rebuild ',
-      'fixes anyway: ' + fmtN(splitNow) + ' classes are taught in more than one room today ',
-      '(the worst across ' + worstRooms + '), against ' + splitNew + ' in the rebuild \u2014 a class ',
-      'there simply holds one room, so ' + fmtN(extraRooms) + ' room-bookings return to the pool. ',
-      'And ' + b2b + ' of ' + groups + ' lecture+seminar pairs run back-to-back.</p>',
+      '<p class="small muted">The worst split booking uses ' + TODAY.maxRooms + ' rooms, and ',
+      'splitting is what creates ' + fmtN(TODAY.splitExtra) + ' of the term\u2019s ' +
+      fmtN(TODAY.roomBookings) + ' room-bookings; in the rebuild a class holds one room, so they ',
+      'return to the pool. Two classes are never forced into one room today either \u2014 the ',
+      'only rooms shared at the same time are the ' + TODAY.sharedRoomPairs + ' studio pairings ',
+      'in architecture, art, hospitality and design, which are deliberate and which the rebuild ',
+      'keeps. All ' + b2b + ' of ' + groups + ' lecture+seminar pairs run back-to-back.</p>',
 
       // ------------------------------------------------ why it always clashes
       '<h2>The current method will always clash</h2>',
@@ -471,9 +505,8 @@
       'cannot see that its 2pm booking is what forces another school\u2019s cohort to 08:15.</li>',
       '<li><strong>So the rules bend instead of the calendar.</strong> When nothing fits, a class ',
       'is split across rooms (' + fmtN(TODAY.splitBookings) + ' of ' + fmtN(TODAY.bookings) +
-      ' bookings, one across ' + TODAY.maxRooms + '), a room is double-booked (' +
-      TODAY.doubleBooked + ' pairs), or a gap opens between a lecture and its seminar (' +
-      gappy + ' of ' + groups + ').</li>',
+      ' bookings, one across ' + TODAY.maxRooms + '), or a gap opens between a lecture and its ',
+      'seminar (' + gappy + ' of ' + groups + ').</li>',
       '<li><strong>And the day stretches.</strong> ' + fmtN(TODAY.outside) + ' of ' +
       fmtN(TODAY.outsideOf) + ' room-bookings fall outside 9\u20135; ' + fmtN(TODAY.at0815) +
       ' start at 08:15.</li>',
@@ -499,7 +532,8 @@
           'Checked in your browser on load, by the same code that built it.</p></div>'
         : '<div class="note warn"><p style="margin:0"><strong>' + fixed.total +
           ' placement' + (fixed.total === 1 ? '' : 's') + ' could not be resolved</strong> \u2014 ' +
-          breakdown(fixed.counts) + ', against ' + now.total + ' today. ' +
+          breakdown(fixed.counts) + ', against ' + (now.total - now.counts.roomClash) +
+          ' today. ' +
           (tight && tight.over > 0
             ? 'In week ' + tight.week + ', classes needing ' + tight.seats + '+ seats ask for ' +
               Math.round(tight.need) + ' room-hours and the ' + tight.rooms + ' rooms that size ' +
