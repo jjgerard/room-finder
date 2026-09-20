@@ -18,6 +18,10 @@ function arg(name, dflt) {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt;
 }
 const SEEDS = Number(arg('seeds', 40));
+// Seeds vary a lot — the same model gives 11 to 19 violations depending on
+// where the search starts — so the practical way to run this is several
+// processes over disjoint seed ranges, each writing its own best.
+const SEED0 = Number(arg('seed0', 1));
 const OUT = arg('out', '');
 const CLASHES = arg('clashes', 'all');   // all | evidenced | cohort
 const START = arg('start', 'current');   // current | scatter | mixed
@@ -38,7 +42,7 @@ console.log(`today's timetable, judged against the hard rules: ${base.total} vio
             `(${base.counts.roomClash} room, ${base.counts.linkedOrder} lecture/seminar)\n`);
 
 let best = null;
-for (let seed = 1; seed <= SEEDS; seed++) {
+for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   // 'mixed' alternates: an anchored start wins when it can, because it moves
   // far less, and a scattered one is there for when it cannot.
   const start = START === 'mixed' ? (seed % 2 ? 'current' : 'scatter') : START;
