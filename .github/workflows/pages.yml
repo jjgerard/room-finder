@@ -1,8 +1,14 @@
 name: Deploy site to GitHub Pages
 
-# Publishes docs/ to GitHub Pages. The configure-pages step below turns Pages
-# on the first time it runs (enablement: true), so there is nothing to switch
-# on by hand; it needs the `pages: write` permission granted further down.
+# Publishes docs/ to GitHub Pages.
+#
+# Pages must be switched on once by hand: Settings → Pages → Source:
+# "GitHub Actions". The configure-pages step below asks for it with
+# `enablement: true`, but the Actions GITHUB_TOKEN is not allowed to create a
+# Pages site ("Resource not accessible by integration") — that endpoint needs
+# repo-admin rights the workflow token does not carry. The request is left in
+# so the workflow works unattended wherever the token is permitted; until
+# then the build fails here, which is the intended signal.
 #
 # It also runs the solver's tests first, so a deploy never ships a site whose
 # constraint code is broken. The site re-checks the timetable in the visitor's
@@ -60,8 +66,9 @@ jobs:
 
       - uses: actions/configure-pages@v5
         with:
-          # Turns Pages on and points it at GitHub Actions if it is not already
-          # configured, instead of failing with "Get Pages site failed".
+          # Asks GitHub to turn Pages on if it is not already configured.
+          # Succeeds only where the token has repo-admin rights; see the note
+          # at the top of this file.
           enablement: true
 
       - uses: actions/upload-pages-artifact@v3
