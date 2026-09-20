@@ -927,6 +927,18 @@ test('solver: the room preferences never bar a room outright', () => {
   eq(s2.roomReluctance(general, lab), 0);
 });
 
+test('solver: the chain sweep never makes the timetable worse', () => {
+  // chainSweep applies chainRepair until it stops paying; every individual
+  // chain is rolled back unless it strictly improves, so the sweep can only
+  // go one way.
+  const s = new Solver(model, Object.assign({ seed: 51 }, TEST_BUDGET));
+  s.run();
+  const before = s.totalHard();
+  s.chainSweep(1, 4, 20000);
+  assert.ok(s.totalHard() <= before,
+    `chainSweep made it worse: ${before} -> ${s.totalHard()}`);
+});
+
 test('solver: never sends block teaching offsite', () => {
   const s = new Solver(model, Object.assign({ seed: 5 }, TEST_BUDGET));
   s.run();

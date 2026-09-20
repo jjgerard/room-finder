@@ -1064,6 +1064,30 @@ class Solver {
   }
 
   /**
+   * Run the chain repair over everything still broken, until it stops paying.
+   *
+   * Cheap enough to be worth doing on every solve: the search exhausts itself
+   * in a few thousand nodes when there is no chain, and finds one in a few
+   * hundred when there is.
+   */
+  chainSweep(rounds, depth, nodes) {
+    let fixed = 0;
+    for (let r = 0; r < (rounds || 4); r++) {
+      const bad = this.violatingClasses();
+      if (!bad.length) break;
+      let any = false;
+      for (const id of bad) {
+        if (this.hardOf(id, null) === 0) continue;
+        if (this.chainRepair(id, depth == null ? 8 : depth, nodes == null ? 400000 : nodes)) {
+          fixed++; any = true;
+        }
+      }
+      if (!any) break;
+    }
+    return fixed;
+  }
+
+  /**
    * A bigger ruin: tear up a random slice of the whole timetable, not just the
    * neighbourhood of one clash, and rebuild it.
    *

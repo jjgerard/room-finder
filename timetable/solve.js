@@ -51,6 +51,11 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   // The endgame: what is left after min-conflicts plateaus needs several
   // classes moved together, which no single-move search can find.
   s.intensify(400);
+  // Chains last: they are the only move that helps when nothing has a free
+  // slot to move into, and they are cheapest once the rest has settled.
+  s.chainSweep();
+  s.intensify(150);
+  s.chainSweep();
   s.polish(4);
   const a = s.assignment();
   const chk = C.check(model, a, CHECK_OPTS);
