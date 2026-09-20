@@ -317,11 +317,18 @@ function load(dir, opts) {
   // A class's "size" is the capacity of the room it sits in today, not a real
   // headcount (only 17 of 1,556 rows carry one). Timetabling's working
   // assumption is that rooms are generally matched to their cohorts, so the
-  // number is usable — but it is an estimate, so a 10% tolerance applies. A
-  // class nominally of 90 may use an 81-seat room. Without that, sizes are
-  // quantised to the capacity ladder (90, 158, 215, 250, 350) and every class
-  // on a rung competes for exactly the rooms on that rung and above.
-  const CAPACITY_TOLERANCE = 0.9;
+  // number is usable — but it is an estimate, so a tolerance applies. Without
+  // one, sizes are quantised to the capacity ladder (90, 158, 215, 250, 350)
+  // and every class on a rung competes for exactly the rooms on that rung and
+  // above.
+  //
+  // 12%, not 10%, for a specific reason. Six of the last nine unresolved
+  // clashes were 90-seat classes, and the largest CEBE lab seats 80 — at 10%
+  // they needed 81 and missed it by a single seat. Widening to 12% costs
+  // little and is bounded: it adds 662 (class, room) options across 327
+  // classes, and the tightest squeeze it permits anywhere is exactly that
+  // case, a nominal 90 in a room of 80.
+  const CAPACITY_TOLERANCE = opts.capacityTolerance == null ? 0.88 : opts.capacityTolerance;
   const needSeats = size => Math.ceil(size * CAPACITY_TOLERANCE);
 
   // Two rooms-preferences that are about the building, not the rules.
@@ -558,4 +565,7 @@ function load(dir, opts) {
   };
 }
 
-module.exports = { load, DAYS, MAX_WEEK, toMin, fmtMin, weekMask, weekList, splitList };
+module.exports = {
+  CAPACITY_TOLERANCE_DEFAULT: 0.88,
+  load, DAYS, MAX_WEEK, toMin, fmtMin, weekMask, weekList, splitList,
+};

@@ -88,7 +88,10 @@ class Solver {
     // A component holding a pinned booking cannot move at all — the data marks
     // it "do not edit or remove", and it carries no cohort or clash information
     // to reschedule it against.
-    for (const comp of components) comp.fixed = comp.members.some(m => m.cls.isFixed);
+    for (let i = 0; i < components.length; i++) {
+      components[i].id = i;
+      components[i].fixed = components[i].members.some(m => m.cls.isFixed);
+    }
     this.buildConflicts = conflicts;
 
     const n = Math.max(...model.classes.map(c => c.id)) + 1;
@@ -941,6 +944,123 @@ class Solver {
     }
     this.restore(best);
     return bestHard;
+  }
+
+  /**
+   * Every legal placement for a component, with the components it would
+   * displace. Ordered by how few that is, so a caller tries the cheapest
+   * chains first.
+   */
+  placementOptions(comp) {
+    const wide = comp.span > DAY_WIDTH;
+    const starts = wide ? [DAY_START] : STARTS.filter(x => x + comp.span <= HARD_MAX);
+    const out = [];
+    for (let d = 0; d < DAY_COUNT; d++) {
+      for (const st of starts) {
+        const rooms = [];
+        const displaced = new Set();
+        let illegal = false;
+        for (const mm of comp.members) {
+          const id = mm.cls.id, s = st + mm.off, du = this.dur[id], w = this.weeks[id];
+          // Cohort and same-day rules are not negotiable by displacing someone
+          // else: they are about people, who cannot be moved to another room.
+          for (const other of this.timePartners.get(id)) {
+            if (comp.members.some(x => x.cls.id === other)) continue;
+            if (this.day[other] !== d) continue;
+            if (s < this.start[other] + this.dur[other] && this.start[other] < s + du &&
+                (w & this.weeks[other])) { illegal = true; break; }
+          }
+          if (illegal) break;
+          for (const other of this.dayPartners.get(id)) {
+            if (comp.members.some(x => x.cls.id === other)) continue;
+            if (this.day[other] === d) { illegal = true; break; }
+          }
+          if (illegal) break;
+
+          // Pick the room that displaces the fewest, preferring none at all.
+          let best = null, bestCount = Infinity, bestHit = null;
+          for (const r of this.roomChoices(id)) {
+            const hit = [];
+            for (const other of this.occ[r * DAY_COUNT + d]) {
+              if (comp.members.some(x => x.cls.id === other)) continue;
+              if (this.shares.has(id < other ? id + ':' + other : other + ':' + id)) continue;
+              if (s < this.start[other] + this.dur[other] && this.start[other] < s + du &&
+                  (w & this.weeks[other])) hit.push(other);
+            }
+            const cost = hit.length * 10 + this.roomReluctance(mm.cls, this.model.rooms[r]) * 0.01;
+            if (cost < bestCount) { bestCount = cost; best = r; bestHit = hit; }
+            if (!hit.length) break;
+          }
+          if (best === null) { illegal = true; break; }
+          rooms.push(best);
+          for (const other of bestHit) displaced.add(this.compOf[other]);
+        }
+        if (illegal || rooms.length !== comp.members.length) continue;
+        out.push({ day: d, start: st, rooms, displaced });
+      }
+    }
+    out.sort((a, b) => a.displaced.size - b.displaced.size);
+    return out;
+  }
+
+  /**
+   * Move a class by moving whatever is in its way, and whatever is in THAT
+   * way, up to a few links deep.
+   *
+   * The clashes that survive everything else are pairs stacked in one room at
+   * one hour where both classes have ten rooms to choose from and all ten are
+   * busy. No single move helps, and a random ruin rarely stumbles on the right
+   * combination — but a chain does: move A into B's room, move B somewhere
+   * that displaces C, move C into a gap. Bounded hard, because it is
+   * exponential: a handful of placements per level, three levels.
+   */
+  chainRepair(startId, maxDepth, nodes) {
+    const comp = this.components[this.compOf[startId]];
+    if (comp.fixed) return false;
+    const before = this.totalHard();
+    const keep = this.snapshot();
+    // A node budget rather than a fixed breadth. Not one of the classes still
+    // stuck has a placement that displaces nobody, so every chain has to run
+    // until it reaches a component with slack; capping the branching at each
+    // level cut those chains off before they got there. A budget lets the
+    // search go wide where the options are cheap and deep where they are not.
+    const budget = { n: nodes == null ? 200000 : nodes };
+    if (this.relocate(comp, maxDepth == null ? 6 : maxDepth, new Set(), budget)) {
+      if (this.totalHard() < before) return true;
+    }
+    this.restore(keep);
+    return false;
+  }
+
+  /** One link of the chain: place `comp` somewhere, recursively clearing the way. */
+  relocate(comp, depth, moving, budget) {
+    if (comp.fixed || moving.has(comp.id) || depth < 0 || budget.n <= 0) return false;
+    moving.add(comp.id);
+    const ids = comp.members.map(m => m.cls.id);
+    const oldDay = comp.day, oldStart = comp.start;
+    const oldRooms = ids.map(i => this.room[i]);
+
+    for (const opt of this.placementOptions(comp)) {
+      if (budget.n <= 0) break;
+      if (opt.day === oldDay && opt.start === oldStart &&
+          opt.rooms.every((r, k) => r === oldRooms[k])) continue;
+      if (opt.displaced.size && depth <= 0) continue;
+      budget.n--;
+
+      this.moveComponent(comp, opt.day, opt.start);
+      ids.forEach((i, k) => this.setRoom(i, opt.rooms[k]));
+
+      let ok = true;
+      for (const other of opt.displaced) {
+        if (!this.relocate(this.components[other], depth - 1, moving, budget)) { ok = false; break; }
+      }
+      if (ok) { moving.delete(comp.id); return true; }
+
+      this.moveComponent(comp, oldDay, oldStart);
+      ids.forEach((i, k) => this.setRoom(i, oldRooms[k]));
+    }
+    moving.delete(comp.id);
+    return false;
   }
 
   /**
