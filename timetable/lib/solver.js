@@ -170,9 +170,31 @@ class Solver {
    * has been placed so far, never against a half-finished future.
    */
   construct() {
+    // What a component really costs is a stripe through room x day x week: a
+    // 7-hour block running weeks 1, 3 and 5 needs one room, on one day, free in
+    // every one of those weeks. An ordinary 2-hour class running twelve weeks
+    // makes that room-day unavailable to it, which is why in the last rebuild
+    // ZERO of the fifty big room-days were free across weeks 1, 3 and 5 —
+    // Lecture Theatre 3 looked empty on the Wednesday of week 5 and was held
+    // all day in weeks 1 and 2 by another block.
+    //
+    // So blocks choose first, longest stripe first, and the short classes fill
+    // in around them. Sorting by "fewest possible rooms" alone put the
+    // specialist classes first and left the blocks picking through a grid that
+    // weekly teaching had already cut to ribbons.
+    const weeksOf = comp => {
+      let mask = 0;
+      for (const m of comp.members) mask |= m.cls.weeks;
+      let n = 0;
+      for (let i = 0; i < 16; i++) if (mask & (1 << i)) n++;
+      return n;
+    };
+    const stripe = comp => (comp.span >= 5 * 60 ? 1e9 : 0) + comp.span * weeksOf(comp);
     const order = this.components
       .filter(c => !c.fixed)
       .sort((a, b) => {
+        const sa = stripe(a), sb = stripe(b);
+        if (sa !== sb) return sb - sa;
         const ra = Math.min(...a.members.map(m => this.roomChoices(m.cls.id).length));
         const rb = Math.min(...b.members.map(m => this.roomChoices(m.cls.id).length));
         return ra - rb || b.span - a.span || b.members.length - a.members.length;
