@@ -146,4 +146,14 @@ if (OUT) {
     rows,
   }));
   console.log(`\nwrote ${path.join(dir, 'solution.json')}`);
+
+  // solution.json and docs/data/timetable.json are a pair: the second is
+  // built from the first and from the model. Writing one without the other
+  // leaves the published site describing a timetable that no longer exists,
+  // which is what CI's drift check keeps catching. So the export runs here,
+  // as part of producing a solution, rather than being remembered separately.
+  if (path.resolve(dir).startsWith(path.resolve(__dirname, '..', 'docs'))) {
+    require('child_process').execFileSync(process.execPath,
+      [path.join(__dirname, 'export.js')], { stdio: 'inherit' });
+  }
 }

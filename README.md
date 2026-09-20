@@ -244,10 +244,15 @@ achieve and then defend against its own later repairs.
 Node 18+, no dependencies.
 
 ```
-node timetable/test.js                              # 56 checks
-node timetable/solve.js --seeds 30 --out docs/data  # rebuild the timetable
-node timetable/export.js                            # pack the data the site loads
+node timetable/test.js                              # the checks
+node timetable/solve.js --seeds 30 --out docs/data  # rebuild, and pack the site data
+node timetable/export.js                            # pack the site data on its own
 ```
+
+Solving into `docs/data` runs the export for you, since `solution.json` and
+`docs/data/timetable.json` are a pair and a stale second one publishes a timetable
+that no longer exists. Run `export.js` by hand after changing the model or the data
+without re-solving — CI fails if the committed `docs/` is not what it produces.
 
 `solve.js` restarts from many seeds and keeps the best, because the search plateaus in
 seconds — restarts buy far more than a longer single run.
