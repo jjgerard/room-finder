@@ -112,9 +112,12 @@
 
   // Tab order, as asked for: the two terms as they stand, the rebuild, then the
   // method. Explore moves lives on its own page, last in the nav.
-  var TABS = ['autumn', 'springNow', 'springNew', 'method'];
+  // Method leads: it is the argument the site exists to make, and the three
+  // timetables are the evidence for it. Opening on Autumn asked a visitor to
+  // work out for themselves what they were looking at.
+  var TABS = ['method', 'autumn', 'springNow', 'springNew'];
 
-  var H = null, tab = 'autumn', view = 'grid';
+  var H = null, tab = 'method', view = 'grid';
   var state = { progs: new Set(), modules: new Set(), rooms: new Set(), weeks: null, days: new Set(), changed: false, split: false };
 
   function esc(s) {
@@ -722,7 +725,7 @@
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(k === tab));
       b.innerHTML = k === 'method'
-        ? 'Method'
+        ? 'How it works<span class="sub">and why</span>'
         : esc(t.label) + '<span class="sub">' + esc(t.sub) + '</span>';
       b.onclick = function () { selectTab(k); };
       tabsEl.appendChild(b);
@@ -789,7 +792,7 @@
     };
 
     document.getElementById('method').innerHTML = window.TTMethod.html(H);
-    selectTab('autumn');
+    selectTab('method');
   }).catch(function (e) {
     document.getElementById('banner').innerHTML =
       '<div class="note warn"><p style="margin:0">' + esc(e.message) + '</p></div>';
