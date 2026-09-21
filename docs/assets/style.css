@@ -191,6 +191,10 @@ body {
 .bar-menu.open .bar-drop { display: block; }
 
 .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 16px 72px; }
+/* Which timetable is open, said once where the eye lands first. */
+.term-title { font-size: 21px; font-weight: 600; margin: 0 0 14px; letter-spacing: -.2px; }
+.term-title span { font-weight: 400; color: var(--muted); font-size: 15px; }
+.term-title span::before { content: '\00b7'; margin: 0 7px; }
 .wrap.narrow { max-width: 780px; }
 
 /* ---------- type ---------- */

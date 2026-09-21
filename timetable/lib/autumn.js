@@ -13,15 +13,73 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 // authors must have derived it, and every derivation is marked so the site can
 // say which figures are read and which are inferred.
 
-/** "CMM115_S1/SEM/CAM 2" → the booking it belongs to. */
-function bookingsFrom(rows) {
-  const byTitle = new Map();
-  for (const r of rows) {
-    const key = r[2] + '|' + r[3] + '|' + r[4] + '|' + r[5] + '|' + r[8];
-    if (!byTitle.has(key)) byTitle.set(key, []);
-    byTitle.get(key).push(r);
+function weekMask(pattern) {
+  let mask = 0;
+  for (let part of String(pattern == null ? '' : pattern).split(',')) {
+    part = part.trim().replace(/\u2013/g, '-');
+    if (!part) continue;
+    const dash = part.indexOf('-', 1);
+    if (dash > 0) {
+      const a = parseInt(part.slice(0, dash), 10), b = parseInt(part.slice(dash + 1), 10);
+      if (Number.isNaN(a) || Number.isNaN(b)) continue;
+      for (let w = a; w <= b; w++) mask |= 1 << w;
+    } else {
+      const v = parseInt(part, 10);
+      if (!Number.isNaN(v)) mask |= 1 << v;
+    }
   }
-  return byTitle;
+  return mask;
+}
+
+/**
+ * "CMM115_S1/SEM/CAM 2" → the booking it belongs to.
+ *
+ * Rows sharing a title, a day, a time and a length are one booking, and the
+ * question is whether they are one class or several. If their weeks overlap
+ * they run side by side and are several: CMM111's labs fill eight comms rooms
+ * in the same hour. If the weeks are disjoint they are one class that changed
+ * room mid-term, and must stay one class — CMM350's lecture is in the MAC
+ * computing lab in weeks 1 and 11 and in BC-03-123 for the rest, which as two
+ * classes is a lecture in two rooms and cannot be put right.
+ */
+function bookingsFrom(rows) {
+  const bySlot = new Map();
+  for (const r of rows) {
+    const key = r[2] + '|' + r[3] + '|' + r[4] + '|' + r[5];
+    if (!bySlot.has(key)) bySlot.set(key, []);
+    bySlot.get(key).push(r);
+  }
+  const out = new Map();
+  for (const [key, group] of bySlot) {
+    let seen = 0, disjoint = true;
+    for (const r of group) {
+      const m = weekMask(r[8]);
+      if (seen & m) { disjoint = false; break; }
+      seen |= m;
+    }
+    if (disjoint) { out.set(key, group); continue; }
+    // Parallel teaching: keep the original split, one entry per week pattern.
+    const byWeeks = new Map();
+    for (const r of group) {
+      const k = key + '|' + r[8];
+      if (!byWeeks.has(k)) byWeeks.set(k, []);
+      byWeeks.get(k).push(r);
+    }
+    for (const [k, list] of byWeeks) out.set(k, list);
+  }
+  return out;
+}
+
+/** "1-3" and "5" over a group of rows, as the pattern text they share. */
+function weeksTextOf(group) {
+  const weeks = [];
+  for (const r of group) {
+    for (let w = 1; w <= 16; w++) {
+      if ((weekMask(r[8]) & (1 << w)) && weeks.indexOf(w) < 0) weeks.push(w);
+    }
+  }
+  weeks.sort((a, b) => a - b);
+  return weeks.join(',');
 }
 
 /**
@@ -74,8 +132,8 @@ function autumnRows(terms, rooms) {
       current_room_capacity: String(dominant.capacity || 0),
       n_current_rooms: String(used.length),
       is_multi_room: used.length > 1 ? '1' : '0',
-      weeks: String(first[8] || ''),
-      n_weeks: String(first[7] || 0),
+      weeks: weeksTextOf(group),
+      n_weeks: String(weeksTextOf(group).split(',').filter(Boolean).length),
       is_teaching: first[0] ? '1' : '0',
       is_block_teaching: first[5] >= 300 ? '1' : '0',
       recommend_offsite: '0',

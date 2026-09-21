@@ -22,6 +22,8 @@
 
 <main class="wrap">
 
+  <h2 class="term-title" id="termTitle" hidden></h2>
+
   <div id="banner"></div>
 
   <div class="card pad" id="filters" style="margin-bottom:16px">
@@ -636,7 +638,17 @@
     var el = document.getElementById('banner');
     if (tab === 'autumn') {
       el.innerHTML = '<div class="note"><p style="margin:0"><strong>Autumn 2026, as it stands.</strong> ' +
-        'Shown for reference — the rebuild covers Spring only.</p></div>';
+        (H.terms.autumnNew
+          ? 'The rebuilt autumn is in the same menu, for comparison.'
+          : 'Shown for reference \u2014 the rebuild covers Spring only.') + '</p></div>';
+    } else if (tab === 'autumnNew') {
+      var left = (H.terms.autumnNew.sub.match(/(\d+) unresolved/) || [])[1];
+      el.innerHTML = left
+        ? '<div class="note warn"><p style="margin:0"><strong>Autumn 2026, rebuilt \u2014 still ' +
+          esc(left) + ' unresolved.</strong> Built the same way as the spring rebuild and ' +
+          'not finished: ' + esc(left) + ' placements still break a hard rule.</p></div>'
+        : '<div class="note good"><p style="margin:0"><strong>Autumn 2026, rebuilt.</strong> ' +
+          'Built the same way as the spring rebuild.</p></div>';
     } else if (tab === 'springNow') {
       el.innerHTML = '<div class="note warn"><p style="margin:0"><strong>Spring 2026, as it stands.</strong> ' +
         'Bookings marked <em>split across rooms</em> are the problem being fixed: one class ' +
@@ -796,13 +808,19 @@
     }
     var trigger = document.getElementById('nav-terms-btn');
     if (trigger) {
+      // The button keeps its name; which timetable is open is said in the
+      // menu, by the tick, and in the heading at the top of the page.
+      if (tab !== 'method' && H.terms[tab]) trigger.setAttribute('aria-current', 'page');
+      else trigger.removeAttribute('aria-current');
+    }
+    var title = document.getElementById('termTitle');
+    if (title) {
       var t = H.terms[tab];
       if (tab !== 'method' && t) {
-        trigger.setAttribute('aria-current', 'page');
-        trigger.textContent = t.label + ' \u00b7 ' + t.sub;
+        title.hidden = false;
+        title.innerHTML = esc(t.label) + ' <span>' + esc(t.sub) + '</span>';
       } else {
-        trigger.removeAttribute('aria-current');
-        trigger.textContent = 'Timetables';
+        title.hidden = true;
       }
     }
     document.querySelectorAll('.drop-item[data-k]').forEach(function (el) {

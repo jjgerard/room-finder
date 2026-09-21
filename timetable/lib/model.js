@@ -621,7 +621,13 @@ function load(dir, opts) {
       const allowed = [];
       for (const room of rooms) {
         let ok = false;
-        if (room.type === c.roomType) {
+        if (c.roomType === 'seminar') {
+          // Not a room type in the data: a request for an ordinary teaching
+          // room with tables that can be pushed together. A theatre is raked
+          // and a lab is full of machines, so neither will do — CMM378 needs
+          // group tables and meets in a Central Computing Lab today.
+          ok = room.type === 'general';
+        } else if (room.type === c.roomType) {
           ok = room.type !== 'specialist'
             ? true
             : !!(subj && roomSubjects.get(room.id) && roomSubjects.get(room.id).has(subj));

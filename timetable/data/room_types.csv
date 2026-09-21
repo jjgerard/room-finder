@@ -1,2 +1,3 @@
 module,activity,type,source
-CMM350,SEM,general,does not need a computer room
+CMM350,SEM,seminar,does not need a computer room
+CMM378,SEM,seminar,needs group tables

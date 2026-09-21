@@ -70,6 +70,7 @@ class Solver {
       // A class that does not need machines should not hold a computing lab
       // while computing classes are short of them.
       wLabSquat: 14,
+      wSameRoom: 6,       // soft: a module's seminars in one room, not five
       // The library's computer room is a student resource first; teaching goes
       // there only when a School lab is not free.
       wLibrary: 9,
@@ -772,10 +773,54 @@ class Solver {
    * clashes, the teaching day) can be disturbed by this pass.
    */
   /** Soft reluctance to put this class in this room; never a bar. */
+  /**
+   * The other classes that ought to meet where this one meets: a module's
+   * seminars, its tutorials, its labs. Sittings of the SAME booking are left
+   * out — they run side by side and need separate rooms — and so is anything
+   * in this class's own component, for the same reason.
+   */
+  roomPeers(cls) {
+    if (!this.peerCache) {
+      this.peerCache = new Map();
+      const byKind = new Map();
+      for (const c of this.model.classes) {
+        if (!c.module) continue;
+        const k = c.module + '|' + c.activity;
+        if (!byKind.has(k)) byKind.set(k, []);
+        byKind.get(k).push(c);
+      }
+      for (const list of byKind.values()) {
+        if (list.length < 2) continue;
+        for (const c of list) {
+          const peers = list.filter(o =>
+            o.id !== c.id && o.title !== c.title && this.compOf[o.id] !== this.compOf[c.id]);
+          if (peers.length) this.peerCache.set(c.id, peers.map(o => o.id));
+        }
+      }
+    }
+    return this.peerCache.get(cls.id) || null;
+  }
+
   roomReluctance(cls, room) {
     const o = this.opts;
     let v = 0;
     if (!room) return v;
+    // A module's seminars scattered over five rooms is five rooms to find and
+    // five rooms to learn. Where its peers have already settled somewhere,
+    // prefer to join them — softly, below every other preference, so it never
+    // costs a placement.
+    if (o.wSameRoom) {
+      const peers = this.roomPeers(cls);
+      if (peers) {
+        let elsewhere = 0, here = 0;
+        for (const id of peers) {
+          const r = this.room[id];
+          if (r < 0) continue;
+          if (r === room.id) here++; else elsewhere++;
+        }
+        if (here === 0 && elsewhere > 0) v += o.wSameRoom;
+      }
+    }
     if (o.wLabSquat && room.type === 'computer' && cls.roomType !== 'computer') v += o.wLabSquat;
     if (o.wLibrary && room.isLibrary) v += o.wLibrary;
     if (o.wOtherSchool && room.isSchoolLab && room.subjects && room.subjects.size) {
