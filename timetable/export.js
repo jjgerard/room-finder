@@ -105,6 +105,7 @@ if (fs.existsSync(autumnSolPath)) {
     meta: autumnSol.meta,
     classes: packClasses(autumnModel, placed, c => c.programmes.map(x => progId(x))),
     cand: autumnModel.classes.map(c => c.cand),
+    candType: autumnModel.classes.map(c => c.candType || c.cand),
     sharePairs: flat([...autumnModel.mayShareRoom].map(k => k.split(':').map(Number))),
     timePairs: flat(autumnModel.cannotShareTime),
     dayPairs: flat(autumnModel.cannotShareDay),
@@ -140,7 +141,10 @@ const packed = {
     springNew: { label: 'Spring 2026', sub: 'rebuilt', rows: springNewRows, checkable: 1 },
   },
   classes: packClasses(model, solved, c => c.programmes.map(p => progId(p))),
-  cand: model.classes.map(c => c.cand),  // The room-type overrides as they stand, so the page that edits them starts
+  cand: model.classes.map(c => c.cand),
+  // Rooms of a kind each class can use, whatever their size: what a
+  // split across two rooms is judged against.
+  candType: model.classes.map(c => c.candType || c.cand),  // The room-type overrides as they stand, so the page that edits them starts
   // from what the solver is actually using rather than from an empty form.
   roomTypes: (() => {
     const file = path.join(__dirname, 'data', 'room_types.csv');

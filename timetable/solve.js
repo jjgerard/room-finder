@@ -69,6 +69,10 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   // own slot is held by something with no reason to be there.
   s.homeSweep(3);
   s.polish(4);
+  // Only now, with the search exhausted: a class still short of a room is
+  // given two rather than left clashing. This is the fault the rebuild exists
+  // to remove, so it is counted and named in the output.
+  const splits = s.splitRepair(3);
   const a = s.assignment();
   const chk = C.check(model, a, CHECK_OPTS);
   const mv = C.movement(model, a);
@@ -77,12 +81,14 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   const moved = mv.total - mv.untouched;
   // Hard violations first, then the soft goals, and movement last — the order
   // the constraints were given in.
-  const rank = chk.total * 1e6 + soft.edge * 10 + gaps * 8 + moved;
+  // A split is a real cost, ranked just under a violation.
+  const rank = chk.total * 1e6 + splits * 1e4 + soft.edge * 10 + gaps * 8 + moved;
   const line = `seed ${String(seed).padStart(3)} ${start.padEnd(7)} hard ${String(chk.total).padStart(3)}  ` +
                `edge ${String(soft.edge).padStart(3)}  gaps ${String(gaps).padStart(3)}  ` +
-               `moved ${String(moved).padStart(4)}`;
+               `moved ${String(moved).padStart(4)}` +
+               (splits ? `  split ${splits}` : '');
   if (!best || rank < best.rank) {
-    best = { rank, seed, chk, mv, soft, gaps, assign: a };
+    best = { rank, seed, chk, mv, soft, gaps, splits, assign: a };
     console.log(line + '   <- best so far');
   } else if (seed % 10 === 0) {
     console.log(line);
@@ -93,6 +99,15 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
 const { chk, mv, soft, gaps, assign } = best;
 console.log(`\n=== best (seed ${best.seed}) ===`);
 console.log(`hard violations: ${chk.total}`);
+if (best.splits) {
+  console.log(`split across rooms as a last resort: ${best.splits}`);
+  for (const [id, p] of best.assign) {
+    if (!p.extra) continue;
+    const c = model.byId.get(id);
+    console.log(`   ${c.module || c.activity}/${c.activity} ` +
+                `${[p.room, ...p.extra].map(r => model.rooms[r].name).join(' + ')}`);
+  }
+}
 for (const [k, v] of Object.entries(chk.counts)) if (v) console.log(`   ${k.padEnd(12)} ${v}`);
 console.log(`movement: ${mv.total - mv.untouched} of ${mv.total} classes changed ` +
             `(${mv.movedDay} day, ${mv.movedTime} time, ${mv.movedRoom} room); ` +
@@ -138,6 +153,7 @@ if (OUT) {
     return {
       id: c.id, module: c.module, activity: c.activity, title: c.title,
       day: p.day, start: p.start, dur: c.dur, room: p.room,
+      extra: p.extra || undefined,
       weeks: c.weeksText, teaching: c.isTeaching ? 1 : 0, block: c.isBlock ? 1 : 0,
       was: { day: c.origDay, start: c.origStart, room: c.origRoom },
       changed: flags,
@@ -149,7 +165,7 @@ if (OUT) {
   fs.writeFileSync(path.join(dir, solFile), JSON.stringify({
     meta: {
       campus: 'Belfast', term: TERM === 'autumn' ? 'Autumn 2026' : 'Spring 2026', generated: new Date().toISOString().slice(0, 10),
-      seed: best.seed, hardViolations: chk.total,
+      seed: best.seed, hardViolations: chk.total, splitRooms: best.splits,
       // Which clash graph this was solved against. The site must check the
       // result with the same rules, or it reports violations the solver was
       // never asked to avoid.

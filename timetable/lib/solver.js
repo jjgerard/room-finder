@@ -135,6 +135,20 @@ class Solver {
       this.classProgs.set(c.id, list);
     }
     this.progDayCount = new Int32Array(this.progIdx.size * DAY_COUNT);
+    // No spare room: the class needs as many rooms at once as it has rooms to
+    // choose from, so anywhere it goes it takes the whole shelf with it.
+    this.extra = new Map();   // classes given a second room as a last resort
+    this.tight = new Uint8Array(n);
+    for (const c of this.model.classes) {
+      const want = c.parallelRooms || 1;
+      const have = (c.cand || []).length;
+      if (have && want >= have) this.tight[c.id] = 1;
+      // A sitting inherits its parent's tightness: it is one of the rooms.
+      if (c.shadowOf != null) {
+        const par = this.model.byId.get(c.shadowOf);
+        if (par && (par.parallelRooms || 1) >= ((par.cand || []).length || 1)) this.tight[c.id] = 1;
+      }
+    }
 
     // Pairs allowed to share a room, because they already do — see model.js.
     this.shares = model.mayShareRoom || new Set();
@@ -483,6 +497,11 @@ class Solver {
     if (d !== cls.origDay) v += o.wMoveDay;
     if (s !== cls.origStart) v += o.wMoveTime;
     if (this.room[id] !== cls.origRoom) v += o.wMoveRoom;
+    // Measured and rejected: charging a class with no spare room extra for
+    // moving, so CMM111's eight lab groups would stay on the eight comms labs
+    // they fit today. At 60 autumn's seeds went 6/5/5 to 7/10/6, at 12 to
+    // 7/11/6, and the soft goals got worse with them. Keeping the tight
+    // classes still only moves the difficulty onto everything else.
     return v;
   }
 
@@ -1392,10 +1411,110 @@ class Solver {
     }
   }
 
+  /**
+   * Last resort: give a class two rooms rather than leave it clashing.
+   *
+   * A class in two rooms is the fault this rebuild exists to remove, so it is
+   * only ever offered when nothing else is left — every single room that
+   * could hold the class is busy at that hour. Two half-empty rooms with a
+   * cohort divided between them is what the current timetable does 215 times;
+   * doing it a handful of times, knowingly and on the record, beats leaving a
+   * class double-booked.
+   */
+  splitRepair(maxRooms) {
+    const cap = maxRooms || 3;
+    let split = 0;
+    for (const id of this.violatingClasses()) {
+      const cls = this.model.byId.get(id);
+      if (cls.isFixed || this.extra.has(id)) continue;
+      // Only a room clash. A class in the wrong hour or the wrong week is not
+      // short of rooms, and splitting it would fix nothing.
+      if (!this.roomClashing(id)) continue;
+      const d = this.day[id], st = this.start[id];
+      // If a single room would do, the search would have taken it; check
+      // anyway, because the timetable has moved since it last looked.
+      const free = this.roomChoices(id).filter(r => this.roomFree(id, r, d, st));
+      if (free.length) { this.setRoom(id, free[0]); continue; }
+      const pick = this.splitOptions(id, cap);
+      if (!pick) continue;
+      this.setRoom(id, pick[0]);
+      const rest = pick.slice(1);
+      this.extra.set(id, rest);
+      // Held, so nothing else takes them either.
+      for (const r of rest) this.occ[r * DAY_COUNT + d].push(id);
+      split++;
+    }
+    return split;
+  }
+
+  /** Is this class's trouble a shared room, rather than a time or a window? */
+  roomClashing(id) {
+    const d = this.day[id], s = this.start[id], du = this.dur[id], w = this.weeks[id];
+    for (const other of this.occ[this.room[id] * DAY_COUNT + d]) {
+      if (other === id) continue;
+      if (this.shares.has(id < other ? id + ':' + other : other + ':' + id)) continue;
+      if (s < this.start[other] + this.dur[other] && this.start[other] < s + du &&
+          (w & this.weeks[other])) return true;
+    }
+    return false;
+  }
+
+  /** Nothing else in this room at this hour, in a week they share. */
+  roomFree(id, room, d, s) {
+    const du = this.dur[id], w = this.weeks[id];
+    for (const other of this.occ[room * DAY_COUNT + d]) {
+      if (other === id) continue;
+      if (this.shares.has(id < other ? id + ':' + other : other + ':' + id)) continue;
+      if (s < this.start[other] + this.dur[other] && this.start[other] < s + du &&
+          (w & this.weeks[other])) return false;
+    }
+    return true;
+  }
+
+  /**
+   * The smallest set of free rooms that together seat the class, biggest
+   * first so it takes as few as it can.
+   */
+  splitOptions(id, maxRooms) {
+    const cls = this.model.byId.get(id);
+    const need = cls.size || 0;
+    if (!need) return null;
+    const d = this.day[id], st = this.start[id];
+    // Rooms of a kind this class can use, whatever their size, that are free
+    // at this hour. Capacity is a question about the set, not about each one.
+    const ok = [];
+    for (const rid of (cls.candType || [])) {
+      const room = this.model.rooms[rid];
+      if (!room || !room.capacityKnown || room.capacity <= 0) continue;
+      // No room worth less than a third of the class: a lecture for 50 in
+      // rooms for 28, 14 and 12 is not a timetable, it is three problems.
+      if (room.capacity * 3 < need) continue;
+      if (!this.roomFree(id, rid, d, st)) continue;
+      ok.push(room);
+    }
+    ok.sort((a, b) => b.capacity - a.capacity);
+    // Two rooms if two will do; three only if they will not. Fewer is better
+    // for the cohort, the staff and the porter.
+    for (let k = 2; k <= Math.max(2, maxRooms || 2); k++) {
+      const pick = [];
+      let seats = 0;
+      for (const room of ok) {
+        if (pick.length >= k) break;
+        pick.push(room.id);
+        seats += room.capacity;
+      }
+      if (pick.length === k && seats >= need) return pick;
+    }
+    return null;
+  }
+
   assignment() {
     const m = new Map();
     for (const c of this.model.classes) {
-      m.set(c.id, { day: this.day[c.id], start: this.start[c.id], room: this.room[c.id] });
+      const p = { day: this.day[c.id], start: this.start[c.id], room: this.room[c.id] };
+      const ex = this.extra.get(c.id);
+      if (ex && ex.length) p.extra = ex.slice();
+      m.set(c.id, p);
     }
     return m;
   }

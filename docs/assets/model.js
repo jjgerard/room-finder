@@ -89,6 +89,7 @@
         isFixed: !!row[C.fixed],
         progs: row[C.progs] || [],
         cand: packed.cand[i],
+        candType: (packed.candType && packed.candType[i]) || packed.cand[i],
       };
     });
 

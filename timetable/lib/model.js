@@ -618,7 +618,7 @@ function load(dir, opts) {
   if (rebuild) {
     for (const c of classes) {
       const subj = subjectOf(c.module);
-      const allowed = [];
+      const allowed = [], allowedByType = [];
       for (const room of rooms) {
         let ok = false;
         if (c.roomType === 'seminar') {
@@ -641,6 +641,7 @@ function load(dir, opts) {
           ok = room.type === 'general';
         }
         if (!ok) continue;
+        allowedByType.push(room.id);
         // Capacity. An unrecorded capacity is NOT "fits anyone": of the 138
         // rooms without one, 81 have never been used and the other 57 have only
         // ever held classes of unknown size, so nothing suggests they seat a
@@ -664,6 +665,11 @@ function load(dir, opts) {
       if (c.homeRoom != null && !allowed.includes(c.homeRoom) && !c.roomTypeOverridden) {
         allowed.push(c.homeRoom);
       }
+      // The same list without the capacity test: rooms of a kind this class
+      // could use, whatever their size. A class split across two rooms is in
+      // neither of them whole, so capacity is a question about the pair, not
+      // about each one, but the KIND of room still has to be right.
+      c.candType = allowedByType;
       const must = requiredRoom(c);
       if (must !== null) { c.cand = [must]; c.roomRequired = must; continue; }
       c.cand = allowed;

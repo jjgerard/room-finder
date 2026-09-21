@@ -97,9 +97,24 @@ function check(model, assign, opts) {
     // (24%) sit in a room outside their own candidate set today, almost always
     // because the room's capacity is unrecorded. Enforcing fit literally would
     // move hundreds of classes for a data artefact. `strictRoomFit` opts in.
-    const stayingPut = p.room === c.origRoom;
-    if (!(stayingPut && !strictRoomFit)) {
-      if (!c.cand.includes(p.room)) add('roomFit', { a: c.id, room: p.room });
+    if (p.extra && p.extra.length) {
+      // A class split across rooms is in none of them whole, so the capacity
+      // question is about the set: every room has to be a kind it can use,
+      // and together they have to seat it.
+      const all = [p.room].concat(p.extra);
+      const byType = c.candType || c.cand;
+      let seats = 0;
+      for (const r of all) {
+        const room = model.rooms[r];
+        if (room && room.capacityKnown) seats += room.capacity;
+        if (!byType.includes(r)) add('roomFit', { a: c.id, room: r });
+      }
+      if (c.size > 0 && seats < c.size) add('roomFit', { a: c.id, room: p.room, short: true });
+    } else {
+      const stayingPut = p.room === c.origRoom;
+      if (!(stayingPut && !strictRoomFit)) {
+        if (!c.cand.includes(p.room)) add('roomFit', { a: c.id, room: p.room });
+      }
     }
   }
 
@@ -148,6 +163,16 @@ function check(model, assign, opts) {
     const key = p.room + ':' + p.day;
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key).push(c);
+    // A class given a second room as a last resort holds both, and both have
+    // to be judged: a room it is squatting is as taken as the one it started
+    // in. Nothing else may be in either.
+    if (p.extra) {
+      for (const r of p.extra) {
+        const k2 = r + ':' + p.day;
+        if (!buckets.has(k2)) buckets.set(k2, []);
+        buckets.get(k2).push(c);
+      }
+    }
   }
   for (const list of buckets.values()) {
     if (list.length < 2) continue;
@@ -155,6 +180,7 @@ function check(model, assign, opts) {
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         const a = list[i], b = list[j];
+        if (a === b) continue;                   // one class, two of its rooms
         const pa = at(a.id), pb = at(b.id);
         if (pb.start >= pa.start + a.dur) break; // sorted: nothing later overlaps
         if (!overlaps(pa.start, a.dur, pb.start, b.dur)) continue;
