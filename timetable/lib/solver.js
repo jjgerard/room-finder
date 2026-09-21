@@ -633,7 +633,7 @@ class Solver {
    * repair depends on, and costs the variety the restarts feed on. Once the
    * timetable has stopped moving, the same move only helps.
    */
-  tryHomeRepair(id) {
+  tryHomeRepair(id, alsoIds) {
     const cls = this.model.byId.get(id);
     if (cls.isFixed) return false;
     const comp = this.components[this.compOf[id]];
@@ -648,13 +648,18 @@ class Solver {
     if (comp.span <= DAY_WIDTH && start + comp.span > HARD_MAX) return false;
 
     const ids = comp.members.map(mm => mm.cls.id);
-    const before = this.costOf(ids);
+    // `alsoIds` widens the accounting to somebody else's classes: sending a
+    // component home rarely pays for itself, but it can free the room the
+    // class that is actually broken needs. Judged on its own the move is
+    // refused and the violation stays.
+    const scope = alsoIds ? ids.concat(alsoIds.filter(x => ids.indexOf(x) < 0)) : ids;
+    const before = this.costOf(scope);
     const oldDay = comp.day, oldStart = comp.start;
     const oldRooms = ids.map(i => this.room[i]);
 
     this.moveComponent(comp, day, start);
     for (const mm of comp.members) this.setRoom(mm.cls.id, mm.cls.origRoom);
-    const after = this.costOf(ids);
+    const after = this.costOf(scope);
     if (after.hard < before.hard ||
         (after.hard === before.hard && after.soft < before.soft)) return true;
 
@@ -953,6 +958,48 @@ class Solver {
       if (!moved) break;
     }
     return { iters: iter, rounds: round, hard: this.totalHard() };
+  }
+
+  /**
+   * Send classes back where they started, including the ones standing in the
+   * way.
+   *
+   * What survives to the end of the search is usually a class whose own slot
+   * is taken by something that had no particular reason to be there. Today's
+   * timetable is a proof that some arrangement works, so the room a class
+   * holds today is the likeliest place to find room for it. Asking the
+   * violator alone to go home is not enough — it is the occupier that has to
+   * move first, and on its own account that move never pays.
+   */
+  homeSweep(rounds) {
+    const LOOK = 40;            // components to try per violation
+    for (let r = 0; r < (rounds || 2); r++) {
+      const bad = this.violatingClasses();
+      if (!bad.length) return;
+      let moved = 0;
+      for (const id of bad) {
+        if (this.tryHomeRepair(id)) { moved++; continue; }
+        const cls = this.model.byId.get(id);
+        const comp = this.components[this.compOf[id]];
+        const mine = comp.members.map(mm => mm.cls.id);
+        const seen = new Set([this.compOf[id]]);
+        let looked = 0;
+        for (const room of (cls.cand || [])) {
+          for (let d = 0; d < DAY_COUNT && looked < LOOK; d++) {
+            for (const other of this.occ[room * DAY_COUNT + d]) {
+              const ci = this.compOf[other];
+              if (seen.has(ci)) continue;
+              seen.add(ci);
+              looked++;
+              if (this.tryHomeRepair(other, mine)) moved++;
+              if (looked >= LOOK) break;
+            }
+          }
+          if (looked >= LOOK) break;
+        }
+      }
+      if (!moved) return;
+    }
   }
 
   /**

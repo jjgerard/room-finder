@@ -760,6 +760,17 @@ function load(dir, opts) {
     });
   }
 
+  // Measured and rejected: stating up front that a module's own sessions
+  // cannot overlap when their shared pool of rooms is too small for both.
+  // CMM111 teaches its labs in parallel groups across the eight comms labs
+  // and one booking fills all eight, so a second CMM111 lab in the same hour
+  // needs a ninth room that does not exist — true, and the search meets it
+  // only as a room clash, late. Stated as a clash edge it made things worse:
+  // 865 edges across the timetable took autumn's best seed from 6 violations
+  // to 9, and narrowing it to one module's own sessions (258 edges) gave 11
+  // and 9 against 6 and 4. The freedom to try the overlap and back out of it
+  // is worth more than the warning.
+
   // Some rooms hold several cohorts at once, on purpose. The architecture
   // studio runs five or six year groups together every Tuesday and Thursday,
   // staff circulating between them; ceramics and fine art do the same.

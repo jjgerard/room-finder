@@ -64,6 +64,10 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   s.chainSweep();
   s.intensify(150);
   s.chainSweep();
+  // Last: put back what did not need to move. Today's timetable proves some
+  // arrangement works, and what survives the search is usually a class whose
+  // own slot is held by something with no reason to be there.
+  s.homeSweep(3);
   s.polish(4);
   const a = s.assignment();
   const chk = C.check(model, a, CHECK_OPTS);
