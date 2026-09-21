@@ -149,6 +149,47 @@ body {
 .appbar nav a:hover { background: rgba(255, 255, 255, .08); color: var(--bar-ink); }
 .appbar nav a[aria-current="page"] { background: rgba(255, 255, 255, .14); color: var(--bar-ink); }
 
+/* The timetable picker, sitting in the bar between About and Fix a clash. The
+   trigger is a button so it can own the menu, so it borrows the links' look
+   rather than inheriting it. */
+.bar-menu { position: relative; display: flex; }
+.bar-link {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bar-sub);
+  padding: 8px 22px 8px 13px;
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.bar-link:hover { background: rgba(255, 255, 255, .08); color: var(--bar-ink); }
+.bar-link[aria-current="page"] { background: rgba(255, 255, 255, .14); color: var(--bar-ink); }
+.bar-link::after {
+  content: '';
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid currentColor;
+  position: absolute; right: 8px; top: 50%; margin-top: -2px;
+  opacity: .65;
+}
+.bar-drop {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px); left: 0;
+  min-width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--sh-2);
+  z-index: 30;
+  padding: 4px 0;
+}
+.bar-menu.open .bar-drop { display: block; }
+
 .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 16px 72px; }
 .wrap.narrow { max-width: 780px; }
 

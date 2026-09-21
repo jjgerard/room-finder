@@ -15,11 +15,10 @@
   <h1>Belfast Timetable</h1>
   <nav id="appnav">
     <a href="#" id="nav-about">About</a>
+    <span class="bar-menu" id="nav-terms"></span>
     <a href="explore.html">Fix a clash</a>
   </nav>
 </header>
-
-<div class="tabs" id="tabs" role="tablist"></div>
 
 <main class="wrap">
 
@@ -717,23 +716,23 @@
    * the other two.
    */
   function buildNav() {
-    var tabsEl = document.getElementById('tabs');
-    tabsEl.innerHTML = '';
-
-    // About and Fix a clash live in the bar at the top, so the strip below it
-    // carries the one control that needs room to open: the timetable picker.
     var about = document.getElementById('nav-about');
     if (about) about.onclick = function (e) { e.preventDefault(); selectTab('method'); };
 
-    var wrap = document.createElement('div');
-    wrap.className = 'tab-menu';
+    // The timetable picker sits between About and Fix a clash, in the bar with
+    // them. It is a menu rather than three more links because there are three
+    // timetables today and four once autumn is rebuilt.
+    var wrap = document.getElementById('nav-terms');
+    if (!wrap) return;
+    wrap.innerHTML = '';
     var trigger = document.createElement('button');
-    trigger.className = 'tab';
+    trigger.className = 'bar-link';
+    trigger.id = 'nav-terms-btn';
     trigger.setAttribute('aria-haspopup', 'true');
     trigger.setAttribute('aria-expanded', 'false');
-    trigger.innerHTML = 'Timetables<span class="sub">pick one</span>';
+    trigger.textContent = 'Timetables';
     var menu = document.createElement('div');
-    menu.className = 'tab-drop';
+    menu.className = 'bar-drop';
     menu.setAttribute('role', 'menu');
 
     TERM_TABS.forEach(function (k) {
@@ -762,14 +761,17 @@
       wrap.classList.remove('open');
       trigger.setAttribute('aria-expanded', 'false');
     }
-    // Hover opens it on a pointer, click on everything else. The click handler
-    // stays because hover does not exist on a phone, and because a keyboard
-    // user reaches the trigger with Tab and opens it with Enter.
+    // Hover opens it where there is a pointer; the click handler stays for
+    // phones, and for a keyboard user who arrives on the trigger with Tab.
     wrap.onmouseenter = function () { if (matchMedia('(hover: hover)').matches) open(); };
     wrap.onmouseleave = function () { if (matchMedia('(hover: hover)').matches) close(); };
     trigger.onclick = function (e) {
       e.stopPropagation();
-      if (wrap.classList.contains('open')) close(); else open();
+      // Where hover already opened it, a click must not close it again: the
+      // pointer is over the trigger, so closing would be undone immediately
+      // and read as the menu refusing to open.
+      if (!wrap.classList.contains('open')) open();
+      else if (!matchMedia('(hover: hover)').matches) close();
     };
     document.addEventListener('click', function (e) {
       if (!wrap.contains(e.target)) close();
@@ -780,28 +782,28 @@
 
     wrap.appendChild(trigger);
     wrap.appendChild(menu);
-    tabsEl.appendChild(wrap);
-
     markNav();
   }
 
   /** Which nav item reads as current. */
   function markNav() {
-    var tabsEl = document.getElementById('tabs');
     var about = document.getElementById('nav-about');
     if (about) {
       if (tab === 'method') about.setAttribute('aria-current', 'page');
       else about.removeAttribute('aria-current');
     }
-    var trigger = tabsEl.querySelector('.tab-menu > .tab');
+    var trigger = document.getElementById('nav-terms-btn');
     if (trigger) {
-      var onTerm = tab !== 'method';
-      trigger.setAttribute('aria-selected', String(onTerm));
       var t = H.terms[tab];
-      trigger.innerHTML = 'Timetables<span class="sub">' +
-        (onTerm && t ? esc(t.label) + ' \u00b7 ' + esc(t.sub) : 'pick one') + '</span>';
+      if (tab !== 'method' && t) {
+        trigger.setAttribute('aria-current', 'page');
+        trigger.textContent = t.label + ' \u00b7 ' + t.sub;
+      } else {
+        trigger.removeAttribute('aria-current');
+        trigger.textContent = 'Timetables';
+      }
     }
-    tabsEl.querySelectorAll('.drop-item[data-k]').forEach(function (el) {
+    document.querySelectorAll('.drop-item[data-k]').forEach(function (el) {
       el.setAttribute('aria-current', String(el.dataset.k === tab));
     });
   }
