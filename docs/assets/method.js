@@ -261,20 +261,62 @@
     return RULE_ORDER.reduce(function (n, k) { return n + (score.now[k] || 0); }, 0);
   }
 
+  /**
+   * One class using several rooms through the term, counted from display
+   * rows: a term whose model the browser never loads still has its bookings.
+   * Rooms held in the SAME week are parallel teaching and are not counted —
+   * only a class taught in one room and then another.
+   */
+  function wanderingRows(rows) {
+    var slots = {};
+    rows.forEach(function (r) {
+      if (!r.module) return;
+      (slots[r.title + '|' + r.day + '|' + r.start] ||
+        (slots[r.title + '|' + r.day + '|' + r.start] = [])).push(r);
+    });
+    var n = 0;
+    Object.keys(slots).forEach(function (k) {
+      var list = slots[k], rooms = {};
+      list.forEach(function (r) { rooms[r.room] = true; });
+      var ids = Object.keys(rooms);
+      if (ids.length < 2) return;
+      for (var w = 0; w < 16; w++) {
+        var here = 0;
+        ids.forEach(function (rm) {
+          if (list.some(function (r) { return String(r.room) === rm && (r.weeks & (1 << w)); })) here++;
+        });
+        if (here > 1) return;                 // parallel teaching, not wandering
+      }
+      n++;
+    });
+    return n;
+  }
+
   /** Autumn's rule counts, tile for tile with spring's. */
-  function autumnTiles(t, heading) {
+  function autumnTiles(t, heading, H) {
     var sc = t.score;
     if (!sc) return '';
     function tile(v, k, sub, cls) {
       return '<div class="stat ' + cls + '"><div class="t">today</div><div class="v">' + v +
         '</div><div class="k">' + k + '</div><div class="r">' + sub + '</div></div>';
     }
-    var broken = RULE_ORDER.filter(function (k) { return sc.now[k]; });
-    if (!broken.length) return '';
-    return '<h4 class="term-sub">' + heading + '</h4><div class="stats">' +
-      broken.map(function (k) {
-      return tile(fmtN(sc.now[k]), TILE_LABELS[k], 'rebuilt: ' + fmtN(sc.fixed[k] || 0), 'warn');
-    }).join('') + '</div>' +
+    // The same three cards spring shows, so the two terms read alike: the two
+    // rules it breaks, and the classes taught in one room and then another.
+    var shown = ['linkedOrder', 'window'];
+    var cards = shown.map(function (k) {
+      return tile(fmtN(sc.now[k] || 0), TILE_LABELS[k],
+                  'rebuilt: ' + fmtN(sc.fixed[k] || 0), sc.now[k] ? 'warn' : 'good');
+    }).join('');
+    var movedRooms = wanderingRows((H.terms.autumn || {}).rows || []);
+    var movedAfter = wanderingRows((H.terms.autumnNew || {}).rows || []);
+    cards += tile(fmtN(movedRooms), 'One class using several rooms through the term',
+                  'rebuilt: ' + fmtN(movedAfter), movedRooms ? 'warn' : 'good');
+    return '<h4 class="term-sub">' + heading + '</h4><div class="stats">' + cards + '</div>' +
+      (sc.now.linkedOrder === 0
+        ? '<p class="small muted">Autumn has no declared lecture and seminar pairs, so the ' +
+          'rebuild infers them from the sessions that already run back-to-back \u2014 which is ' +
+          'why today breaks none of them. The rebuild keeps all ' + fmtN(sc.groups) + '.</p>'
+        : '') +
       (sc.overflow
         ? '<p class="small muted">' + sc.overflow + ' sessions in the rebuild still finish after ' +
           '17:15, because the chain of classes they belong to is longer than a teaching day. The ' +
@@ -673,7 +715,7 @@
       '<div class="stats">',
       ruleTiles,
       '</div>',
-      autumnTiles(H.terms.autumnNew, 'Autumn 2026'),
+      autumnTiles(H.terms.autumnNew, 'Autumn 2026', H),
       '<p class="small muted">The room rule itself already holds today: ' + TODAY.sharedRoomPairs +
       ' pairs of bookings do hold one room at the same time, and every one of them is shared ',
       'teaching \u2014 architecture and art studios, the hospitality kitchen, a joint sports ',

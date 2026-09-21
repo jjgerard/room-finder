@@ -275,6 +275,37 @@ li { margin-bottom: 6px; }
 .term-sub { font-size: 13px; font-weight: 600; letter-spacing: .04em;
   text-transform: uppercase; color: var(--muted); margin: 18px 0 0; }
 
+/* ---------- the rooms calendar ---------- */
+
+/* The room list beside the week, so ticking a room and reading its hours are
+   the same gesture. Below tablet width they stack. */
+.rooms-split { display: grid; grid-template-columns: 330px 1fr; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .rooms-split { grid-template-columns: 1fr; } }
+.rooms-split table td { padding: 7px 10px; vertical-align: top; }
+.rooms-split tr { cursor: pointer; }
+.rooms-split tr.set { background: var(--accent-weak); }
+
+.cal { display: flex; gap: 4px; min-width: 560px; }
+.cal-day { flex: 1 1 0; min-width: 0; }
+.cal-times { width: 52px; flex: none; }
+.cal-head {
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  text-align: center; padding-bottom: 6px;
+}
+.cal-body { position: relative; border-top: 1px solid var(--line); }
+.cal-hour {
+  position: absolute; left: 0; right: 4px; text-align: right;
+  font-size: 11px; color: var(--muted);
+  border-top: 1px dashed var(--line); padding-top: 1px;
+}
+.cal-day .cal-body { border-left: 1px solid var(--line); }
+.cal-block {
+  position: absolute; border-radius: 4px; overflow: hidden;
+  font-size: 11px; line-height: 1.25; padding: 2px 4px;
+  color: var(--ink);
+}
+.cal-block strong { font-weight: 600; }
+
 /* ---------- callouts ---------- */
 
 .note {

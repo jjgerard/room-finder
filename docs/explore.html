@@ -70,11 +70,11 @@
 
     <div class="grid2">
       <div>
-        <h3>Cheapest fixes — same slot, different room</h3>
+        <h3>Proposed fixes</h3>
+        <p class="small muted">Least disruptive first: keeping the hour beats moving it, which
+        beats moving the day. Where nothing single is free, a fix may put a class in two rooms
+        and says so.</p>
         <div id="roomonly"></div>
-
-        <h3>Clear alternative slots</h3>
-        <p class="small muted">Least disruptive first: a different room beats a different time, which beats a different day.</p>
         <div id="clear"></div>
       </div>
       <div>
@@ -210,7 +210,7 @@
 
   function slotLabel(day, start) { return DAYS[day] + ' ' + fmt(start); }
 
-  function renderOption(o, cls) {
+  function renderOption(o, cls, how) {
     var moves = o.members.map(function (m) {
       var c = MODEL().byId.get(m.id);
       var nm = modName(c.module);
@@ -226,6 +226,7 @@
     return '<div class="card pad" style="margin-bottom:10px">' +
       '<div class="row" style="justify-content:space-between">' +
         '<strong>' + slotLabel(o.day, o.start) + '</strong>' +
+        (how ? ' <span class="small muted">' + esc(how) + '</span>' : '') +
         (cls === 'clear'
           ? '<span class="pill ok">clear</span>'
           : '<span class="pill no">' + o.blockers.length + ' blocker' + (o.blockers.length > 1 ? 's' : '') + '</span>') +
@@ -365,11 +366,8 @@
     // A group is not fixed one class at a time: if the whole component can
     // keep this hour by changing rooms, that is the cheapest fix there is and
     // it goes first.
-    var groupFix = r.sameSlot
-      ? '<p class="small muted">Everything moves together, and the hour does not change.</p>' +
-        renderOption(r.sameSlot, 'clear')
-      : '';
-    ro.innerHTML = groupFix + (r.roomOnly.length
+    var groupFix = r.sameSlot ? renderOption(r.sameSlot, 'clear', 'Keeps the hour') : '';
+    ro.innerHTML = groupFix + (!groupFix && r.roomOnly.length
       ? r.roomOnly.map(function (o) {
           var oc = MODEL().byId.get(o.classId);
           return '<div class="card pad" style="margin-bottom:8px">' +
@@ -382,9 +380,18 @@
          '<p class="small muted">No other room is free in this slot. Any fix means moving ' +
          'the time or day.</p>'));
 
+    // Several to choose from, each labelled by what it costs, and marked when
+    // it splits a class across rooms — the option of last resort, but a real
+    // one when the hour cannot move.
     document.getElementById('clear').innerHTML = r.clear.length
-      ? r.clear.map(function (o) { return renderOption(o, 'clear'); }).join('')
-      : '<p class="small muted">No completely clear alternative slot exists.</p>';
+      ? r.clear.slice(0, 6).map(function (o) {
+          var split = o.members.some(function (m) { return m.extra && m.extra.length; });
+          var how = o.day === r.current.day
+            ? 'Same day, ' + (o.start > r.current.start ? 'later' : 'earlier')
+            : 'Moves to ' + DAYS[o.day];
+          return renderOption(o, 'clear', how + (split ? ' · two rooms' : ''));
+        }).join('')
+      : (groupFix ? '' : '<p class="small muted">No completely clear alternative slot exists.</p>');
 
     document.getElementById('near').innerHTML = r.near.length
       ? r.near.map(function (o) { return renderOption(o, 'near'); }).join('')

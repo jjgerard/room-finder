@@ -63,17 +63,32 @@
     </div>
   </div>
 
-  <div class="card" style="overflow:hidden">
-    <div class="scroll"><table id="tbl">
-      <thead><tr>
-        <th>Room</th><th>Kind</th><th>Seats</th><th>Hours a week</th><th>Busiest day</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table></div>
+  <div class="row" style="margin-bottom:10px">
+    <span class="small muted" style="font-weight:600">Week</span>
+    <div class="chips" id="f-weeks"></div>
+    <button id="weeks-all" class="chip" style="border-style:dashed">All</button>
   </div>
-  <p class="small muted" id="more"></p>
 
-  <div id="detail" hidden></div>
+  <div class="rooms-split">
+    <div class="card" style="overflow:hidden">
+      <div class="scroll" style="max-height:620px"><table id="tbl">
+        <thead><tr>
+          <th></th><th>Room</th><th>Seats</th><th>Hours</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <p class="small muted" id="more" style="padding:0 14px 12px"></p>
+    </div>
+
+    <div>
+      <div class="row" style="margin-bottom:8px">
+        <span class="small muted" id="picked">No room selected</span>
+        <button id="clear-rooms" style="margin-left:auto">Clear</button>
+      </div>
+      <div class="card gridcard"><div id="cal"></div></div>
+      <div class="legend" id="cal-legend"></div>
+    </div>
+  </div>
 
 </main>
 
@@ -91,8 +106,12 @@
 (function () {
   'use strict';
   var M = window.TTModel, DAYS = M.DAYS, fmt = M.fmt;
-  var H = null, term = 'autumn', kind = 'all', open = null;
+  var H = null, term = 'autumn', kind = 'all';
+  var picked = [];            // room ids drawn on the calendar
+  var week = null;            // null = every week
   var LIMIT = 120;
+  // Enough colours to tell a handful of rooms apart without inventing a palette.
+  var HUES = [210, 12, 150, 275, 36, 190, 330, 95];
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -116,21 +135,16 @@
     var t = H.terms[term];
     var byRoom = {};
     t.rows.forEach(function (r) {
-      var g = byRoom[r.room] || (byRoom[r.room] = { rows: [], hours: 0, days: [0, 0, 0, 0, 0] });
+      var g = byRoom[r.room] || (byRoom[r.room] = { rows: [], hours: 0 });
       g.rows.push(r);
-      var weeks = weekCount(r.weeks);
-      g.hours += (r.dur / 60) * weeks / 12;
-      if (r.day >= 0 && r.day < 5) g.days[r.day] += r.dur / 60;
+      g.hours += (r.dur / 60) * weekCount(r.weeks) / 12;
     });
     return H.model.rooms.map(function (room, i) {
-      var g = byRoom[i] || { rows: [], hours: 0, days: [0, 0, 0, 0, 0] };
-      var busiest = g.days.indexOf(Math.max.apply(null, g.days));
+      var g = byRoom[i] || { rows: [], hours: 0 };
       return {
         id: i, name: room.name, type: room.type,
         capacity: room.capacityKnown ? room.capacity : null,
         hours: g.hours, rows: g.rows,
-        busiest: g.rows.length ? busiest : -1,
-        busiestHours: g.days[busiest] || 0,
       };
     });
   }
@@ -144,21 +158,22 @@
   }
 
   function render() {
-    var list = rooms().filter(matches)
+    var all = rooms();
+    var list = all.filter(matches)
       .sort(function (a, b) { return b.hours - a.hours || a.name.localeCompare(b.name); });
     var body = document.querySelector('#tbl tbody');
     body.innerHTML = list.slice(0, LIMIT).map(function (r) {
-      return '<tr data-room="' + r.id + '"' + (open === r.id ? ' class="set"' : '') + '>' +
-        '<td><strong>' + esc(r.name) + '</strong></td>' +
-        '<td class="small muted">' + esc(r.type) + '</td>' +
+      var on = picked.indexOf(r.id) >= 0;
+      return '<tr data-room="' + r.id + '"' + (on ? ' class="set"' : '') + '>' +
+        '<td><input type="checkbox"' + (on ? ' checked' : '') + ' aria-label="show ' +
+        esc(r.name) + '"></td>' +
+        '<td><strong>' + esc(r.name) + '</strong><br>' +
+        '<span class="small muted">' + esc(r.type) + '</span></td>' +
         '<td>' + (r.capacity == null ? '<span class="muted">—</span>' : r.capacity) + '</td>' +
-        '<td>' + (r.rows.length ? r.hours.toFixed(1) : '<span class="muted">never used</span>') + '</td>' +
-        '<td class="small">' + (r.busiest >= 0
-          ? DAYS[r.busiest] + ' <span class="muted">' + r.busiestHours.toFixed(1) + 'h</span>'
-          : '') + '</td></tr>';
+        '<td>' + (r.rows.length ? r.hours.toFixed(1) : '<span class="muted">—</span>') + '</td></tr>';
     }).join('');
     body.querySelectorAll('tr').forEach(function (tr) {
-      tr.onclick = function () { show(Number(tr.dataset.room)); };
+      tr.onclick = function () { toggle(Number(tr.dataset.room)); };
     });
 
     var used = list.filter(function (r) { return r.rows.length; }).length;
@@ -166,43 +181,118 @@
       list.length + ' rooms · ' + used + ' in use · ' + (list.length - used) + ' never used';
     document.getElementById('more').textContent = list.length > LIMIT
       ? 'Showing the busiest ' + LIMIT + ' of ' + list.length + '.' : '';
-    if (open !== null) show(open, true);
+    calendar(all);
   }
 
-  /** One room's week, hour by hour, in the timetable being viewed. */
-  function show(id, keep) {
-    open = id;
-    var r = rooms()[id];
-    var el = document.getElementById('detail');
-    el.hidden = false;
-    var byDay = [[], [], [], [], []];
-    r.rows.forEach(function (x) { if (x.day >= 0 && x.day < 5) byDay[x.day].push(x); });
-    byDay.forEach(function (list) { list.sort(function (a, b) { return a.start - b.start; }); });
-    var cols = byDay.map(function (list, d) {
-      return '<div><h4 class="small" style="margin:0 0 6px">' + DAYS[d] + '</h4>' +
-        (list.length
-          ? list.map(function (x) {
-              return '<div class="small" style="margin-bottom:6px">' +
-                '<strong>' + fmt(x.start) + '</strong> ' + esc(x.module || x.activity) +
-                ' <span class="muted">' + esc(x.activity) + ' · ' +
-                (x.dur / 60) + 'h · weeks ' + esc(x.weeksText) + '</span></div>';
-            }).join('')
-          : '<p class="small muted">nothing</p>') + '</div>';
-    }).join('');
-    el.innerHTML = '<h3>' + esc(r.name) + '</h3>' +
-      '<p class="small muted">' + esc(r.type) +
-      (r.capacity == null ? ', capacity unrecorded' : ', ' + r.capacity + ' seats') +
-      ' · ' + r.rows.length + ' bookings · ' + r.hours.toFixed(1) + ' hours in an average week</p>' +
-      '<div class="card pad" style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px">' +
-      cols + '</div>';
-    if (!keep) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  function toggle(id) {
+    var i = picked.indexOf(id);
+    if (i >= 0) picked.splice(i, 1); else picked.push(id);
+    render();
   }
+
+  /**
+   * The selected rooms as one week.
+   *
+   * Several rooms on one grid is the point: it answers "is anything free at
+   * two o'clock" without opening them one at a time. Where two bookings in
+   * different rooms fall in the same hour they sit side by side, so a column
+   * that is full is genuinely full.
+   */
+  function calendar(all) {
+    var cal = document.getElementById('cal');
+    var legend = document.getElementById('cal-legend');
+    var chosen = picked.map(function (id) { return all[id]; }).filter(Boolean);
+    document.getElementById('picked').textContent = chosen.length
+      ? chosen.length + ' room' + (chosen.length === 1 ? '' : 's') + ' shown' +
+        (week ? ' · week ' + week : ' · every week')
+      : 'No room selected — tick one or more on the left';
+    legend.innerHTML = chosen.map(function (r, i) {
+      return '<span class="k"><span class="tag" style="background:hsl(' + HUES[i % HUES.length] +
+        ' 70% 62%)"></span>' + esc(r.name) + '</span>';
+    }).join('');
+    if (!chosen.length) { cal.innerHTML = ''; return; }
+
+    var S0 = 9 * 60 + 15, S1 = 18 * 60 + 15, H_ = S1 - S0;
+    var PX = 0.9;
+    var cols = [];
+    for (var d = 0; d < 5; d++) {
+      var items = [];
+      chosen.forEach(function (r, ri) {
+        r.rows.forEach(function (x) {
+          if (x.day !== d) return;
+          if (week && !(x.weeks & (1 << (week - 1)))) return;
+          items.push({ x: x, hue: HUES[ri % HUES.length], room: r.name });
+        });
+      });
+      items.sort(function (a, b) { return a.x.start - b.x.start; });
+      // Lanes, so two bookings in the same hour sit beside each other.
+      var lanes = [];
+      items.forEach(function (it) {
+        var k = 0;
+        while (lanes[k] != null && lanes[k] > it.x.start) k++;
+        lanes[k] = it.x.start + it.x.dur;
+        it.lane = k;
+      });
+      // Four abreast is the most that stays readable. A studio running seven
+      // groups at once is real, and saying "and 3 more" is better than seven
+      // slivers with two letters each.
+      var MAX_LANES = 4;
+      var nLanes = Math.max(1, Math.min(lanes.length, MAX_LANES));
+      var hidden = items.filter(function (it) { return it.lane >= MAX_LANES; }).length;
+      var blocks = items.filter(function (it) { return it.lane < MAX_LANES; }).map(function (it) {
+        var top = (it.x.start - S0) * PX;
+        var h = Math.max(16, it.x.dur * PX - 2);
+        var w = 100 / nLanes;
+        return '<div class="cal-block" style="top:' + top + 'px;height:' + h + 'px;left:' +
+          (it.lane * w) + '%;width:calc(' + w + '% - 3px);' +
+          'background:hsl(' + it.hue + ' 70% 94%);border-left:3px solid hsl(' + it.hue + ' 70% 55%)"' +
+          ' title="' + esc(it.room + ' · ' + (it.x.module || it.x.activity) + ' ' + it.x.activity +
+            ' · weeks ' + it.x.weeksText) + '">' +
+          '<strong>' + esc(it.x.module || it.x.activity) + '</strong> ' +
+          '<span class="muted">' + fmt(it.x.start) + '</span></div>';
+      }).join('');
+      cols.push('<div class="cal-day"><div class="cal-head">' + DAYS[d] +
+        (hidden ? ' <span class="muted">+' + hidden + '</span>' : '') + '</div>' +
+        '<div class="cal-body" style="height:' + (H_ * PX) + 'px">' + blocks + '</div></div>');
+    }
+    var hours = '';
+    for (var m = S0; m < S1; m += 60) {
+      hours += '<div class="cal-hour" style="top:' + ((m - S0) * PX) + 'px">' + fmt(m) + '</div>';
+    }
+    cal.innerHTML = '<div class="cal"><div class="cal-times"><div class="cal-head"></div>' +
+      '<div class="cal-body" style="height:' + (H_ * PX) + 'px">' + hours + '</div></div>' +
+      cols.join('') + '</div>';
+  }
+
+  function buildWeeks() {
+    var wrap = document.getElementById('f-weeks');
+    var out = [];
+    for (var w = 1; w <= 16; w++) {
+      out.push('<button class="chip" data-w="' + w + '" aria-pressed="false">' + w + '</button>');
+    }
+    wrap.innerHTML = out.join('');
+    wrap.onclick = function (e) {
+      var b = e.target.closest('.chip');
+      if (!b) return;
+      var w = Number(b.dataset.w);
+      week = (week === w) ? null : w;
+      wrap.querySelectorAll('.chip').forEach(function (x) {
+        x.setAttribute('aria-pressed', String(Number(x.dataset.w) === week));
+      });
+      render();
+    };
+    document.getElementById('weeks-all').onclick = function () {
+      week = null;
+      wrap.querySelectorAll('.chip').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+      render();
+    };
+  }
+
+  document.getElementById('clear-rooms').onclick = function () { picked = []; render(); };
 
   document.getElementById('q').addEventListener('input', render);
   document.getElementById('term').addEventListener('change', function (e) {
     term = e.target.value;
-    open = null;
-    document.getElementById('detail').hidden = true;
     render();
   });
   document.getElementById('f-type').addEventListener('click', function (e) {
@@ -242,6 +332,7 @@
       if (!h.terms[o.value]) o.remove();
     });
     term = sel.value;
+    buildWeeks();
     render();
   }).catch(function (e) {
     document.getElementById('count').textContent = e.message;
