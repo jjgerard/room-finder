@@ -115,7 +115,7 @@
   // timetables are the evidence for it. Opening on Autumn asked a visitor to
   // work out for themselves what they were looking at.
   var TABS = ['method', 'autumn', 'springNow', 'springNew'];
-  var TERM_TABS = ['autumn', 'springNow', 'springNew'];
+  var TERM_TABS = ['autumn', 'springNow', 'springNew', 'autumnNew'];
 
   var H = null, tab = 'method', view = 'grid';
   var state = { progs: new Set(), modules: new Set(), rooms: new Set(), weeks: null, days: new Set(), changed: false, split: false };
@@ -746,12 +746,14 @@
       item.onclick = function () { close(); selectTab(k); };
       menu.appendChild(item);
     });
-    // Autumn rebuilt is not built yet; saying so is better than leaving a gap
-    // where a visitor has to guess whether it is missing or coming.
-    var soon = document.createElement('div');
-    soon.className = 'drop-item soon';
-    soon.innerHTML = 'Autumn 2026<span class="sub">rebuilt \u2014 in progress</span>';
-    menu.appendChild(soon);
+    // Only while a term has not been rebuilt: a gap would leave a visitor
+    // guessing whether it is missing or coming.
+    if (!H.terms.autumnNew) {
+      var soon = document.createElement('div');
+      soon.className = 'drop-item soon';
+      soon.innerHTML = 'Autumn 2026<span class="sub">rebuilt \u2014 in progress</span>';
+      menu.appendChild(soon);
+    }
 
     function open() {
       wrap.classList.add('open');

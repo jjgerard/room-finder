@@ -73,6 +73,32 @@ const autumnRows = terms.autumn.rows.map(r =>
 const springNowRows = terms.springCurrent.rows.map(r =>
   displayRow(r, modProgs.get(r[0]) || []));
 
+// Autumn rebuilt, when a solution for it exists. Display only, like autumn as
+// it stands: the checkable model the browser carries is the spring one, and
+// shipping a second whole model would double the download for a tab that only
+// needs to be read.
+let autumnNewRows = null, autumnNewUnresolved = 0;
+const autumnSolPath = path.join(DATA, 'solution-autumn.json');
+if (fs.existsSync(autumnSolPath)) {
+  const autumnSol = JSON.parse(fs.readFileSync(autumnSolPath, 'utf8'));
+  const autumnModel = load(null, { clashes: autumnSol.meta.clashMode || 'all', term: 'autumn' });
+  const placed = new Map(autumnSol.rows.map(r => [r.id, r]));
+  autumnNewRows = autumnModel.classes.map(c => {
+    const a = placed.get(c.id);
+    const progs = c.programmes.length
+      ? c.programmes.map(x => progId(x))
+      : (modProgs.get(c.module) || []);
+    return displayRow(
+      [c.module, c.activity, c.title,
+        a ? a.day : c.origDay, a ? a.start : c.origStart, c.dur,
+        a ? a.room : c.origRoom, c.nWeeks, c.weeksText],
+      progs, a ? a.changed : '');
+  });
+  autumnNewUnresolved = autumnSol.meta.hardViolations || 0;
+  console.log(`  autumn rebuilt: ${autumnNewRows.length} rows, ` +
+              `${autumnSol.meta.hardViolations} hard violations`);
+}
+
 // The rebuilt term comes from the solver, so its programmes are per class.
 const springNewRows = model.classes.map(c => {
   const s = solved.get(c.id);
@@ -128,6 +154,16 @@ const packed = {
   groups: model.linkedGroups.map(g => [g.key, ...g.members.map(m => m.id)]),
   comps: components.map(c => c.members.map(m => [m.cls.id, m.off])),
 };
+
+if (autumnNewRows) {
+  // Say so while it is not clean. The tab is display-only, so a visitor has no
+  // way to check it for themselves the way the spring rebuild can be checked.
+  const left = autumnNewUnresolved;
+  packed.terms.autumnNew = {
+    label: 'Autumn 2026', checkable: 0, rows: autumnNewRows,
+    sub: left ? 'rebuilt \u2014 ' + left + ' unresolved' : 'rebuilt',
+  };
+}
 
 function flat(pairs) {
   const out = new Array(pairs.length * 2);

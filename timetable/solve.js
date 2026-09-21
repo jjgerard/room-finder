@@ -139,9 +139,12 @@ if (OUT) {
       changed: flags,
     };
   });
-  fs.writeFileSync(path.join(dir, 'solution.json'), JSON.stringify({
+  // One file per term, so solving autumn does not overwrite the spring
+  // solution the site is built from.
+  const solFile = TERM === 'spring' ? 'solution.json' : `solution-${TERM}.json`;
+  fs.writeFileSync(path.join(dir, solFile), JSON.stringify({
     meta: {
-      campus: 'Belfast', term: 'Spring 2026', generated: new Date().toISOString().slice(0, 10),
+      campus: 'Belfast', term: TERM === 'autumn' ? 'Autumn 2026' : 'Spring 2026', generated: new Date().toISOString().slice(0, 10),
       seed: best.seed, hardViolations: chk.total,
       // Which clash graph this was solved against. The site must check the
       // result with the same rules, or it reports violations the solver was
@@ -158,7 +161,7 @@ if (OUT) {
     rooms: model.rooms.map(r => ({ id: r.id, name: r.name, type: r.type, capacity: r.capacity })),
     rows,
   }));
-  console.log(`\nwrote ${path.join(dir, 'solution.json')}`);
+  console.log(`\nwrote ${path.join(dir, solFile)}`);
 
   // solution.json and docs/data/timetable.json are a pair: the second is
   // built from the first and from the model. Writing one without the other

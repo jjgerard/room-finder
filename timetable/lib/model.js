@@ -584,6 +584,33 @@ function load(dir, opts) {
     return null;
   };
 
+  // The kind of room a class needs is read off the kind it sits in today,
+  // which is right until it is not: CMM350's seminar meets in a Central
+  // Computing Lab and so is offered only the seven computer rooms, when it
+  // wants an ordinary seminar room and the lab could go back to the classes
+  // that need one. This file overrides the inference, by module and
+  // optionally by activity.
+  const typeOverrides = [];
+  try {
+    for (const row of rd('room_types.csv')) {
+      if (!row.module || !row.type) continue;
+      typeOverrides.push({
+        module: row.module.trim(),
+        activity: String(row.activity || '').trim(),
+        type: row.type.trim(),
+      });
+    }
+  } catch (e) { /* no overrides */ }
+  for (const c of classes) {
+    for (const o of typeOverrides) {
+      if (o.module !== c.module) continue;
+      if (o.activity && o.activity !== c.activity) continue;
+      c.roomType = o.type;
+      c.roomTypeOverridden = true;
+      break;
+    }
+  }
+
   const openRooms = opts.openRooms === undefined ? ['computer'] : opts.openRooms;
   const rebuild = opts.rebuildCandidates !== false;
   const sourceCand = new Map(classes.map(c => [c.id, c.cand.slice()]));
@@ -599,8 +626,11 @@ function load(dir, opts) {
             ? true
             : !!(subj && roomSubjects.get(room.id) && roomSubjects.get(room.id).has(subj));
         } else if (c.roomType === 'general') {
-          // A lecture is content with a theatre, and with a lab if labs are open.
-          ok = room.type === 'theatre' || openRooms.includes(room.type);
+          // A lecture is content with a theatre, and with a lab if labs are
+          // open — unless it was moved to 'general' on purpose, which says it
+          // wants an ordinary room rather than that it will tolerate one.
+          ok = room.type === 'theatre' ||
+               (!c.roomTypeOverridden && openRooms.includes(room.type));
         } else if (c.roomType === 'theatre') {
           ok = room.type === 'general';
         }
@@ -621,7 +651,13 @@ function load(dir, opts) {
         if (c.size > 0 && !(room.capacityKnown && room.capacity >= needs)) continue;
         allowed.push(room.id);
       }
-      if (c.homeRoom != null && !allowed.includes(c.homeRoom)) allowed.push(c.homeRoom);
+      // Staying put is normally allowed whatever the room, because a class
+      // sitting somewhere unexpected is usually a gap in the data rather than
+      // a mistake. An overridden type is the exception: the point of saying a
+      // seminar does not belong in a computer lab is that it must leave one.
+      if (c.homeRoom != null && !allowed.includes(c.homeRoom) && !c.roomTypeOverridden) {
+        allowed.push(c.homeRoom);
+      }
       const must = requiredRoom(c);
       if (must !== null) { c.cand = [must]; c.roomRequired = must; continue; }
       c.cand = allowed;
