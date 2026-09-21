@@ -67,6 +67,8 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   // Last: put back what did not need to move. Today's timetable proves some
   // arrangement works, and what survives the search is usually a class whose
   // own slot is held by something with no reason to be there.
+  // A component that needs every room it can use has to move as a shelf.
+  s.poolMove(3);
   s.homeSweep(3);
   s.polish(4);
   // Only now, with the search exhausted: a class still short of a room is

@@ -135,6 +135,35 @@ function componentOf(model, components, classId) {
  * different time, then another day. That mirrors what a timetabler would try
  * by hand, and means the first clear option offered is the cheapest one.
  */
+/**
+ * Two free rooms that together seat the class, when no single one is free.
+ *
+ * Judged as a set: a class in two rooms is in neither of them whole, so what
+ * matters is that both are a kind it can use and that the seats add up. No
+ * room worth less than a third of the class, and never more than two — a
+ * cohort in three places is not a fix.
+ */
+function freePair(model, assign, idx, cls, day, start, ignore) {
+  const need = cls.size || 0;
+  if (!need) return null;
+  const pool = cls.candType || cls.cand || [];
+  const free = [];
+  for (const r of pool) {
+    const room = model.rooms[r];
+    if (!room || !room.capacityKnown || room.capacity <= 0) continue;
+    if (room.capacity * 3 < need) continue;
+    if (blockersAt(model, assign, idx, cls, day, start, r, ignore).length) continue;
+    free.push(room);
+  }
+  free.sort((a, b) => b.capacity - a.capacity);
+  for (let i = 0; i < free.length; i++) {
+    for (let j = i + 1; j < free.length; j++) {
+      if (free[i].capacity + free[j].capacity >= need) return [free[i].id, free[j].id];
+    }
+  }
+  return null;
+}
+
 function alternatives(model, components, assign, classId, opts) {
   opts = opts || {};
   const limit = opts.limit == null ? 12 : opts.limit;
@@ -179,10 +208,18 @@ function alternatives(model, components, assign, classId, opts) {
           if (!b.length) { pick = { room: r, blockers: [] }; break; }
           if (!pick || b.length < pick.blockers.length) pick = { room: r, blockers: b };
         }
+        // Nothing single is free: two rooms then, rather than nothing at all.
+        // Keeping the hour matters more to a cohort than keeping one room,
+        // and splitting is what the current timetable does 215 times over.
+        if (pick && pick.blockers.length) {
+          const pair = freePair(model, assign, idx, m.cls, d, memberStart, ids);
+          if (pair) pick = { room: pair[0], extra: pair.slice(1), blockers: [] };
+        }
         if (!pick) pick = { room: held, blockers: [{ rule: 'roomFit', text: 'no room available' }] };
-        placed.push({ id: m.cls.id, room: pick.room, blockers: pick.blockers });
+        placed.push({ id: m.cls.id, room: pick.room, extra: pick.extra, blockers: pick.blockers });
         blockers = blockers.concat(pick.blockers);
         if (pick.room !== m.cls.origRoom) roomChanges++;
+        if (pick.extra) roomChanges += pick.extra.length;
       }
 
       options.push({

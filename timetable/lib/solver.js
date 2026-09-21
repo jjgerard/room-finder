@@ -1412,6 +1412,49 @@ class Solver {
   }
 
   /**
+   * Move a whole shelf of rooms at once.
+   *
+   * A component that needs every room it can use — CMM111's eight lab groups
+   * across the eight comms labs — cannot be repaired a class at a time: there
+   * is no room to move one group into, because its siblings hold them all.
+   * What it needs is an hour where the whole shelf is free, and the ordinary
+   * repair rarely stumbles on one because it is looking at single classes.
+   * This asks the question directly, and only takes an answer that displaces
+   * nobody.
+   */
+  poolMove(rounds) {
+    let moved = 0;
+    for (let r = 0; r < (rounds || 2); r++) {
+      const seen = new Set();
+      let any = 0;
+      for (const id of this.violatingClasses()) {
+        if (!this.tight[id] || !this.roomClashing(id)) continue;
+        const ci = this.compOf[id];
+        if (seen.has(ci)) continue;
+        seen.add(ci);
+        const comp = this.components[ci];
+        if (comp.fixed) continue;
+        const ids = comp.members.map(mm => mm.cls.id);
+        const before = this.costOf(ids);
+        const oldDay = comp.day, oldStart = comp.start;
+        const oldRooms = ids.map(i => this.room[i]);
+        for (const opt of this.placementOptions(comp)) {
+          if (opt.displaced.size) break;          // sorted: none cleaner follows
+          if (opt.day === oldDay && opt.start === oldStart) continue;
+          this.moveComponent(comp, opt.day, opt.start);
+          opt.rooms.forEach((rm, k) => this.setRoom(ids[k], rm));
+          const after = this.costOf(ids);
+          if (after.hard < before.hard) { any++; moved++; break; }
+          this.moveComponent(comp, oldDay, oldStart);
+          ids.forEach((i, k) => this.setRoom(i, oldRooms[k]));
+        }
+      }
+      if (!any) break;
+    }
+    return moved;
+  }
+
+  /**
    * Last resort: give a class two rooms rather than leave it clashing.
    *
    * A class in two rooms is the fault this rebuild exists to remove, so it is

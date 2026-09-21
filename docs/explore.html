@@ -188,8 +188,14 @@
     var moves = o.members.map(function (m) {
       var c = MODEL().byId.get(m.id);
       var nm = modName(c.module);
+      // Two rooms when no single one is free at that hour — said plainly,
+      // because a cohort divided between rooms is a real cost.
+      var where = m.extra && m.extra.length
+        ? [m.room].concat(m.extra).map(roomName).map(esc).join(' <em>+</em> ') +
+          ' <span class="muted">(split, nothing single was free)</span>'
+        : esc(roomName(m.room));
       return '<strong>' + esc(label(c)) + '</strong>' + (nm ? ' ' + esc(nm) : '') +
-             ' → ' + esc(roomName(m.room));
+             ' → ' + where;
     }).join('<br>');
     return '<div class="card pad" style="margin-bottom:10px">' +
       '<div class="row" style="justify-content:space-between">' +
@@ -249,11 +255,13 @@
 
     var comp = document.getElementById('pcomp');
     if (r.component.size > 1) {
-      var names = r.component.ids.map(function (i) {
-        var x = MODEL().byId.get(i);
-        var xn = modName(x.module);
-        return esc(label(x)) + (xn ? ' (' + esc(xn) + ')' : '');
-      }).join(', ');
+      // The others, not this one: the list read as one longer than the count.
+      var names = r.component.ids.filter(function (i) { return i !== selected; })
+        .map(function (i) {
+          var x = MODEL().byId.get(i);
+          var xn = modName(x.module);
+          return esc(label(x)) + (xn ? ' (' + esc(xn) + ')' : '');
+        }).join(', ');
       comp.innerHTML = '<div class="note"><p style="margin:0"><strong>This class cannot move on its own.</strong> ' +
         'It is locked to ' + (r.component.size - 1) + ' other' + (r.component.size > 2 ? 's' : '') +
         ' (' + names + ') which must stay back-to-back with it, so every option below moves all of them together.</p></div>';
