@@ -149,11 +149,18 @@ class Solver {
     for (let i = 0; i < this.occ.length; i++) this.occ[i].length = 0;
     this.progDayCount.fill(0);
     for (const c of this.model.classes) {
-      this.day[c.id] = c.origDay;
+      // Autumn teaches two lectures on a Saturday. The search works over five
+      // days, so starting a class on day 5 writes its occupancy and its
+      // programme's day count outside the week — off the end of the row, into
+      // the next programme's Monday — and every move from there is scored
+      // against nonsense. Both classes sat on Saturday through every seed.
+      // They start the week on Monday instead, and are free to move from there.
+      const day = c.origDay >= 0 && c.origDay < DAY_COUNT ? c.origDay : 0;
+      this.day[c.id] = day;
       this.start[c.id] = c.origStart;
       this.room[c.id] = c.origRoom;
-      this.occ[c.origRoom * DAY_COUNT + c.origDay].push(c.id);
-      for (const p of this.classProgs.get(c.id)) this.progDayCount[p * DAY_COUNT + c.origDay]++;
+      this.occ[c.origRoom * DAY_COUNT + day].push(c.id);
+      for (const p of this.classProgs.get(c.id)) this.progDayCount[p * DAY_COUNT + day]++;
     }
     // Start from today's timetable, but pulled into component geometry: 73 of
     // the 146 linked groups currently run with a gap between lecture and
@@ -161,9 +168,10 @@ class Solver {
     // at its anchor's current slot keeps disruption minimal while making the
     // starting state consistent with the rules the search assumes hold.
     for (const comp of this.components) {
-      comp.day = comp.origDay;
+      const cd = comp.origDay >= 0 && comp.origDay < DAY_COUNT ? comp.origDay : 0;
+      comp.day = cd;
       comp.start = comp.origStart;
-      if (comp.members.length > 1) this.moveComponent(comp, comp.origDay, comp.origStart);
+      if (comp.members.length > 1) this.moveComponent(comp, cd, comp.origStart);
     }
     if (this.opts.start === 'scatter') this.scatter();
     if (this.opts.start === 'greedy') this.construct();
