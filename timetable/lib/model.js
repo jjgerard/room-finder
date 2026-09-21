@@ -106,13 +106,36 @@ function load(dir, opts) {
   const isGroup = title => /\b(gp|grp|group)\s*[0-9a-z]?/i.test(String(title || ''));
   const wholeCohort = r =>
     (r.activity === 'LEC' || r.activity === 'EXM') && !isGroup(r.title);
+  // A module's seminars divide its cohort between them: CMM350 has 60
+  // students and two seminars, so each seminar room seats 30, not 60. The
+  // count is of distinct seminar TITLES, because one group meeting weekly is
+  // many rows under one title while two groups are two titles.
+  // Built on first use: the rows it counts are read further down.
+  let groupsOf = null;
+  const groupCount = r => {
+    if (!groupsOf) {
+      groupsOf = new Map();
+      const titles = new Map();
+      for (const row of classRows) {
+        const key = String(row.module || '').trim() + '|' + String(row.activity || '');
+        if (!titles.has(key)) titles.set(key, new Set());
+        titles.get(key).add(String(row.title || ''));
+      }
+      for (const [key, set] of titles) groupsOf.set(key, set.size);
+    }
+    return groupsOf.get(String(r.module || '').trim() + '|' + String(r.activity || '')) || 1;
+  };
   const sizeFor = r => {
     const proxy = Number(r.size_estimate) || 0;
     const cohort = trueSizes.get(String(r.module || '').trim());
     if (cohort == null) return proxy;
     if (proxy === 0) return 0;                       // unrecorded stays unrecorded
     if (wholeCohort(r)) return cohort;
-    return Math.min(proxy, cohort);
+    // A share of the cohort, and still no more than the room suggests. The
+    // share alone would inflate BMG350's "SEM/GrpD" to all 250, because only
+    // one of its groups appears in the data and dividing by one is dividing
+    // by nothing. Both are ceilings; the smaller wins.
+    return Math.min(proxy, Math.max(1, Math.ceil(cohort / groupCount(r))));
   };
   const sizeConfirmedFor = r => {
     const cohort = trueSizes.get(String(r.module || '').trim());

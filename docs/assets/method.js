@@ -247,7 +247,8 @@
           'autumn rebuild too.</strong> It is shown for reading rather than re-checked here, ' +
           'so this count is the solver\u2019s own.</p></div>'),
       '<p class="small muted">Getting there took corrections rather than a better search, and ',
-      'the corrections came from timetabling: twenty-seven confirmed cohort sizes, two classes ',
+      'the corrections came from timetabling: sixty-two confirmed cohort sizes across the ',
+      'two terms, two classes ',
       'told what kind of room they need, one told to keep the slot it has. Five modules were ',
       'each believed to need all 350 seats of Lecture Theatre 1 because that is the room they ',
       'sit in \u2014 only one of them does. ENH315 needs forty. Every such correction hands a ',
