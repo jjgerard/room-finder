@@ -187,59 +187,74 @@ function alternatives(model, components, assign, classId, opts) {
   };
   current.blockers = current.members.flatMap(m => m.blockers);
 
+  /**
+   * Put the whole component down at one slot and find every member a room.
+   *
+   * Used for the alternatives AND for the slot it already occupies: keeping
+   * the hour and changing only the rooms is the cheapest fix there is, and it
+   * has to be offered for the group at once — a lecture and its two seminars
+   * are not fixed one at a time.
+   */
+  function placeAt(d, s) {
+    const placed = [];
+    let blockers = [];
+    let roomChanges = 0;
+    for (const m of comp.members) {
+      const memberStart = s + m.off;
+      const held = at(m.cls.id).room;
+      const choices = [held, ...m.cls.cand.filter(r => r !== held)];
+      let pick = null;
+      for (const r of choices) {
+        const b = blockersAt(model, assign, idx, m.cls, d, memberStart, r, ids);
+        if (!b.length) { pick = { room: r, blockers: [] }; break; }
+        if (!pick || b.length < pick.blockers.length) pick = { room: r, blockers: b };
+      }
+      // Nothing single is free: two rooms then, rather than nothing at all.
+      // Keeping the hour matters more to a cohort than keeping one room, and
+      // splitting is what the current timetable does 215 times over.
+      if (pick && pick.blockers.length) {
+        const pair = freePair(model, assign, idx, m.cls, d, memberStart, ids);
+        if (pair) pick = { room: pair[0], extra: pair.slice(1), blockers: [] };
+      }
+      if (!pick) pick = { room: held, blockers: [{ rule: 'roomFit', text: 'no room available' }] };
+      placed.push({ id: m.cls.id, room: pick.room, extra: pick.extra, blockers: pick.blockers });
+      blockers = blockers.concat(pick.blockers);
+      if (pick.room !== at(m.cls.id).room) roomChanges++;
+      if (pick.extra) roomChanges += pick.extra.length;
+    }
+    return { members: placed, blockers, clear: blockers.length === 0, roomChanges };
+  }
+
   const options = [];
   for (let d = 0; d < DAY_COUNT; d++) {
     for (const s of starts) {
       if (d === curDay && s === curStart) continue;
       if (comp.span > DAY_WIDTH ? s !== DAY_START : s + comp.span > DAY_END) continue;
-
-      // For each member pick the least-blocked room, preferring the one it
-      // already holds so an otherwise fine move is not reported as a room change.
-      const placed = [];
-      let blockers = [];
-      let roomChanges = 0;
-      for (const m of comp.members) {
-        const memberStart = s + m.off;
-        const held = at(m.cls.id).room;
-        const choices = [held, ...m.cls.cand.filter(r => r !== held)];
-        let pick = null;
-        for (const r of choices) {
-          const b = blockersAt(model, assign, idx, m.cls, d, memberStart, r, ids);
-          if (!b.length) { pick = { room: r, blockers: [] }; break; }
-          if (!pick || b.length < pick.blockers.length) pick = { room: r, blockers: b };
-        }
-        // Nothing single is free: two rooms then, rather than nothing at all.
-        // Keeping the hour matters more to a cohort than keeping one room,
-        // and splitting is what the current timetable does 215 times over.
-        if (pick && pick.blockers.length) {
-          const pair = freePair(model, assign, idx, m.cls, d, memberStart, ids);
-          if (pair) pick = { room: pair[0], extra: pair.slice(1), blockers: [] };
-        }
-        if (!pick) pick = { room: held, blockers: [{ rule: 'roomFit', text: 'no room available' }] };
-        placed.push({ id: m.cls.id, room: pick.room, extra: pick.extra, blockers: pick.blockers });
-        blockers = blockers.concat(pick.blockers);
-        if (pick.room !== m.cls.origRoom) roomChanges++;
-        if (pick.extra) roomChanges += pick.extra.length;
-      }
-
+      const got = placeAt(d, s);
       options.push({
         day: d, start: s,
-        kind: d === curDay && s === curStart ? 'room' : d === curDay ? 'time' : 'day',
-        members: placed,
-        blockers,
-        clear: blockers.length === 0,
-        roomChanges,
+        kind: d === curDay ? 'time' : 'day',
+        members: got.members,
+        blockers: got.blockers,
+        clear: got.clear,
+        roomChanges: got.roomChanges,
         // Smaller is less disruptive: a different day costs most, then a
         // different time, then a different room.
         disturbance: (d === anchor.origDay ? 0 : 100) +
                      Math.abs(s - anchor.origStart) / 60 +
-                     roomChanges,
+                     got.roomChanges,
       });
     }
   }
 
-  // A room-only change at the current slot is the cheapest fix of all, so it is
-  // generated separately rather than being excluded with the current placement.
+  // The same hour, different rooms — the fix that costs the cohort nothing.
+  const sameSlotPlan = placeAt(curDay, curStart);
+  const sameSlot = sameSlotPlan.clear && sameSlotPlan.roomChanges
+    ? { day: curDay, start: curStart, kind: 'room', members: sameSlotPlan.members,
+        blockers: [], clear: true, roomChanges: sameSlotPlan.roomChanges,
+        disturbance: sameSlotPlan.roomChanges }
+    : null;
+
   const roomOnly = [];
   for (const m of comp.members) {
     const memberStart = curStart + m.off;
@@ -265,6 +280,7 @@ function alternatives(model, components, assign, classId, opts) {
     component: { size: comp.members.length, span: comp.span, ids: [...ids] },
     current,
     roomOnly: roomOnly.slice(0, limit),
+    sameSlot: sameSlot,
     clear: clear.slice(0, limit),
     near: near.slice(0, limit),
     counts: { clear: clear.length, blocked: near.length, roomOnly: roomOnly.length },

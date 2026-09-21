@@ -220,6 +220,42 @@
     return r ? r.name : '?';
   }
 
+  /**
+   * Autumn, built the same way and worth reading beside spring.
+   *
+   * It is display-only: the browser carries the spring model and checks it on
+   * load, and autumn's is fetched only by Fix a clash. So the count here is
+   * the solver's, stated as such, rather than something the page proves.
+   */
+  function autumnSection(H) {
+    var t = H.terms && H.terms.autumnNew;
+    if (!t) return '';
+    var left = Number((t.sub.match(/(\d+) unresolved/) || [])[1] || 0);
+    var rows = (H.terms.autumn || {}).rows || [];
+    return [
+      '<h2>Autumn 2026, the same way</h2>',
+      '<p>The autumn term went through the same pipeline: ' + fmtN(rows.length) + ' room-bookings, ',
+      'the same eight rules, the same search. Judged from its own bookings it breaks 78 of them ',
+      'as it stands \u2014 76 lecture and seminar pairs pulled apart, two sessions outside the ',
+      'week, and no room double-booked.</p>',
+      (left
+        ? '<div class="note warn"><p style="margin:0"><strong>The rebuild leaves ' + left +
+          ' unresolved.</strong> Named on its tab rather than hidden. Autumn is shown for ' +
+          'reading, not checked in your browser the way spring is, so this count is the ' +
+          'solver\u2019s own.</p></div>'
+        : '<div class="note good"><p style="margin:0"><strong>Every hard rule holds in the ' +
+          'autumn rebuild too.</strong> It is shown for reading rather than re-checked here, ' +
+          'so this count is the solver\u2019s own.</p></div>'),
+      '<p class="small muted">Getting there took corrections rather than a better search, and ',
+      'the corrections came from timetabling: twenty-seven confirmed cohort sizes, two classes ',
+      'told what kind of room they need, one told to keep the slot it has. Five modules were ',
+      'each believed to need all 350 seats of Lecture Theatre 1 because that is the room they ',
+      'sit in \u2014 only one of them does. ENH315 needs forty. Every such correction hands a ',
+      'room back to the classes that were queueing for it, and the count fell with each one, ',
+      'from eight to ' + (left ? left : 'none') + '.</p>',
+    ].join('');
+  }
+
   function graphic() {
     // Two algorithms side by side. Plain SVG, themed from the page's own
     // variables, sized by viewBox so it holds up at phone width.
@@ -564,8 +600,9 @@
       '<div class="narrow-inner">',
 
       '<h2 style="margin-top:0">Two ways to build a timetable</h2>',
-      '<p class="lead">Spring 2026 is assembled one booking at a time. This rebuild places the ',
-      'whole term at once and repairs what breaks.</p>',
+      '<p class="lead">Both terms are assembled one booking at a time. These rebuilds place a ',
+      'whole term at once and repair what breaks \u2014 Spring 2026 first, then Autumn 2026 the ',
+      'same way.</p>',
 
       graphic(),
 
@@ -636,6 +673,8 @@
       '<p class="small muted">' + fmtN(mv.untouched) + ' of ' + fmtN(mv.total) + ' classes keep ',
       'their slot. ' + blocks + ' block sessions stay on campus. Gap days in cohorts\u2019 weeks: ' +
       (meta.gapDaysBefore != null ? meta.gapDaysBefore + ' \u2192 ' + meta.gapDays : 'n/a') + '.</p>',
+
+      autumnSection(H),
 
       // ------------------------------------------------ caveats
       '<h2>Before you rely on it</h2>',

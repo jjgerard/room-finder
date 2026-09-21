@@ -167,6 +167,12 @@
       if ((c.title || '').toLowerCase().indexOf(q) >= 0) return true;
       if (modName(c.module).toLowerCase().indexOf(q) >= 0) return true;
       return roomName(a.get(c.id).room).toLowerCase().indexOf(q) >= 0;
+    }).sort(function (x, y) {
+      // Monday first, then by the hour: a room's classes read as the week
+      // runs, not in whatever order the data happens to hold them.
+      var px = a.get(x.id), py = a.get(y.id);
+      return px.day - py.day || px.start - py.start ||
+             String(x.module || '').localeCompare(String(y.module || ''));
     }).slice(0, 40);
 
     if (!hits.length) { out.innerHTML = '<span class="small muted">No class matches that.</span>'; return; }
@@ -270,7 +276,14 @@
     }
 
     var ro = document.getElementById('roomonly');
-    ro.innerHTML = r.roomOnly.length
+    // A group is not fixed one class at a time: if the whole component can
+    // keep this hour by changing rooms, that is the cheapest fix there is and
+    // it goes first.
+    var groupFix = r.sameSlot
+      ? '<p class="small muted">Everything moves together, and the hour does not change.</p>' +
+        renderOption(r.sameSlot, 'clear')
+      : '';
+    ro.innerHTML = groupFix + (r.roomOnly.length
       ? r.roomOnly.map(function (o) {
           var oc = MODEL().byId.get(o.classId);
           return '<div class="card pad" style="margin-bottom:8px">' +
@@ -279,7 +292,9 @@
             'stays at ' + slotLabel(o.day, o.start) + ', moves to <strong>' +
             esc(o.roomName) + '</strong></span><span class="pill ok">clear</span></div></div>';
         }).join('')
-      : '<p class="small muted">No other room is free in this slot. Any fix means moving the time or day.</p>';
+      : (groupFix ? '' :
+         '<p class="small muted">No other room is free in this slot. Any fix means moving ' +
+         'the time or day.</p>'));
 
     document.getElementById('clear').innerHTML = r.clear.length
       ? r.clear.map(function (o) { return renderOption(o, 'clear'); }).join('')

@@ -884,6 +884,27 @@ function load(dir, opts) {
         }
       }
     } catch (e) { /* no booking history; no sharing is granted */ }
+
+    // Sharing granted by hand, for teaching the history does not evidence.
+    // CMM111 runs eight parallel lab groups across the eight comms labs, so a
+    // second CMM111 lab in the same hour wants a ninth room that does not
+    // exist. Timetabling says those groups may share a lab, which is the same
+    // allowance the studios get and could not be read off the bookings,
+    // because today the seven lab sessions are kept at different times.
+    try {
+      for (const row of rd('may_share_room.csv')) {
+        const ma = String(row.module_a || '').trim(), mb = String(row.module_b || '').trim();
+        const aa = String(row.activity_a || '').trim(), ab = String(row.activity_b || '').trim();
+        if (!ma || !mb) continue;
+        const pick = (mod, act) => classes.filter(c =>
+          c.module === mod && (!act || c.activity === act));
+        for (const x of pick(ma, aa)) {
+          for (const y of pick(mb, ab)) {
+            if (x.id !== y.id) mayShareRoom.add(shareKey(x.id, y.id));
+          }
+        }
+      }
+    } catch (e) { /* nothing granted by hand */ }
   }
 
   // Rule 5 is "no NEW same-day pairings" — a pair already sharing a day today
