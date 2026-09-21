@@ -57,6 +57,8 @@
     <div id="results" class="chips" style="margin-top:14px"></div>
   </div>
 
+  <div id="modpanel" hidden></div>
+
   <div id="panel" hidden>
     <div class="card pad" style="margin-bottom:18px">
       <h3 style="margin-top:0" id="ptitle"></h3>
@@ -176,7 +178,22 @@
     }).slice(0, 40);
 
     if (!hits.length) { out.innerHTML = '<span class="small muted">No class matches that.</span>'; return; }
-    out.innerHTML = hits.map(function (c) {
+    // A module first, where the query names one: a fix is often module-wide,
+    // and picking through its classes one at a time hides that.
+    var mods = [];
+    hits.forEach(function (c) {
+      if (!c.module) return;
+      if (c.module.toLowerCase().indexOf(q) < 0 && modName(c.module).toLowerCase().indexOf(q) < 0) return;
+      if (mods.indexOf(c.module) < 0) mods.push(c.module);
+    });
+    var modChips = mods.slice(0, 6).map(function (code) {
+      var n = MODEL().classes.filter(function (c) { return c.module === code; }).length;
+      var nm = modName(code);
+      return '<button class="chip mod" data-mod="' + esc(code) + '">' +
+        '<strong>' + esc(code) + '</strong>' + (nm ? ' <span class="muted">' + esc(nm) + '</span>' : '') +
+        ' · all ' + n + ' classes</button>';
+    }).join('');
+    out.innerHTML = modChips + hits.map(function (c) {
       var p = a.get(c.id);
       var nm = modName(c.module);
       return '<button class="chip" data-id="' + c.id + '" title="' + esc(c.title) + '">' +
@@ -184,7 +201,9 @@
         ' · ' + esc(c.activity) + ' · ' + DAYS[p.day] + ' ' + fmt(p.start) + '</button>';
     }).join('');
     out.querySelectorAll('.chip').forEach(function (b) {
-      b.onclick = function () { select(Number(b.dataset.id)); };
+      b.onclick = b.dataset.mod
+        ? function () { selectModule(b.dataset.mod); }
+        : function () { select(Number(b.dataset.id)); };
     });
   }
 
@@ -219,9 +238,75 @@
       '</div>';
   }
 
+  /**
+   * The whole module at once.
+   *
+   * A module's classes are not independent: a lecture and its seminars move
+   * as one, and where they can go is decided together. Picking them off one
+   * at a time hides which of them actually has to change, so this walks every
+   * group the module has and names the cheapest fix for each.
+   */
+  function selectModule(code) {
+    selected = null;
+    document.getElementById('hint').hidden = true;
+    document.getElementById('panel').hidden = true;
+    var wrap = document.getElementById('modpanel');
+    wrap.hidden = false;
+
+    var a = assign();
+    var mine = MODEL().classes.filter(function (c) { return c.module === code; });
+    // One entry per group that moves together, not per class.
+    var seen = {}, groups = [];
+    mine.forEach(function (c) {
+      var r = S.alternatives(MODEL(), COMPS(), a, c.id, { limit: 4 });
+      var key = r.component.ids.slice().sort().join(',');
+      if (seen[key]) return;
+      seen[key] = true;
+      groups.push(r);
+    });
+
+    var nm = modName(code);
+    var broken = groups.filter(function (r) { return r.current.blockers.length; });
+    var out = ['<div class="card pad" style="margin-bottom:18px">',
+      '<h3 style="margin-top:0">' + esc(code) + (nm ? ' — ' + esc(nm) : '') + '</h3>',
+      '<p class="small muted">' + mine.length + ' classes in ' + groups.length + ' group' +
+      (groups.length === 1 ? '' : 's') + ' that move together. ' +
+      (broken.length
+        ? broken.length + ' of them ' + (broken.length === 1 ? 'breaks' : 'break') +
+          ' a rule where ' + (broken.length === 1 ? 'it sits' : 'they sit') + '.'
+        : 'None of them breaks a rule where it sits.') + '</p></div>'];
+
+    groups.forEach(function (r) {
+      var members = r.component.ids.map(function (i) {
+        var x = MODEL().byId.get(i), p = a.get(i);
+        return '<li><strong>' + esc(label(x)) + '</strong> ' + DAYS[p.day] + ' ' + fmt(p.start) +
+          ' · ' + esc(roomName(p.room)) + '</li>';
+      }).join('');
+      var fix = r.sameSlot
+        ? { o: r.sameSlot, why: 'Keeps the hour, changes only rooms.' }
+        : (r.clear.length ? { o: r.clear[0], why: 'The least disruptive clear slot.' } : null);
+      out.push('<div class="card pad" style="margin-bottom:14px">' +
+        '<div class="row" style="justify-content:space-between">' +
+        '<strong>' + (r.component.ids.length === 1 ? 'On its own' : 'Moves together') + '</strong>' +
+        (r.current.blockers.length
+          ? '<span class="pill no">' + r.current.blockers.length + ' broken</span>'
+          : '<span class="pill ok">holds</span>') + '</div>' +
+        '<ul class="small">' + members + '</ul>' +
+        (r.current.blockers.length
+          ? (fix
+              ? '<p class="small muted">' + fix.why + '</p>' + renderOption(fix.o, 'clear')
+              : '<p class="small muted">No clear alternative for this group \u2014 open a class ' +
+                'in it to see what is in the way.</p>')
+          : '') +
+        '</div>');
+    });
+    wrap.innerHTML = out.join('');
+  }
+
   function select(id) {
     selected = id;
     document.getElementById('hint').hidden = true;
+    document.getElementById('modpanel').hidden = true;
     document.getElementById('panel').hidden = false;
 
     var c = MODEL().byId.get(id);

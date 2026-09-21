@@ -476,6 +476,14 @@ function load(dir, opts) {
         isMultiRoom: false,
         parallelRooms: 1,
         wanders: false,
+        // A sitting runs BESIDE its parent, not after it. Copying the linked
+        // group made every sitting another link in the chain: components.js
+        // starts each member when the previous one ends, so CMM111's eight
+        // parallel lab rooms became eight consecutive hours and TDF102's
+        // component spanned fifty-six. The tie to the parent is examRooms,
+        // which holds them at the same moment.
+        linked: '',
+        order: null,
       }));
     }
     c.roomsNeeded = want;

@@ -185,6 +185,30 @@ if (OUT) {
   }));
   console.log(`\nwrote ${path.join(dir, solFile)}`);
 
+  // Check what was WRITTEN, not what was in memory. The two can differ —
+  // autumn's file once carried a class the run had counted as clean — and a
+  // number nobody can reproduce from the file is worth nothing.
+  {
+    const written = JSON.parse(fs.readFileSync(path.join(dir, solFile), 'utf8'));
+    const back = new Map(written.rows.map(r => [r.id, r]));
+    const reread = new Map(model.classes.map(c => {
+      const r = back.get(c.id);
+      return [c.id, r
+        ? { day: r.day, start: r.start, room: r.room, extra: r.extra }
+        : { day: c.origDay, start: c.origStart, room: c.origRoom }];
+    }));
+    const again = C.check(model, reread, CHECK_OPTS);
+    console.log(`re-read from the file and checked again: ${again.total} violations`);
+    if (again.total !== chk.total) {
+      console.log('   MISMATCH with the run\'s own count of ' + chk.total + ':');
+      for (const v of again.violations.slice(0, 5)) {
+        const c = model.byId.get(v.a);
+        console.log(`   ${v.kind}: ${c.module || c.activity}/${c.activity} ` +
+                    `start ${reread.get(v.a).start} dur ${c.dur}`);
+      }
+    }
+  }
+
   // solution.json and docs/data/timetable.json are a pair: the second is
   // built from the first and from the model. Writing one without the other
   // leaves the published site describing a timetable that no longer exists,

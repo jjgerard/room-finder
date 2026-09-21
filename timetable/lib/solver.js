@@ -435,7 +435,11 @@ class Solver {
     const d = this.day[id], s = this.start[id], du = this.dur[id], w = this.weeks[id], r = this.room[id];
 
     const cls0 = this.model.byId.get(id);
-    if (!cls0.isFixed && (s < HARD_MIN || (!cls0.windowExempt && s + du > HARD_MAX))) v++;
+    // Starting after the day has ended is a violation whatever the exemption:
+    // overflowing the end is a concession to a long session, not a licence to
+    // begin at any hour.
+    if (!cls0.isFixed &&
+        (s < HARD_MIN || s >= HARD_MAX || (!cls0.windowExempt && s + du > HARD_MAX))) v++;
 
     const cls = this.model.byId.get(id);
     if (!(r === cls.origRoom) && !this.candSet.get(id).has(r)) v++;

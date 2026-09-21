@@ -1106,6 +1106,20 @@ test('checker: a placement without its own weeks reserves the whole term', () =>
   assert.ok(r.counts.roomClash > 0, 'two classes in one room went unreported');
 });
 
+test('checker: a class may not begin after the teaching day has ended', () => {
+  // The window rule let a long session overflow the end, and the exemption
+  // removed the end check outright — with nothing left to say a class may not
+  // BEGIN at any hour. Autumn's rebuild parked a practical at 33:15 and called
+  // itself clean, and the checker agreed.
+  const c = model.classes.find(x => !x.isFixed && x.dur <= 120);
+  assert.ok(c, 'no movable short class to test with');
+  const assign = new Map(model.classes.map(x =>
+    [x.id, { day: x.origDay, start: x.origStart, room: x.origRoom, weeks: x.origRoomWeeks }]));
+  assign.set(c.id, { day: 0, start: 33 * 60 + 15, room: c.origRoom });
+  const r = C.check(model, assign, { occupancy: model.currentOccupancy });
+  assert.ok(r.counts.window > 0, 'a class at 33:15 went unreported');
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)

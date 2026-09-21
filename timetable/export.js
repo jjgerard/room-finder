@@ -79,6 +79,7 @@ const springNowRows = terms.springCurrent.rows.map(r =>
 // needs to be read.
 let autumnNewRows = null, autumnNewUnresolved = 0;
 let autumnPack = null;   // the autumn model, written beside the main file
+let autumnScore = null;  // its rule counts, for the About page
 const autumnSolPath = path.join(DATA, 'solution-autumn.json');
 if (fs.existsSync(autumnSolPath)) {
   const autumnSol = JSON.parse(fs.readFileSync(autumnSolPath, 'utf8'));
@@ -101,6 +102,39 @@ if (fs.existsSync(autumnSolPath)) {
   // nothing else does, so the pages that only show a timetable should not pay
   // for it on load.
   const autumnComps = build(autumnModel).components;
+  // Autumn's own scorecard. AFTER build(), which marks the components too
+  // wide for a teaching day: a chain longer than the day may overflow its
+  // end, and scoring before that flag is set reports those as violations
+  // the solver never saw. Computed here because the browser is never given
+  // autumn's model: the numbers on the About page would otherwise be spring's
+  // with an autumn label.
+  {
+    const C = require('./lib/constraints');
+    const opts = { dayStart: C.DAY_START, dayEnd: C.DAY_END };
+    const baseline = new Map(autumnModel.classes.map(c =>
+      [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom, weeks: c.origRoomWeeks }]));
+    const solvedAssign = new Map(autumnModel.classes.map(c => {
+      const a = placed.get(c.id);
+      return [c.id, { day: a ? a.day : c.origDay, start: a ? a.start : c.origStart,
+                      room: a ? a.room : c.origRoom, extra: a && a.extra }];
+    }));
+    autumnScore = {
+      now: C.check(autumnModel, baseline,
+        Object.assign({ occupancy: autumnModel.currentOccupancy }, opts)).counts,
+      fixed: C.check(autumnModel, solvedAssign, opts).counts,
+      classes: autumnModel.classes.length,
+      groups: autumnModel.linkedGroups.length,
+      // Sessions that finish after 17:15 because their linked chain is longer
+      // than the teaching day. The rule excuses them; the page should still
+      // say how many there are.
+      overflow: autumnModel.classes.filter(c => {
+        const a = solvedAssign.get(c.id);
+        return a && !c.isFixed && a.start + c.dur > C.DAY_END;
+      }).length,
+    };
+  }
+
+
   autumnPack = {
     meta: autumnSol.meta,
     classes: packClasses(autumnModel, placed, c => c.programmes.map(x => progId(x))),
@@ -178,6 +212,7 @@ if (autumnNewRows) {
   packed.terms.autumnNew = {
     label: 'Autumn 2026', checkable: 0, rows: autumnNewRows,
     sub: left ? 'rebuilt \u2014 ' + left + ' unresolved' : 'rebuilt',
+    score: autumnScore,
   };
 }
 

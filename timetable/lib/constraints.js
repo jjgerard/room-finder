@@ -88,8 +88,13 @@ function check(model, assign, opts) {
     var tooLongToFit = c.windowExempt || c.dur > DAY_WIDTH;
     // Pinned bookings are not ours to move, so the window is not held against
     // them — several institutional reservations run to 21:15 by design.
+    // A class must START inside the teaching day, always. Letting a long
+    // session overflow the end is one thing; the exemption used to remove the
+    // end check outright, with nothing left to say a class may not begin after
+    // the day is over. Autumn's rebuild parked a TDF102 practical at 33:15 and
+    // called itself clean.
     if (!c.isFixed &&
-        (p.day < 0 || p.day > 4 || p.start < dayStart ||
+        (p.day < 0 || p.day > 4 || p.start < dayStart || p.start >= dayEnd ||
         (!tooLongToFit && p.start + c.dur > dayEnd))) {
       add('window', { a: c.id, start: p.start, day: p.day, tooLong: !!tooLongToFit });
     }
