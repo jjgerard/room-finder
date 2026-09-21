@@ -442,9 +442,7 @@
     var ruleTiles = brokenNow.map(function (k) {
       return tile(fmtN(now.counts[k]), TILE_LABELS[k],
                   'rebuilt: ' + fmtN(fixed.counts[k] || 0), 'warn');
-    }).join('') +
-      tile(fmtN(TODAY.splitBookings), 'One class spread across several rooms',
-           'rebuilt: 0', 'warn');
+    }).join('');
 
     var riskRows = risky.map(function (x) {
       var name = (model.modTitles || {})[x.code] || '';
@@ -466,19 +464,18 @@
       '<p class="small muted">The large number is how often the timetable as it stands breaks ',
       'that rule, counted from the bookings themselves; underneath it, the same count in the ',
       'rebuild. The other ' + (RULE_ORDER.length - brokenNow.length) + ' hard rules already hold ',
-      'today and still do in the rebuild. Beside them is the thing no rule forbids and the ',
-      'rebuild removes anyway: one class spread over several rooms.</p>',
+      'today and still do in the rebuild.</p>',
       '<div class="stats">',
       ruleTiles,
       '</div>',
-      '<p class="small muted">The worst split booking uses ' + TODAY.maxRooms + ' rooms, and ',
-      'splitting is what creates ' + fmtN(TODAY.splitExtra) + ' of the term\u2019s ' +
-      fmtN(TODAY.roomBookings) + ' room-bookings; in the rebuild a class holds one room, so they ',
-      'return to the pool. The room rule itself already holds today: ' + TODAY.sharedRoomPairs +
+      '<p class="small muted">The room rule itself already holds today: ' + TODAY.sharedRoomPairs +
       ' pairs of bookings do hold one room at the same time, and every one of them is shared ',
       'teaching \u2014 architecture and art studios, the hospitality kitchen, a joint sports ',
-      'physiology lab \u2014 which the rebuild keeps. All ' + b2b + ' of ' + groups + ' ',
-      'lecture+seminar pairs run back-to-back.</p>',
+      'physiology lab \u2014 which the rebuild keeps. What the term does have is splitting: ' +
+      fmtN(TODAY.splitBookings) + ' of ' + fmtN(TODAY.bookings) + ' bookings use more than one ',
+      'room, one of them ' + TODAY.maxRooms + ', which is ' + fmtN(TODAY.splitExtra) + ' of the ',
+      'term\u2019s ' + fmtN(TODAY.roomBookings) + ' room-bookings. All ' + b2b + ' of ' + groups +
+      ' lecture+seminar pairs run back-to-back.</p>',
 
       // ------------------------------------------------ why it always clashes
       '<h2>The current method will always clash</h2>',
@@ -541,6 +538,14 @@
       '<div class="note warn"><p style="margin:0"><strong>Most class sizes are room capacities, ',
       'not headcounts.</strong> Where timetabling has confirmed a real number it is used exactly; ',
       'everywhere else the room a class sits in stands in for its cohort, give or take 12%.</p></div>',
+      '<div class="note warn"><p style="margin:0"><strong>A split class is modelled as one ',
+      'class.</strong> Where a booking holds several rooms at once, its size is taken from the ',
+      'largest of them, not their total, and the rebuild gives it a single room. That is right ',
+      'where the split was for want of one big enough room, and wrong where one title covers ',
+      'parallel groups: MEC114\u2019s tutorial occupies eight rooms today and is modelled as 50 ',
+      'people. Set the studios, exams and institutional bookings aside and 38 ordinary teaching ',
+      'bookings are split; only one of them lands in a room as big as the rooms it uses now. ',
+      'Until each is read as either one class or several, treat their rooms as unsettled.</p></div>',
       '<div class="note"><p style="margin:0"><strong>Exams and evenings are different.</strong> ',
       'A multi-room exam keeps its several rooms. Anything taught after 17:15 stays there \u2014 ',
       'nineteen modules are evening-only, nearly all part-time. One-off bookings are excluded.</p></div>',
