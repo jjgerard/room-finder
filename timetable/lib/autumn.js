@@ -57,7 +57,11 @@ function bookingsFrom(rows) {
       if (seen & m) { disjoint = false; break; }
       seen |= m;
     }
-    if (disjoint) { out.set(key, group); continue; }
+    if (disjoint) {
+      group.merged = group.length > 1;
+      out.set(key, group);
+      continue;
+    }
     // Parallel teaching: keep the original split, one entry per week pattern.
     const byWeeks = new Map();
     for (const r of group) {
@@ -68,6 +72,13 @@ function bookingsFrom(rows) {
     for (const [k, list] of byWeeks) out.set(k, list);
   }
   return out;
+}
+
+/** How many weeks a pattern covers. */
+function countWeeks(pattern) {
+  let n = 0, m = weekMask(pattern);
+  while (m) { n += m & 1; m >>>= 1; }
+  return n;
 }
 
 /** "1-3" and "5" over a group of rows, as the pattern text they share. */
@@ -104,7 +115,16 @@ function autumnRows(terms, rooms) {
     // large rooms and invented five thousand clashes that are not in the
     // timetable at all.
     const used = [...new Set(group.map(r => r[6]))];
-    const dominant = rooms[first[6]];
+    // For a class that changed room mid-term, its home is the room it spends
+    // most of the term in, not the first row listed: CMM350's lecture is in
+    // the MAC computing lab for two weeks of twelve, and taking that row made
+    // the whole lecture a computing class. Parallel teaching still takes the
+    // first room listed — choosing the biggest there funnelled hundreds of
+    // bookings into the same few large rooms.
+    const home = group.merged
+      ? group.reduce((a, b) => (countWeeks(b[8]) > countWeeks(a[8]) ? b : a), group[0])
+      : first;
+    const dominant = rooms[home[6]];
     if (!dominant) continue;
 
     const entry = mod[first[0]] || null;

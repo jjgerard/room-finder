@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room needs · Belfast Timetable</title>
+<meta name="description" content="Say what kind of room each class needs, and take away the file the solver reads.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="appbar">
+  <span class="mark" aria-hidden="true"></span>
+  <h1>Belfast Timetable</h1>
+  <nav>
+    <a href="index.html">About</a>
+    <span class="bar-menu" id="nav-terms">
+      <button class="bar-link" id="nav-terms-btn" aria-haspopup="true" aria-expanded="false">Timetables</button>
+      <div class="bar-drop" role="menu">
+        <a class="drop-item" role="menuitem" href="index.html?t=autumn">Autumn 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNow">Spring 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNew">Spring 2026<span class="sub">rebuilt</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=autumnNew">Autumn 2026<span class="sub">rebuilt</span></a>
+      </div>
+    </span>
+    <a href="explore.html">Fix a clash</a>
+    <a href="rooms.html" aria-current="page">Room needs</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <h2 class="term-title">Room needs<span>what kind of room each class has to have</span></h2>
+
+  <div class="note">
+    <p style="margin:0 0 8px"><strong>The rebuild guesses from today.</strong> A class that meets
+    in a computer lab is taken to need one, which is right until it is not: CMM350's seminars meet
+    in a Central Computing Lab and only want an ordinary room, and CMM378's lecture wants tables
+    that push together rather than machines. Say so here and the guess is overruled.</p>
+    <p style="margin:0" class="small muted">Nothing is saved to the university's systems. Your
+    answers stay in this browser until you download the file below and put it in the repository at
+    <code>timetable/data/room_types.csv</code>.</p>
+  </div>
+
+  <div class="card pad" style="margin:16px 0">
+    <div class="grid2">
+      <div>
+        <label class="fld" for="q">Find a class</label>
+        <div class="box"><input id="q" type="search" placeholder="Module code, title or room…" autocomplete="off"></div>
+      </div>
+      <div>
+        <label class="fld" for="f-term">Timetable</label>
+        <div class="box"><select id="f-term">
+          <option value="all">Both terms</option>
+          <option value="autumn">Autumn 2026</option>
+          <option value="springNow">Spring 2026</option>
+        </select></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div class="chips" id="f-kind" role="group" aria-label="Show">
+        <button class="chip" data-k="all" aria-pressed="true">All</button>
+        <button class="chip" data-k="computer" aria-pressed="false">In a computer room today</button>
+        <button class="chip" data-k="specialist" aria-pressed="false">In a specialist room today</button>
+        <button class="chip" data-k="set" aria-pressed="false">Answered</button>
+      </div>
+      <button id="clear" style="margin-left:auto">Clear my answers</button>
+    </div>
+  </div>
+
+  <p class="small" id="summary" style="min-height:20px"></p>
+
+  <div class="card" style="overflow:hidden">
+    <div class="scroll"><table id="tbl">
+      <thead><tr>
+        <th>Class</th><th>Where it meets today</th><th>Needs</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+  <p class="small muted" id="more"></p>
+
+  <h3>The file</h3>
+  <p class="small muted">This is <code>timetable/data/room_types.csv</code>. Download it, or copy it,
+  and the next solve reads it.</p>
+  <div class="row" style="margin-bottom:10px">
+    <button id="dl" class="primary">Download room_types.csv</button>
+    <button id="copy">Copy to clipboard</button>
+    <span class="small muted" id="copied" aria-live="polite"></span>
+  </div>
+  <pre class="card pad mono small" style="overflow-x:auto"><code id="csv"></code></pre>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Room kinds are read from the timetable as it stands; a class sitting somewhere unexpected is
+    usually a gap in the data rather than a mistake, which is why this page exists.
+    Source and solver: <a href="https://github.com/jjgerard/room-finder">jjgerard/room-finder</a>.
+  </div>
+</footer>
+
+<script src="assets/model.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // The kinds a class may be told it needs. 'seminar' is not a room type in
+  // the data: it means an ordinary teaching room with tables that can be
+  // pushed together, so neither a theatre nor a lab will do.
+  var KINDS = [
+    ['', 'as it is today'],
+    ['seminar', 'an ordinary room, group tables'],
+    ['general', 'an ordinary room'],
+    ['computer', 'a computer room'],
+    ['theatre', 'a lecture theatre'],
+    ['specialist', 'a specialist room'],
+  ];
+  var STORE = 'roomTypes.v1';
+  var LIMIT = 200;
+
+  var H = null, groups = [], chosen = {}, kind = 'all';
+  // Why each answer was given, kept so a note already in the file survives a
+  // round trip through this page unless the answer itself changes.
+  var sources = {}, fromFile = {};
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { return {}; }
+  }
+  function save() {
+    try { localStorage.setItem(STORE, JSON.stringify(chosen)); } catch (e) { /* private window */ }
+  }
+
+  /** One row per module and activity — the grain room_types.csv is keyed on. */
+  function build(h) {
+    var by = {};
+    ['autumn', 'springNow'].forEach(function (termKey) {
+      var t = h.terms[termKey];
+      if (!t) return;
+      t.rows.forEach(function (r) {
+        if (!r.module) return;
+        var key = r.module + '|' + r.activity;
+        var g = by[key] || (by[key] = {
+          key: key, module: r.module, activity: r.activity,
+          titles: {}, rooms: {}, types: {}, terms: {}, n: 0,
+        });
+        g.n++;
+        g.titles[r.title] = true;
+        g.terms[termKey] = true;
+        var room = h.model.rooms[r.room];
+        if (room) { g.rooms[room.name] = true; g.types[room.type] = true; }
+      });
+    });
+    return Object.keys(by).map(function (k) { return by[k]; })
+      .sort(function (a, b) {
+        return a.module.localeCompare(b.module) || a.activity.localeCompare(b.activity);
+      });
+  }
+
+  function matches(g) {
+    var q = document.getElementById('q').value.trim().toLowerCase();
+    var term = document.getElementById('f-term').value;
+    if (term !== 'all' && !g.terms[term]) return false;
+    if (kind === 'computer' && !g.types.computer) return false;
+    if (kind === 'specialist' && !g.types.specialist) return false;
+    if (kind === 'set' && !chosen[g.key]) return false;
+    if (!q) return true;
+    if (g.module.toLowerCase().indexOf(q) >= 0) return true;
+    if (Object.keys(g.titles).join(' ').toLowerCase().indexOf(q) >= 0) return true;
+    return Object.keys(g.rooms).join(' ').toLowerCase().indexOf(q) >= 0;
+  }
+
+  function render() {
+    var list = groups.filter(matches);
+    var body = document.querySelector('#tbl tbody');
+    body.innerHTML = list.slice(0, LIMIT).map(function (g) {
+      var rooms = Object.keys(g.rooms);
+      var shown = rooms.slice(0, 2).map(esc).join(', ') +
+        (rooms.length > 2 ? ' <span class="muted">and ' + (rooms.length - 2) + ' more</span>' : '');
+      var opts = KINDS.map(function (k) {
+        return '<option value="' + k[0] + '"' +
+          (chosen[g.key] === k[0] || (!chosen[g.key] && !k[0]) ? ' selected' : '') +
+          '>' + esc(k[1]) + '</option>';
+      }).join('');
+      return '<tr' + (chosen[g.key] ? ' class="set"' : '') + '>' +
+        '<td><strong>' + esc(g.module) + '</strong> · ' + esc(g.activity) +
+        '<br><span class="small muted">' + g.n + ' session' + (g.n === 1 ? '' : 's') + ' · ' +
+        Object.keys(g.terms).map(function (t) {
+          return t === 'autumn' ? 'autumn' : 'spring';
+        }).join(' and ') + '</span></td>' +
+        '<td class="small">' + shown + '<br><span class="muted">' +
+        Object.keys(g.types).map(esc).join(', ') + '</span></td>' +
+        '<td><select data-key="' + esc(g.key) + '">' + opts + '</select></td></tr>';
+    }).join('');
+
+    document.getElementById('more').textContent = list.length > LIMIT
+      ? 'Showing the first ' + LIMIT + ' of ' + list.length + ' — narrow it with the search box.'
+      : '';
+    var set = Object.keys(chosen).length;
+    document.getElementById('summary').textContent =
+      list.length + ' of ' + groups.length + ' classes shown · ' +
+      set + ' answered';
+    writeCsv();
+  }
+
+  function csvText() {
+    var lines = ['module,activity,type,source'];
+    Object.keys(chosen).sort().forEach(function (key) {
+      if (!chosen[key]) return;
+      var parts = key.split('|');
+      var why = (fromFile[key] === chosen[key] && sources[key])
+        ? sources[key]
+        : 'entered on the room needs page';
+      lines.push(parts[0] + ',' + parts[1] + ',' + chosen[key] + ',' + why);
+    });
+    return lines.join('\n') + '\n';
+  }
+  function writeCsv() {
+    document.getElementById('csv').textContent = csvText();
+  }
+
+  document.querySelector('#tbl').addEventListener('change', function (e) {
+    var sel = e.target.closest('select[data-key]');
+    if (!sel) return;
+    var key = sel.dataset.key;
+    if (sel.value) chosen[key] = sel.value; else delete chosen[key];
+    save();
+    render();
+  });
+
+  document.getElementById('q').addEventListener('input', render);
+  document.getElementById('f-term').addEventListener('change', render);
+  document.getElementById('f-kind').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip');
+    if (!b) return;
+    kind = b.dataset.k;
+    document.querySelectorAll('#f-kind .chip').forEach(function (x) {
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    render();
+  });
+  document.getElementById('clear').onclick = function () {
+    chosen = {};
+    save();
+    render();
+  };
+  document.getElementById('dl').onclick = function () {
+    var blob = new Blob([csvText()], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'room_types.csv';
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  };
+  document.getElementById('copy').onclick = function () {
+    var say = document.getElementById('copied');
+    var done = function () {
+      say.textContent = 'copied';
+      setTimeout(function () { say.textContent = ''; }, 2000);
+    };
+    if (navigator.clipboard) navigator.clipboard.writeText(csvText()).then(done, function () {});
+    else done();
+  };
+
+  // The picker, same behaviour as the other pages.
+  (function () {
+    var wrap = document.getElementById('nav-terms');
+    var trigger = document.getElementById('nav-terms-btn');
+    if (!wrap || !trigger) return;
+    var hoverable = function () { return matchMedia('(hover: hover)').matches; };
+    function open() { wrap.classList.add('open'); trigger.setAttribute('aria-expanded', 'true'); }
+    function close() { wrap.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); }
+    wrap.onmouseenter = function () { if (hoverable()) open(); };
+    wrap.onmouseleave = function () { if (hoverable()) close(); };
+    trigger.onclick = function (e) {
+      e.stopPropagation();
+      if (!wrap.classList.contains('open')) open();
+      else if (!hoverable()) close();
+    };
+    document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  })();
+
+  window.TTModel.loadTimetable().then(function (h) {
+    H = h;
+    groups = build(h);
+    // Start from the overrides the solver is using, then let anything already
+    // answered in this browser win: a half-finished edit is not lost by a
+    // republish.
+    (h.roomTypes || []).forEach(function (r) {
+      if (!r[0] || !r[2]) return;
+      var k = r[0] + '|' + (r[1] || '');
+      fromFile[k] = r[2];
+      if (r[3]) sources[k] = r[3];
+    });
+    var mine = load();
+    chosen = Object.assign({}, fromFile, mine);
+    save();
+    render();
+  }).catch(function (err) {
+    document.getElementById('summary').textContent = String(err && err.message || err);
+  });
+})();
+</script>
+
+</body>
+</html>

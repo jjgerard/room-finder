@@ -17,6 +17,7 @@
     <a href="#" id="nav-about">About</a>
     <span class="bar-menu" id="nav-terms"></span>
     <a href="explore.html">Fix a clash</a>
+    <a href="rooms.html">Room needs</a>
   </nav>
 </header>
 
@@ -669,12 +670,23 @@
     if (!v) return;
     if (fixed.total === 0) {
       v.className = 'note good';
-      v.innerHTML = '<p style="margin:0"><strong>Checked just now, in this browser: 0 violations across all ' +
-        H.model.classes.length.toLocaleString() + ' classes.</strong> One room per class (exams aside, ' +
-        'which may fill several), no cohort or lecturer in two places, every lecture and seminar ' +
-        'back-to-back, and no new same-day pairings. ' +
-        mv.untouched.toLocaleString() + ' of ' + mv.total.toLocaleString() +
-        ' classes are exactly where they are today. <a href="#" id="to-method">How it was built</a>.</p>';
+      // The rules, one per line, and the count. A reader wants to know what
+      // was asked of it before they care where the checking happened.
+      v.innerHTML = '<p style="margin:0 0 8px"><strong>0 violations across all ' +
+        H.model.classes.length.toLocaleString() + ' classes.</strong></p>' +
+        '<ul class="rule-list">' +
+        '<li>One room per class \u2014 exams aside, which may fill several</li>' +
+        '<li>No two classes in one room at once</li>' +
+        '<li>No cohort or lecturer in two places at once</li>' +
+        '<li>The right kind of room, big enough</li>' +
+        '<li>Every lecture and seminar back-to-back, in order</li>' +
+        '<li>Exams keep their module\u2019s slot, and stay with the class they follow</li>' +
+        '<li>No new same-day pairing for a cohort</li>' +
+        '<li>Everything inside the teaching day</li>' +
+        '</ul>' +
+        '<p style="margin:8px 0 0">' + mv.untouched.toLocaleString() + ' of ' +
+        mv.total.toLocaleString() + ' classes are exactly where they are today. ' +
+        '<a href="#" id="to-method">How it was built</a>.</p>';
     } else {
       // A handful of named exceptions is a different thing from a broken
       // timetable, so say which ones and let the reader judge.

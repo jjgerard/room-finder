@@ -142,6 +142,20 @@ const packed = {
     ];
   }),
   cand: model.classes.map(c => c.cand),
+  // The room-type overrides as they stand, so the page that edits them starts
+  // from what the solver is actually using rather than from an empty form.
+  roomTypes: (() => {
+    const file = path.join(__dirname, 'data', 'room_types.csv');
+    if (!fs.existsSync(file)) return [];
+    const [head, ...lines] = fs.readFileSync(file, 'utf8').trim().split(/\r?\n/);
+    const cols = head.split(',');
+    return lines.filter(Boolean).map(l => {
+      const v = l.split(',');
+      const row = {};
+      cols.forEach((c, i) => { row[c] = (v[i] || '').trim(); });
+      return [row.module || '', row.activity || '', row.type || '', row.source || ''];
+    });
+  })(),
   // Pairs already sharing a room today, which may keep doing so. Without
   // these the browser counts all 160 of them as double-bookings and reports a
   // timetable as far worse than the checker that produced it found it: the

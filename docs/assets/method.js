@@ -30,6 +30,12 @@
 
   function fmtN(n) { return Number(n).toLocaleString(); }
 
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
   // The hard rules, in one place: the checker's key, a short form for the
   // tiles and the rebuild graphic, and the full sentence for the table. They
   // are listed in the order the checker reports them.
@@ -212,35 +218,6 @@
   function roomLabel(model, id) {
     var r = model.rooms[id];
     return r ? r.name : '?';
-  }
-
-  /** The table of moved-about classes, and what the rebuild does with them. */
-  function wanderSection(model, H) {
-    var list = wanderers(H);
-    if (!list.length) return '';
-    var freed = list.reduce(function (n, x) { return n + x.rooms.length - 1; }, 0);
-    var rows = list.slice(0, 12).map(function (x) {
-      var now = x.rooms.map(function (r) { return roomLabel(model, r); }).join(', ');
-      return '<tr><td><strong>' + x.module + '</strong><br>' +
-        '<span class="small muted">' + x.title + '</span></td>' +
-        '<td>' + x.rooms.length + '<br><span class="small muted">' + now + '</span></td>' +
-        '<td>' + roomLabel(model, x.cls.room) + '</td></tr>';
-    }).join('');
-    return [
-      '<h3>Classes that move from room to room, and the one they end up with</h3>',
-      '<p class="small muted">' + list.length + ' classes are taught in a different room at ',
-      'different points in the term \u2014 not two rooms at once, one room after another. The ',
-      'rebuild gives each a single room for the whole term, which returns ' + freed + ' room-',
-      'bookings to the pool. A class that holds several rooms in the same hour is a different ',
-      'thing and keeps them: MEC114\u2019s tutorial teaches 350 students in seven rooms at once, ',
-      'and the rebuild books seven.</p>',
-      '<div class="scroll"><table><thead><tr><th>Class</th><th>Rooms today</th>',
-      '<th>Room in the rebuild</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
-      list.length > 12
-        ? '<p class="small muted">The other ' + (list.length - 12) + ' are on the rebuilt ' +
-          'timetable; the <em>Split across rooms</em> filter finds them.</p>'
-        : '',
-    ].join('');
   }
 
   function graphic() {
@@ -514,13 +491,45 @@
     // A tile per hard rule: how often today's timetable breaks it, and the
     // same count in the rebuild. Both numbers come from the checker running in
     // this browser, not from anything typed in here.
-    function tile(v, k, sub, cls) {
+    function tile(v, k, sub, cls, list) {
       return '<div class="stat ' + (cls || '') + '">' +
              (sub ? '<div class="t">today</div>' : '') +
              '<div class="v">' + v + '</div>' +
              '<div class="k">' + k + '</div>' +
-             (sub ? '<div class="r">' + sub + '</div>' : '') + '</div>';
+             (sub ? '<div class="r">' + sub + '</div>' : '') +
+             (list ? '<details class="stat-list"><summary>which ones</summary>' + list +
+                     '</details>' : '') +
+             '</div>';
     }
+
+    /** A short list inside a tile: the first dozen, then how many are left. */
+    function few(items) {
+      if (!items.length) return '';
+      var head = items.slice(0, 12).map(function (x) { return '<li>' + x + '</li>'; }).join('');
+      return '<ul>' + head + '</ul>' +
+        (items.length > 12
+          ? '<p class="small muted">and ' + fmtN(items.length - 12) + ' more</p>' : '');
+    }
+
+    function named(id) {
+      var c = model.byId.get(id);
+      if (!c) return '?';
+      return '<strong>' + esc(c.module || c.activity) + '</strong> ' +
+             esc(String(c.title || '').slice(0, 30));
+    }
+
+    // What each tile is counting, class by class.
+    var lists = {};
+    (now.violations || []).forEach(function (v) {
+      if (v.kind !== 'linkedOrder' && v.kind !== 'window') return;
+      (lists[v.kind] || (lists[v.kind] = [])).push(
+        v.kind === 'linkedOrder'
+          ? named(v.a) + ' <span class="muted">and its ' +
+            esc((model.byId.get(v.b) || {}).activity || 'pair') + '</span>'
+          : named(v.a) + ' <span class="muted">' +
+            M.DAYS[(a.current.get(v.a) || {}).day] + ' ' +
+            M.fmt((a.current.get(v.a) || {}).start) + '</span>');
+    });
     // Only the rules today's timetable actually breaks get a tile. The full
     // set is in the rebuild graphic above, so nothing is hidden by leaving the
     // ones that already hold off the row.
@@ -528,8 +537,21 @@
     var brokenNow = RULE_ORDER.filter(function (k) { return now.counts[k]; });
     var ruleTiles = brokenNow.map(function (k) {
       return tile(fmtN(now.counts[k]), TILE_LABELS[k],
-                  'rebuilt: ' + fmtN(fixed.counts[k] || 0), 'warn');
+                  'rebuilt: ' + fmtN(fixed.counts[k] || 0), 'warn', few(lists[k] || []));
     }).join('');
+    // The room fault the rebuild does close. Not a hard rule, and not every
+    // class with several rooms: a class holding several at once is parallel
+    // teaching and keeps them. These are the ones taught in one room and then
+    // another, which the rebuild gives a single room for the whole term.
+    var moved = wanderers(H);
+    if (moved.length) {
+      ruleTiles += tile(fmtN(moved.length), 'One class using several rooms through the term',
+        'rebuilt: 0', 'warn',
+        few(moved.map(function (x) {
+          return '<strong>' + esc(x.module) + '</strong> <span class="muted">' +
+            x.rooms.length + ' rooms \u2192 ' + esc(roomLabel(model, x.cls.room)) + '</span>';
+        })));
+    }
 
     var riskRows = risky.map(function (x) {
       var name = (model.modTitles || {})[x.code] || '';
@@ -555,8 +577,6 @@
       '<div class="stats">',
       ruleTiles,
       '</div>',
-      wanderSection(model, H),
-
       '<p class="small muted">The room rule itself already holds today: ' + TODAY.sharedRoomPairs +
       ' pairs of bookings do hold one room at the same time, and every one of them is shared ',
       'teaching \u2014 architecture and art studios, the hospitality kitchen, a joint sports ',

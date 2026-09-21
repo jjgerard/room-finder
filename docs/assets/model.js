@@ -142,7 +142,11 @@
       };
     });
 
-    return { model: model, components: components, terms: terms };
+    return {
+      model: model, components: components, terms: terms,
+      // The room-type overrides the solver is using, for the page that edits them.
+      roomTypes: packed.roomTypes || [],
+    };
   }
 
   /**
