@@ -330,6 +330,50 @@ function load(dir, opts) {
       // reserving, which is the safe direction.
       c.origRoomWeeks = c.weeks;
     }
+
+    // How many rooms the class holds AT ONCE, which is not how many it uses.
+    // A class that moves from one room to another mid-term uses two and holds
+    // one; MEC114's tutorial holds eight in the same hour, because the 350
+    // students are taught in eight parallel groups under a single booking
+    // title. The first is a split the rebuild can close by giving the class
+    // one room. The second is not: those rooms are the teaching.
+    let par = c.bookedRooms.length ? 1 : 1;
+    for (let w = 0; w < MAX_WEEK; w++) {
+      const inWeek = new Set();
+      for (const b of c.bookedRooms) if (b.weeks & (1 << w)) inWeek.add(b.room);
+      if (inWeek.size > par) par = inWeek.size;
+    }
+    c.parallelRooms = par;
+    c.wanders = par === 1 && new Set(c.bookedRooms.map(b => b.room)).size > 1;
+
+    // A class that moves between rooms has to fit in every one of them, so
+    // the largest is the better proxy for its size. Taking the dominant room
+    // instead sized SOP543 at 12 when it also meets in rooms for 24, and the
+    // rebuild duly offered it the 12. A confirmed cohort still wins, and
+    // still caps this.
+    if (c.wanders) {
+      let widest = 0, widestRoom = null;
+      for (const b of c.bookedRooms) {
+        const r = rooms[b.room];
+        if (r && r.capacityKnown && r.capacity > widest) { widest = r.capacity; widestRoom = b.room; }
+      }
+      if (!c.sizeConfirmed && widest > c.size) {
+        const cohort = trueSizes.get(String(c.module || '').trim());
+        c.size = cohort == null ? widest : Math.min(widest, cohort);
+      }
+      // And its baseline room is that one, not whichever the class file called
+      // dominant. A class with no single room today has no true "where it is";
+      // the widest is the only one of its rooms that holds it all term, and
+      // staying put is always legal, so starting from a room too small left
+      // SOP543 in a room for 12 when it also meets in one for 24.
+      if (widestRoom !== null && widest >= c.size) {
+        c.origRoom = widestRoom;
+        c.homeRoom = widestRoom;
+        c.homeRoomName = rooms[widestRoom].name;
+        c.origRoomWeeks = c.bookedRooms.filter(b => b.room === widestRoom)
+                                       .reduce((m, b) => m | b.weeks, 0) || c.weeks;
+      }
+    }
   }
 
   // An exam is not a normal class: it may legitimately occupy several rooms at
@@ -344,7 +388,12 @@ function load(dir, opts) {
   const shadows = [];
   let nextShadowId = 10000;
   for (const c of classes) {
-    if (c.activity !== 'EXM' || c.nRooms < 2 || c.isFixed) continue;
+    if (c.isFixed) continue;
+    // Exams fall back to the class file's room count, because the booking
+    // history names only one room for some of them (BEN140 books four and
+    // appears once) and an exam's sittings are real either way.
+    const want = Math.max(c.parallelRooms || 1, c.activity === 'EXM' ? c.nRooms : 1);
+    if (want < 2) continue;
     const taken = new Set([c.homeRoom]);
     // The other rooms the exam really used, from the booking history. Taking
     // them from the candidate list instead put sittings in rooms the exam
@@ -353,7 +402,7 @@ function load(dir, opts) {
     // never happened. Candidates are still the fallback where the history
     // does not reach, because a sitting has to be somewhere.
     const booked = (c.bookedRooms || []).map(b => b.room).filter(r => r !== c.homeRoom);
-    for (let k = 1; k < c.nRooms; k++) {
+    for (let k = 1; k < want; k++) {
       let room = booked.find(r => !taken.has(r));
       let weeks = null;
       if (room === undefined) room = c.cand.find(r => !taken.has(r));
@@ -370,11 +419,21 @@ function load(dir, opts) {
         homeRoomName: rooms[room].name,
         origRoom: room,
         origRoomWeeks: weeks == null ? c.weeks : weeks,
+        // Sized by the room it is booked into, capped by the class itself.
+        // Copying the parent's size would say each of MEC114's seven tutorial
+        // rooms holds the same 50 its dominant room does, and the cohort is
+        // 350; taking the room's capacity alone would put BME104's exam at
+        // 158 when timetabling has confirmed the cohort is 100.
+        size: Math.min(c.size,
+          rooms[room] && rooms[room].capacityKnown ? rooms[room].capacity : c.size),
+        sizeConfirmed: false,
         nRooms: 1,
         isMultiRoom: false,
+        parallelRooms: 1,
+        wanders: false,
       }));
     }
-    c.roomsNeeded = c.nRooms;
+    c.roomsNeeded = want;
   }
   classes.push(...shadows);
 

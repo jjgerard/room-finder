@@ -156,6 +156,93 @@
     return parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
   }
 
+  /**
+   * Classes that move between rooms during the term without ever holding two
+   * at once — and the single room the rebuild gives them.
+   *
+   * This is the split the rebuild can actually close. A class that holds
+   * several rooms in the same hour is a different thing: MEC114's tutorial
+   * teaches 350 students in seven rooms at once, and the rebuild keeps all
+   * seven. Mixing the two would count studio teaching and parallel groups as
+   * faults being fixed.
+   */
+  function wanderers(H) {
+    var t = H.terms && H.terms.springNow;
+    if (!t) return [];
+    var slots = {};
+    t.rows.forEach(function (r) {
+      var k = r.title + '|' + r.day + '|' + r.start;
+      (slots[k] || (slots[k] = [])).push(r);
+    });
+    var byTitle = {};
+    H.model.classes.forEach(function (c) {
+      if (!c.shadowOf || c.shadowOf < 0) (byTitle[c.title] || (byTitle[c.title] = [])).push(c);
+    });
+    var out = [];
+    Object.keys(slots).forEach(function (k) {
+      var list = slots[k];
+      var rooms = {};
+      list.forEach(function (r) { rooms[r.room] = true; });
+      var ids = Object.keys(rooms).map(Number);
+      if (ids.length < 2) return;
+      // Never two rooms in the same week, or it is parallel teaching.
+      for (var w = 0; w < 16; w++) {
+        var n = 0;
+        ids.forEach(function (rm) {
+          if (list.some(function (r) { return r.room === rm && (r.weeks & (1 << w)); })) n++;
+        });
+        if (n > 1) return;
+      }
+      var first = list[0];
+      if (!first.module) return;
+      var cands = byTitle[first.title] || [];
+      var cls = null;
+      for (var i = 0; i < cands.length; i++) {
+        if (cands[i].origDay === first.day && cands[i].origStart === first.start) { cls = cands[i]; break; }
+      }
+      if (!cls) cls = cands[0];
+      if (!cls || cls.isFixed) return;
+      out.push({ module: first.module, title: first.title, rooms: ids, cls: cls });
+    });
+    out.sort(function (a, b) { return b.rooms.length - a.rooms.length; });
+    return out;
+  }
+
+  /** "BC-03-102 (66)" without the parenthesised capacity. */
+  function roomLabel(model, id) {
+    var r = model.rooms[id];
+    return r ? r.name : '?';
+  }
+
+  /** The table of moved-about classes, and what the rebuild does with them. */
+  function wanderSection(model, H) {
+    var list = wanderers(H);
+    if (!list.length) return '';
+    var freed = list.reduce(function (n, x) { return n + x.rooms.length - 1; }, 0);
+    var rows = list.slice(0, 12).map(function (x) {
+      var now = x.rooms.map(function (r) { return roomLabel(model, r); }).join(', ');
+      return '<tr><td><strong>' + x.module + '</strong><br>' +
+        '<span class="small muted">' + x.title + '</span></td>' +
+        '<td>' + x.rooms.length + '<br><span class="small muted">' + now + '</span></td>' +
+        '<td>' + roomLabel(model, x.cls.room) + '</td></tr>';
+    }).join('');
+    return [
+      '<h3>Classes that move from room to room, and the one they end up with</h3>',
+      '<p class="small muted">' + list.length + ' classes are taught in a different room at ',
+      'different points in the term \u2014 not two rooms at once, one room after another. The ',
+      'rebuild gives each a single room for the whole term, which returns ' + freed + ' room-',
+      'bookings to the pool. A class that holds several rooms in the same hour is a different ',
+      'thing and keeps them: MEC114\u2019s tutorial teaches 350 students in seven rooms at once, ',
+      'and the rebuild books seven.</p>',
+      '<div class="scroll"><table><thead><tr><th>Class</th><th>Rooms today</th>',
+      '<th>Room in the rebuild</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
+      list.length > 12
+        ? '<p class="small muted">The other ' + (list.length - 12) + ' are on the rebuilt ' +
+          'timetable; the <em>Split across rooms</em> filter finds them.</p>'
+        : '',
+    ].join('');
+  }
+
   function graphic() {
     // Two algorithms side by side. Plain SVG, themed from the page's own
     // variables, sized by viewBox so it holds up at phone width.
@@ -468,6 +555,8 @@
       '<div class="stats">',
       ruleTiles,
       '</div>',
+      wanderSection(model, H),
+
       '<p class="small muted">The room rule itself already holds today: ' + TODAY.sharedRoomPairs +
       ' pairs of bookings do hold one room at the same time, and every one of them is shared ',
       'teaching \u2014 architecture and art studios, the hospitality kitchen, a joint sports ',
@@ -538,14 +627,12 @@
       '<div class="note warn"><p style="margin:0"><strong>Most class sizes are room capacities, ',
       'not headcounts.</strong> Where timetabling has confirmed a real number it is used exactly; ',
       'everywhere else the room a class sits in stands in for its cohort, give or take 12%.</p></div>',
-      '<div class="note warn"><p style="margin:0"><strong>A split class is modelled as one ',
-      'class.</strong> Where a booking holds several rooms at once, its size is taken from the ',
-      'largest of them, not their total, and the rebuild gives it a single room. That is right ',
-      'where the split was for want of one big enough room, and wrong where one title covers ',
-      'parallel groups: MEC114\u2019s tutorial occupies eight rooms today and is modelled as 50 ',
-      'people. Set the studios, exams and institutional bookings aside and 38 ordinary teaching ',
-      'bookings are split; only one of them lands in a room as big as the rooms it uses now. ',
-      'Until each is read as either one class or several, treat their rooms as unsettled.</p></div>',
+      '<div class="note"><p style="margin:0"><strong>Rooms held at once are kept.</strong> ',
+      'A booking that holds several rooms in the same hour is parallel teaching, not a fault: ',
+      'MEC114\u2019s tutorial teaches 350 students in seven rooms and the rebuild books seven, ',
+      'and the fine art studios keep their fourteen. Each of those rooms is sized by its own ',
+      'capacity, so a group is never assumed larger than the room it meets in. What the rebuild ',
+      'removes is a class wandering between rooms across the term.</p></div>',
       '<div class="note"><p style="margin:0"><strong>Exams and evenings are different.</strong> ',
       'A multi-room exam keeps its several rooms. Anything taught after 17:15 stays there \u2014 ',
       'nineteen modules are evening-only, nearly all part-time. One-off bookings are excluded.</p></div>',
