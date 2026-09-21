@@ -78,6 +78,7 @@ const springNowRows = terms.springCurrent.rows.map(r =>
 // shipping a second whole model would double the download for a tab that only
 // needs to be read.
 let autumnNewRows = null, autumnNewUnresolved = 0;
+let autumnPack = null;   // the autumn model, written beside the main file
 const autumnSolPath = path.join(DATA, 'solution-autumn.json');
 if (fs.existsSync(autumnSolPath)) {
   const autumnSol = JSON.parse(fs.readFileSync(autumnSolPath, 'utf8'));
@@ -95,6 +96,23 @@ if (fs.existsSync(autumnSolPath)) {
       progs, a ? a.changed : '');
   });
   autumnNewUnresolved = autumnSol.meta.hardViolations || 0;
+  // The same shape the spring model is packed in, so the browser can hydrate
+  // it with the same code. It goes in its own file: Fix a clash needs it and
+  // nothing else does, so the pages that only show a timetable should not pay
+  // for it on load.
+  const autumnComps = build(autumnModel).components;
+  autumnPack = {
+    meta: autumnSol.meta,
+    classes: packClasses(autumnModel, placed, c => c.programmes.map(x => progId(x))),
+    cand: autumnModel.classes.map(c => c.cand),
+    sharePairs: flat([...autumnModel.mayShareRoom].map(k => k.split(':').map(Number))),
+    timePairs: flat(autumnModel.cannotShareTime),
+    dayPairs: flat(autumnModel.cannotShareDay),
+    adjPairs: flat(autumnModel.preservedAdjacency),
+    slotPairs: flat(autumnModel.preservedSlot),
+    groups: autumnModel.linkedGroups.map(g => [g.key, ...g.members.map(m => m.id)]),
+    comps: autumnComps.map(c => c.members.map(m => [m.cls.id, m.off])),
+  };
   console.log(`  autumn rebuilt: ${autumnNewRows.length} rows, ` +
               `${autumnSol.meta.hardViolations} hard violations`);
 }
@@ -121,28 +139,8 @@ const packed = {
     springNow: { label: 'Spring 2026', sub: 'as it stands', rows: springNowRows, checkable: 0 },
     springNew: { label: 'Spring 2026', sub: 'rebuilt', rows: springNewRows, checkable: 1 },
   },
-  classes: model.classes.map(c => {
-    const s = solved.get(c.id);
-    return [
-      c.id, c.module, c.activity, c.title,
-      c.dur, c.weeks, c.weeksText,
-      c.isTeaching ? 1 : 0, c.isBlock ? 1 : 0, c.isMultiRoom ? 1 : 0, c.nRooms,
-      c.roomType, c.size,
-      c.origDay, c.origStart, c.origRoom,          // where it sits today
-      s ? s.day : c.origDay,                        // where the solver put it
-      s ? s.start : c.origStart,
-      s ? s.room : c.origRoom,
-      s ? s.changed : '',
-      // `attended` drives the soft-goal counts, and is NOT is_teaching: all 66
-      // exams and 136 lectures are flagged non-teaching yet carry a cohort.
-      c.attended ? 1 : 0,
-      c.isShadow ? c.shadowOf : -1,
-      c.isFixed ? 1 : 0,
-      c.programmes.map(p => progId(p)),
-    ];
-  }),
-  cand: model.classes.map(c => c.cand),
-  // The room-type overrides as they stand, so the page that edits them starts
+  classes: packClasses(model, solved, c => c.programmes.map(p => progId(p))),
+  cand: model.classes.map(c => c.cand),  // The room-type overrides as they stand, so the page that edits them starts
   // from what the solver is actually using rather than from an empty form.
   roomTypes: (() => {
     const file = path.join(__dirname, 'data', 'room_types.csv');
@@ -179,6 +177,31 @@ if (autumnNewRows) {
   };
 }
 
+
+/** One term's classes, in the row shape docs/assets/model.js reads. */
+function packClasses(model, solved, progsOf) {
+  return model.classes.map(c => {
+    const s = solved.get(c.id);
+    return [
+      c.id, c.module, c.activity, c.title,
+      c.dur, c.weeks, c.weeksText,
+      c.isTeaching ? 1 : 0, c.isBlock ? 1 : 0, c.isMultiRoom ? 1 : 0, c.nRooms,
+      c.roomType, c.size,
+      c.origDay, c.origStart, c.origRoom,          // where it sits today
+      s ? s.day : c.origDay,                        // where the solver put it
+      s ? s.start : c.origStart,
+      s ? s.room : c.origRoom,
+      s ? s.changed : '',
+      // `attended` drives the soft-goal counts, and is NOT is_teaching: all 66
+      // exams and 136 lectures are flagged non-teaching yet carry a cohort.
+      c.attended ? 1 : 0,
+      c.isShadow ? c.shadowOf : -1,
+      c.isFixed ? 1 : 0,
+      progsOf(c),
+    ];
+  });
+}
+
 function flat(pairs) {
   const out = new Array(pairs.length * 2);
   for (let i = 0; i < pairs.length; i++) { out[2 * i] = pairs[i][0]; out[2 * i + 1] = pairs[i][1]; }
@@ -187,6 +210,14 @@ function flat(pairs) {
 
 fs.mkdirSync(DATA, { recursive: true });
 fs.mkdirSync(ASSETS, { recursive: true });
+if (autumnPack) {
+  const autumnFile = path.join(DATA, 'autumn.json');
+  fs.writeFileSync(autumnFile, JSON.stringify(autumnPack));
+  console.log(`wrote ${path.relative(ROOT, autumnFile)} ` +
+              `(${(fs.statSync(autumnFile).size / 1024).toFixed(0)} KB, ` +
+              `${autumnPack.classes.length} classes)`);
+}
+
 const outFile = path.join(DATA, 'timetable.json');
 fs.writeFileSync(outFile, JSON.stringify(packed));
 console.log(`wrote ${path.relative(ROOT, outFile)} (${(fs.statSync(outFile).size / 1024).toFixed(0)} KB)`);

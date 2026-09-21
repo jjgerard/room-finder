@@ -47,8 +47,10 @@
       <div>
         <label class="fld" for="which">Starting from</label>
         <select id="which">
-          <option value="solved">The rebuilt timetable</option>
-          <option value="current">The current timetable</option>
+          <option value="autumn">Autumn 2026, as it stands</option>
+          <option value="springNow">Spring 2026, as it stands</option>
+          <option value="autumnNew">Autumn 2026, rebuilt</option>
+          <option value="springNew" selected>Spring 2026, rebuilt</option>
         </select>
       </div>
     </div>
@@ -124,25 +126,39 @@
 (function () {
   'use strict';
   var M = window.TTModel, S = window.TTSuggest, DAYS = M.DAYS, fmt = M.fmt;
-  var H = null, which = 'solved', selected = null;
+  // Which timetable the what-if runs against. Autumn's model lives in its own
+  // file and is fetched the first time it is asked for.
+  var TERMS = {
+    autumn:    { file: 'data/autumn.json', solved: false, label: 'Autumn 2026, as it stands' },
+    autumnNew: { file: 'data/autumn.json', solved: true,  label: 'Autumn 2026, rebuilt' },
+    springNow: { file: null,               solved: false, label: 'Spring 2026, as it stands' },
+    springNew: { file: null,               solved: true,  label: 'Spring 2026, rebuilt' },
+  };
+  var H = null, which = 'springNew', term = null, selected = null;
 
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (ch) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
     });
   }
-  function assign() { return which === 'solved' ? H.assign.solved : H.assign.current; }
+  /** The model, components and placement the page is working against. */
+  function MODEL() { return term ? term.model : H.model; }
+  function COMPS() { return term ? term.components : H.components; }
+  function assign() {
+    var a = term ? term.assign : H.assign;
+    return TERMS[which].solved ? a.solved : a.current;
+  }
   // The module's name, not its code — "Drawing in Practice", not "AAD009".
-  function modName(code) { return (H.model.modTitles || {})[code] || ''; }
+  function modName(code) { return (MODEL().modTitles || {})[code] || ''; }
   function label(c) { return (c.module || c.activity) + '/' + c.activity; }
-  function roomName(r) { return H.model.rooms[r] ? H.model.rooms[r].name : 'room ' + r; }
+  function roomName(r) { return MODEL().rooms[r] ? MODEL().rooms[r].name : 'room ' + r; }
 
   function search(q) {
     q = q.trim().toLowerCase();
     var out = document.getElementById('results');
     if (q.length < 2) { out.innerHTML = ''; return; }
     var a = assign();
-    var hits = H.model.classes.filter(function (c) {
+    var hits = MODEL().classes.filter(function (c) {
       if ((c.module || '').toLowerCase().indexOf(q) >= 0) return true;
       if ((c.title || '').toLowerCase().indexOf(q) >= 0) return true;
       if (modName(c.module).toLowerCase().indexOf(q) >= 0) return true;
@@ -166,7 +182,7 @@
 
   function renderOption(o, cls) {
     var moves = o.members.map(function (m) {
-      var c = H.model.byId.get(m.id);
+      var c = MODEL().byId.get(m.id);
       var nm = modName(c.module);
       return '<strong>' + esc(label(c)) + '</strong>' + (nm ? ' ' + esc(nm) : '') +
              ' → ' + esc(roomName(m.room));
@@ -192,10 +208,10 @@
     document.getElementById('hint').hidden = true;
     document.getElementById('panel').hidden = false;
 
-    var c = H.model.byId.get(id);
+    var c = MODEL().byId.get(id);
     var a = assign();
     var p = a.get(id);
-    var room = H.model.rooms[p.room];
+    var room = MODEL().rooms[p.room];
 
     var nm = modName(c.module);
     document.getElementById('ptitle').innerHTML =
@@ -212,7 +228,7 @@
       ' · ' + c.cand.length + ' rooms it could use';
 
     var t0 = performance.now();
-    var r = S.alternatives(H.model, H.components, a, id, { limit: 8 });
+    var r = S.alternatives(MODEL(), COMPS(), a, id, { limit: 8 });
     var ms = Math.round(performance.now() - t0);
 
     var st = document.getElementById('pstatus');
@@ -230,7 +246,7 @@
     var comp = document.getElementById('pcomp');
     if (r.component.size > 1) {
       var names = r.component.ids.map(function (i) {
-        var x = H.model.byId.get(i);
+        var x = MODEL().byId.get(i);
         var xn = modName(x.module);
         return esc(label(x)) + (xn ? ' (' + esc(xn) + ')' : '');
       }).join(', ');
@@ -244,7 +260,7 @@
     var ro = document.getElementById('roomonly');
     ro.innerHTML = r.roomOnly.length
       ? r.roomOnly.map(function (o) {
-          var oc = H.model.byId.get(o.classId);
+          var oc = MODEL().byId.get(o.classId);
           return '<div class="card pad" style="margin-bottom:8px">' +
             '<div class="row" style="justify-content:space-between">' +
             '<span><strong>' + esc(oc.module || oc.activity) + '/' + esc(oc.activity) + '</strong> ' +
@@ -266,15 +282,38 @@
       r.counts.blocked + ' blocked, computed in ' + ms + ' ms</span>';
   }
 
+  /** Move to another timetable, fetching its model if it is not the spring one. */
+  function switchTerm(key) {
+    var hint = document.getElementById('hint');
+    which = key;
+    selected = null;
+    document.getElementById('panel').hidden = true;
+    var q = document.getElementById('q');
+    var spec = TERMS[key];
+    if (!spec.file) {
+      term = null;
+      search(q.value);
+      return;
+    }
+    hint.textContent = 'Loading ' + spec.label + '\u2026';
+    M.loadModel(spec.file, H).then(function (built) {
+      if (which !== key) return;        // the reader moved on while it loaded
+      term = built;
+      hint.textContent = '';
+      search(q.value);
+    }).catch(function (e) {
+      hint.className = 'note warn';
+      hint.textContent = e.message;
+    });
+  }
+
   M.loadTimetable().then(function (h) {
     H = h;
     var q = document.getElementById('q');
     q.oninput = function () { search(q.value); };
-    document.getElementById('which').onchange = function (e) {
-      which = e.target.value;
-      search(q.value);
-      if (selected !== null) select(selected);
-    };
+    var sel = document.getElementById('which');
+    sel.onchange = function () { switchTerm(sel.value); };
+    switchTerm(sel.value);
   }).catch(function (e) {
     document.getElementById('hint').className = 'note warn';
     document.getElementById('hint').textContent = e.message;

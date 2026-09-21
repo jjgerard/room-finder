@@ -64,11 +64,12 @@
     return mask;
   }
 
-  function hydrate(packed) {
-    var rooms = packed.rooms.map(function (r, i) {
-      return { id: i, name: r[0], type: r[1], capacity: r[2], capacityKnown: r[2] > 0 };
-    });
-
+  /**
+   * One term's model and components, from a pack in the shape export.js
+   * writes. The rooms, programme names and module titles are shared between
+   * terms, so they are passed in rather than repeated in every file.
+   */
+  function buildModel(packed, rooms, programmes, modTitles) {
     var classes = packed.classes.map(function (row, i) {
       return {
         id: row[C.id],
@@ -97,8 +98,8 @@
       rooms: rooms,
       classes: classes,
       byId: byId,
-      programmes: packed.programmes,
-      modTitles: packed.modTitles || {},
+      programmes: programmes,
+      modTitles: modTitles || {},
       // Pairs grandfathered to share a room, in the shape constraints.js wants:
       // a Set of "a:b" with the smaller id first.
       mayShareRoom: new Set(unflat(packed.sharePairs || []).map(function (p) {
@@ -125,6 +126,15 @@
       };
     });
 
+    return { model: model, components: components };
+  }
+
+  function hydrate(packed) {
+    var rooms = packed.rooms.map(function (r, i) {
+      return { id: i, name: r[0], type: r[1], capacity: r[2], capacityKnown: r[2] > 0 };
+    });
+    var built = buildModel(packed, rooms, packed.programmes, packed.modTitles);
+
     // Display rows, with the week mask precomputed so drawing does not reparse.
     var terms = {};
     Object.keys(packed.terms).forEach(function (key) {
@@ -143,7 +153,8 @@
     });
 
     return {
-      model: model, components: components, terms: terms,
+      model: built.model, components: built.components, terms: terms,
+      rooms: rooms, programmes: packed.programmes, modTitles: packed.modTitles || {},
       // The room-type overrides the solver is using, for the page that edits them.
       roomTypes: packed.roomTypes || [],
     };
@@ -182,6 +193,25 @@
     return { current: current, solved: solved };
   }
 
+  /**
+   * A second term's model, fetched only when something asks for it. Fix a
+   * clash needs autumn's; the pages that only draw a timetable do not, and
+   * should not pay 845 KB for it on load.
+   */
+  function loadModel(url, h) {
+    if (!h.__models) h.__models = {};
+    if (h.__models[url]) return Promise.resolve(h.__models[url]);
+    h.__models[url] = fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('could not load ' + url + ' (' + r.status + ')');
+      return r.json();
+    }).then(function (pack) {
+      var built = buildModel(pack, h.rooms, h.programmes, h.modTitles);
+      built.assign = assignments(built.model);
+      return built;
+    });
+    return h.__models[url];
+  }
+
   function loadTimetable(url) {
     return fetch(url || 'data/timetable.json').then(function (r) {
       if (!r.ok) throw new Error('could not load the timetable data (' + r.status + ')');
@@ -196,6 +226,7 @@
   window.TTModel = {
     DAYS: DAYS, C: C, R: R, fmt: fmt, weekList: weekList, weekMask: weekMask,
     hydrate: hydrate, assignments: assignments, loadTimetable: loadTimetable,
+    buildModel: buildModel, loadModel: loadModel,
     currentOccupancy: currentOccupancy,
   };
 })();
