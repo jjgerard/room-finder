@@ -376,6 +376,28 @@ function load(dir, opts) {
     }
   }
 
+  // ---- classes told to stay exactly where they are ------------------------
+  //
+  // The pinning rule catches the evening by the clock — anything from 17:15 —
+  // but a class can run past the teaching day without starting after it.
+  // POL310 goes Monday 15:15 to 18:15, immediately after PUP318's lecture,
+  // and the two share four cohorts: stacked end to end they never collide,
+  // and the only way to fit both inside 09:15-17:15 is to move one to another
+  // day. Where that trade has already been made, saying so here keeps it.
+  try {
+    for (const row of rd('keep_slot.csv')) {
+      const mod = String(row.module || '').trim();
+      const act = String(row.activity || '').trim();
+      if (!mod) continue;
+      for (const c of classes) {
+        if (c.module !== mod) continue;
+        if (act && c.activity !== act) continue;
+        c.isFixed = true;
+        c.keptSlot = true;
+      }
+    }
+  } catch (e) { /* nothing pinned by hand */ }
+
   // An exam is not a normal class: it may legitimately occupy several rooms at
   // once, so the one-room-per-class rule does not apply to it. It is modelled as
   // several sub-classes pinned to the same slot, which reuses the component
