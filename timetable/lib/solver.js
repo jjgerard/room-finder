@@ -1555,6 +1555,36 @@ class Solver {
     return null;
   }
 
+  /**
+   * Start from a timetable somebody already has, rather than from today.
+   *
+   * A published solution took a long search to find. When one rule changes —
+   * a class told it needs a particular room — throwing that away and starting
+   * over is wasteful and gives a different timetable for no reason. This
+   * adopts the existing placement and lets the ordinary repair fix only what
+   * the new rule broke.
+   */
+  adopt(placement) {
+    const at = id => (placement.get ? placement.get(id) : placement[id]);
+    for (const comp of this.components) {
+      const anchor = comp.members[0];
+      const p = at(anchor.cls.id);
+      if (!p) continue;
+      const day = p.day, start = p.start - anchor.off;
+      if (day < 0 || day >= DAY_COUNT) continue;
+      this.moveComponent(comp, day, start);
+    }
+    for (const c of this.model.classes) {
+      const p = at(c.id);
+      if (!p) continue;
+      // A room the class may no longer use is dropped here rather than
+      // carried in: the repair will find it another.
+      const room = this.candSet.get(c.id).has(p.room) || p.room === c.origRoom
+        ? p.room : (this.roomChoices(c.id)[0] != null ? this.roomChoices(c.id)[0] : c.origRoom);
+      this.setRoom(c.id, room);
+    }
+  }
+
   assignment() {
     const m = new Map();
     for (const c of this.model.classes) {

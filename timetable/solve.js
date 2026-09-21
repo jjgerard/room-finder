@@ -26,6 +26,11 @@ const OUT = arg('out', '');
 const CLASHES = arg('clashes', 'all');   // all | evidenced | cohort
 const TERM = arg('term', 'spring');      // spring | autumn
 const START = arg('start', 'current');   // current | scatter | mixed
+// Repair a timetable somebody already has instead of searching for a new one.
+// When one rule changes, the published solution is a far better starting point
+// than today's timetable, and it keeps the result recognisable.
+const FROM = arg('from', '');
+let priorRows = null;
 const CHECK_OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
 
 const model = load(null, { clashes: CLASHES, term: TERM });
@@ -54,7 +59,35 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   // 'mixed' alternates: an anchored start wins when it can, because it moves
   // far less, and a scattered one is there for when it cannot.
   const start = START === 'mixed' ? (seed % 2 ? 'current' : 'scatter') : START;
-  const s = new Solver(model, { seed, start, maxIters: 200000, noise: 0.03 });
+  // Repairing a timetable that already works is a different job from finding
+  // one: a long search would wander off the placement it was given and hand
+  // back a different timetable for no reason. Short leash, low noise.
+  const s = new Solver(model, {
+    seed, start, noise: FROM ? 0.01 : 0.03, maxIters: FROM ? 20000 : 200000,
+  });
+  if (FROM) {
+    const prior = JSON.parse(fs.readFileSync(path.resolve(FROM), 'utf8'));
+    const had = new Map(prior.rows.map(r => [r.id, r]));
+    priorRows = had;
+    s.adopt(new Map(model.classes.map(c => {
+      const r = had.get(c.id);
+      return [c.id, r ? { day: r.day, start: r.start, room: r.room }
+                      : { day: c.origDay, start: c.origStart, room: c.origRoom }];
+    })));
+    console.log(`adopted ${prior.rows.length} placements from ${FROM}: ` +
+                `${s.totalHard()} violations to repair`);
+  }
+  if (FROM) {
+    // A repair, not a search. Only the moves that fix a broken placement run:
+    // the ordinary loop would rearrange classes that are already fine, and
+    // polish would move whole components for soft reasons, handing back a
+    // timetable nobody asked for.
+    s.chainSweep();
+    s.intensify(200);
+    s.chainSweep();
+    s.homeSweep(2);
+    if (s.totalHard()) s.splitRepair(3);
+  } else {
   s.run();
   // The endgame: what is left after min-conflicts plateaus needs several
   // classes moved together, which no single-move search can find.
@@ -71,13 +104,24 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   s.poolMove(3);
   s.homeSweep(3);
   s.polish(4);
+  }
   // Only now, with the search exhausted: a class still short of a room is
   // given two rather than left clashing. This is the fault the rebuild exists
   // to remove, so it is counted and named in the output.
-  const splits = s.splitRepair(3);
+  const splits = FROM ? 0 : s.splitRepair(3);
   const a = s.assignment();
   const chk = C.check(model, a, CHECK_OPTS);
   const mv = C.movement(model, a);
+  // How far it drifted from the timetable it was asked to repair, which is the
+  // number that matters when the job was a tweak.
+  let drift = 0;
+  if (FROM && priorRows) {
+    for (const c of model.classes) {
+      const was = priorRows.get(c.id), now = a.get(c.id);
+      if (!was || !now) continue;
+      if (was.day !== now.day || was.start !== now.start || was.room !== now.room) drift++;
+    }
+  }
   const soft = C.softScore(model, a);
   const gaps = s.spreadPenalty();
   const moved = mv.total - mv.untouched;
@@ -88,9 +132,10 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   const line = `seed ${String(seed).padStart(3)} ${start.padEnd(7)} hard ${String(chk.total).padStart(3)}  ` +
                `edge ${String(soft.edge).padStart(3)}  gaps ${String(gaps).padStart(3)}  ` +
                `moved ${String(moved).padStart(4)}` +
-               (splits ? `  split ${splits}` : '');
+               (splits ? `  split ${splits}` : '') +
+               (FROM ? `  changed-from-prior ${drift}` : '');
   if (!best || rank < best.rank) {
-    best = { rank, seed, chk, mv, soft, gaps, splits, assign: a };
+    best = { rank, seed, chk, mv, soft, gaps, splits, drift, assign: a };
     console.log(line + '   <- best so far');
   } else if (seed % 10 === 0) {
     console.log(line);
@@ -101,6 +146,9 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
 const { chk, mv, soft, gaps, assign } = best;
 console.log(`\n=== best (seed ${best.seed}) ===`);
 console.log(`hard violations: ${chk.total}`);
+if (FROM) {
+  console.log(`changed from the timetable it repaired: ${best.drift} of ${model.classes.length}`);
+}
 if (best.splits) {
   console.log(`split across rooms as a last resort: ${best.splits}`);
   for (const [id, p] of best.assign) {
