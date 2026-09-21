@@ -145,6 +145,29 @@
     return { model: model, components: components, terms: terms };
   }
 
+  /**
+   * Today's room usage as it is actually booked: one entry per class-room
+   * booking, each carrying its own room, slot and weeks.
+   *
+   * The rebuilt term's model cannot express this. It gives a class one room,
+   * one slot and one week list covering every room it uses, so a split class
+   * looks double-booked in the weeks it is elsewhere. The checker takes this
+   * list instead when judging the timetable as it stands.
+   */
+  function currentOccupancy(h) {
+    var t = h.terms && h.terms.springNow;
+    if (!t) return null;
+    var byTitle = {};
+    h.model.classes.forEach(function (c) {
+      (byTitle[c.title] || (byTitle[c.title] = [])).push(c.id);
+    });
+    return t.rows.map(function (r) {
+      return { title: r.title, module: r.module, room: r.room, day: r.day,
+               start: r.start, dur: r.dur, weeks: r.weeks,
+               ids: byTitle[r.title] || [] };
+    });
+  }
+
   // Two assignments over the rebuilt term's model: today, and the rebuild.
   function assignments(model) {
     var current = new Map(), solved = new Map();
@@ -169,5 +192,6 @@
   window.TTModel = {
     DAYS: DAYS, C: C, R: R, fmt: fmt, weekList: weekList, weekMask: weekMask,
     hydrate: hydrate, assignments: assignments, loadTimetable: loadTimetable,
+    currentOccupancy: currentOccupancy,
   };
 })();

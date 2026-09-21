@@ -15,7 +15,15 @@
   <h1>Belfast Timetable</h1>
   <nav>
     <a href="index.html">About</a>
-    <a href="index.html">Timetables</a>
+    <span class="bar-menu" id="nav-terms">
+      <button class="bar-link" id="nav-terms-btn" aria-haspopup="true" aria-expanded="false">Timetables</button>
+      <div class="bar-drop" role="menu">
+        <a class="drop-item" role="menuitem" href="index.html?t=autumn">Autumn 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNow">Spring 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNew">Spring 2026<span class="sub">rebuilt</span></a>
+        <span class="drop-item soon">Autumn 2026<span class="sub">rebuilt &mdash; in progress</span></span>
+      </div>
+    </span>
     <a href="explore.html" aria-current="page">Fix a clash</a>
   </nav>
 </header>
@@ -86,6 +94,28 @@
   </div>
 </footer>
 
+<script>
+// The timetable picker, same behaviour as on the timetable page: hover opens
+// it where there is a pointer, click everywhere, Escape closes. Its items are
+// ordinary links, so this page needs none of the term machinery.
+(function () {
+  var wrap = document.getElementById('nav-terms');
+  var trigger = document.getElementById('nav-terms-btn');
+  if (!wrap || !trigger) return;
+  function open() { wrap.classList.add('open'); trigger.setAttribute('aria-expanded', 'true'); }
+  function close() { wrap.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); }
+  var hoverable = function () { return matchMedia('(hover: hover)').matches; };
+  wrap.onmouseenter = function () { if (hoverable()) open(); };
+  wrap.onmouseleave = function () { if (hoverable()) close(); };
+  trigger.onclick = function (e) {
+    e.stopPropagation();
+    if (!wrap.classList.contains('open')) open();
+    else if (!hoverable()) close();
+  };
+  document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+})();
+</script>
 <script src="assets/model.js"></script>
 <script src="assets/constraints.js"></script>
 <script src="assets/suggest.js"></script>

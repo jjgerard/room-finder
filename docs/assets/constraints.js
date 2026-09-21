@@ -40,6 +40,19 @@ function sharesWeek(a, b) {
   return (a.weeks & b.weeks) !== 0;
 }
 
+/**
+ * The weeks a class holds a ROOM, which is not always the weeks it runs.
+ *
+ * A placement may carry its own mask. Today's timetable uses that: a class
+ * split across rooms is in each of them only part of the term, and judging it
+ * on its full week list reports clashes in weeks when it is somewhere else.
+ * A rebuilt placement carries none, because a class there holds one room for
+ * as long as it runs.
+ */
+function roomWeeks(c, p) {
+  return p && p.weeks != null ? p.weeks : c.weeks;
+}
+
 function placementOf(assignment, id) {
   return Array.isArray(assignment) ? assignment[id] : assignment.get(id);
 }
@@ -94,6 +107,42 @@ function check(model, assign, opts) {
   }
 
   // ---- room double-booking ----
+  //
+  // `opts.occupancy` judges a timetable from its bookings rather than from the
+  // assignment: one entry per class-room booking, each with its own room, slot
+  // and weeks. Today's timetable needs this — the class file collapses a split
+  // class into one room, one slot and one week list, which invents clashes in
+  // weeks when the class is somewhere else. A rebuilt timetable does not: one
+  // class, one room, one slot.
+  if (opts.occupancy) {
+    const bk = new Map();
+    for (const o of opts.occupancy) {
+      // Bookings with no class behind them are the ones the model never sees
+      // (one-off institutional reservations), so they are not held against it.
+      if (!o.ids || !o.ids.length) continue;
+      const k = o.room + ':' + o.day;
+      if (!bk.has(k)) bk.set(k, []);
+      bk.get(k).push(o);
+    }
+    for (const list of bk.values()) {
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          const a = list[i], b = list[j];
+          if (a.title === b.title) continue;          // one booking, two rooms
+          if (!(a.weeks & b.weeks)) continue;
+          if (!overlaps(a.start, a.dur, b.start, b.dur)) continue;
+          let shared = false;
+          if (model.mayShareRoom) {
+            for (const x of a.ids) for (const y of b.ids) {
+              if (x !== y && model.mayShareRoom.has(x < y ? x + ':' + y : y + ':' + x)) shared = true;
+            }
+          }
+          if (shared) continue;
+          add('roomClash', { a: a.ids[0], b: b.ids[0], room: a.room, day: a.day });
+        }
+      }
+    }
+  } else {
   // Bucket by (room, day) so this stays near-linear instead of 2,072².
   const buckets = new Map();
   for (const c of model.classes) {
@@ -112,13 +161,14 @@ function check(model, assign, opts) {
         const pa = at(a.id), pb = at(b.id);
         if (pb.start >= pa.start + a.dur) break; // sorted: nothing later overlaps
         if (!overlaps(pa.start, a.dur, pb.start, b.dur)) continue;
-        if (!sharesWeek(a, b)) continue;
+        if (!(roomWeeks(a, pa) & roomWeeks(b, pb))) continue;
         // A pair that already shares a room today may keep sharing one.
         if (model.mayShareRoom &&
             model.mayShareRoom.has(a.id < b.id ? a.id + ':' + b.id : b.id + ':' + a.id)) continue;
         add('roomClash', { a: a.id, b: b.id, room: pa.room, day: pa.day });
       }
     }
+  }
   }
 
   // ---- cohort / staff clash ----
@@ -212,7 +262,7 @@ function softScore(model, assign) {
   return { edge, wedPm };
 }
 
-const api = { HARD, check, movement, softScore, overlaps, sharesWeek,
+const api = { HARD, check, movement, softScore, overlaps, sharesWeek, roomWeeks,
   DAY_START, DAY_END, DAY_WIDTH };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 if (typeof window !== 'undefined') window.TTConstraints = api;

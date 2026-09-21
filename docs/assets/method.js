@@ -56,8 +56,8 @@
   var RULE_ORDER = RULES.map(function (r) { return r[0]; });
   // The subset the algorithm graphic lists; every rule is still checked.
   var DRAWN_RULES = RULES.filter(function (r) { return r[3] !== false; });
-  var TILE_LABELS = {}, ruleLabels = {};
-  RULES.forEach(function (r) { TILE_LABELS[r[0]] = r[1]; ruleLabels[r[0]] = r[2]; });
+  var TILE_LABELS = {};
+  RULES.forEach(function (r) { TILE_LABELS[r[0]] = r[1]; });
 
   /** Modules most exposed to a last-minute scramble, and why. */
   function atRisk(model) {
@@ -371,9 +371,15 @@
   }
 
   function html(H) {
-    var C = window.TTConstraints;
+    var C = window.TTConstraints, M = window.TTModel;
     var model = H.model, a = H.assign;
-    var now = C.check(model, a.current, {});
+    // Today's timetable is judged from its own bookings, each with the room,
+    // slot and weeks it was actually booked for. Judging it through the
+    // rebuilt term's model instead — one room and one week list per class —
+    // reported 288 room clashes, and the per-room data shows none of them
+    // happen.
+    var occ = M.currentOccupancy ? M.currentOccupancy(H) : null;
+    var now = C.check(model, a.current, occ ? { occupancy: occ } : {});
     var fixed = C.check(model, a.solved, {});
     var mv = C.movement(model, a.solved);
     var softNow = C.softScore(model, a.current);
@@ -428,18 +434,11 @@
              '<div class="k">' + k + '</div>' +
              (sub ? '<div class="r">' + sub + '</div>' : '') + '</div>';
     }
-    // Only the rules today's timetable actually breaks get a tile; the table
-    // below still lists all eight, so nothing is hidden.
+    // Only the rules today's timetable actually breaks get a tile. The full
+    // set is in the rebuild graphic above, so nothing is hidden by leaving the
+    // ones that already hold off the row.
     //
-    // roomClash is deliberately left out of this comparison. The class file
-    // gives each class ONE dominant room and one week list covering all the
-    // rooms it uses, so two classes whose dominant room coincides look like a
-    // double-booking in weeks when one of them is elsewhere: it reports 288,
-    // and the per-room booking history shows 288 of them are not real. The
-    // room fault today is the splitting itself, which is counted beside it.
-    var brokenNow = RULE_ORDER.filter(function (k) {
-      return k !== 'roomClash' && now.counts[k];
-    });
+    var brokenNow = RULE_ORDER.filter(function (k) { return now.counts[k]; });
     var ruleTiles = brokenNow.map(function (k) {
       return tile(fmtN(now.counts[k]), TILE_LABELS[k],
                   'rebuilt: ' + fmtN(fixed.counts[k] || 0), 'warn');
@@ -454,19 +453,6 @@
         '<td>' + x.why + '</td></tr>';
     }).join('');
 
-    var ruleRows = RULE_ORDER.map(function (k) {
-      var a1 = fixed.counts[k] || 0;
-      // The room rule cannot be scored against today's timetable from this
-      // data — see the note beside the tiles — so it says so rather than
-      // printing a number that is not real.
-      var nowCell = k === 'roomClash'
-        ? '<span class="pill neutral">not measurable</span>'
-        : (now.counts[k] ? '<span class="pill no">' + now.counts[k] + '</span>'
-                         : '<span class="pill ok">holds</span>');
-      return '<tr><td>' + ruleLabels[k] + '</td><td>' + nowCell + '</td>' +
-        '<td>' + (a1 ? '<span class="pill no">' + a1 + '</span>' : '<span class="pill ok">holds</span>') + '</td></tr>';
-    }).join('');
-
     return [
       '<div class="narrow-inner">',
 
@@ -478,21 +464,21 @@
 
       '<h3>What Spring 2026 breaks</h3>',
       '<p class="small muted">The large number is how often the timetable as it stands breaks ',
-      'that rule; underneath it, the same count in the rebuild. The other ' +
-      (RULE_ORDER.length - brokenNow.length - 1) + ' hard rules already hold today and still do ' +
-      'in the rebuild. The one rule missing here is the room rule: a class in this data carries ',
-      'one dominant room and one week list covering every room it uses, so today cannot be ',
-      'scored against it \u2014 the splitting on the right is the room fault it does have.</p>',
+      'that rule, counted from the bookings themselves; underneath it, the same count in the ',
+      'rebuild. The other ' + (RULE_ORDER.length - brokenNow.length) + ' hard rules already hold ',
+      'today and still do in the rebuild. Beside them is the thing no rule forbids and the ',
+      'rebuild removes anyway: one class spread over several rooms.</p>',
       '<div class="stats">',
       ruleTiles,
       '</div>',
       '<p class="small muted">The worst split booking uses ' + TODAY.maxRooms + ' rooms, and ',
       'splitting is what creates ' + fmtN(TODAY.splitExtra) + ' of the term\u2019s ' +
       fmtN(TODAY.roomBookings) + ' room-bookings; in the rebuild a class holds one room, so they ',
-      'return to the pool. Two classes are never forced into one room today either \u2014 the ',
-      'only rooms shared at the same time are the ' + TODAY.sharedRoomPairs + ' studio pairings ',
-      'in architecture, art, hospitality and design, which are deliberate and which the rebuild ',
-      'keeps. All ' + b2b + ' of ' + groups + ' lecture+seminar pairs run back-to-back.</p>',
+      'return to the pool. The room rule itself already holds today: ' + TODAY.sharedRoomPairs +
+      ' pairs of bookings do hold one room at the same time, and every one of them is shared ',
+      'teaching \u2014 architecture and art studios, the hospitality kitchen, a joint sports ',
+      'physiology lab \u2014 which the rebuild keeps. All ' + b2b + ' of ' + groups + ' ',
+      'lecture+seminar pairs run back-to-back.</p>',
 
       // ------------------------------------------------ why it always clashes
       '<h2>The current method will always clash</h2>',
@@ -541,8 +527,6 @@
             : 'No week is over capacity on paper, so this is the search rather than the building. ') +
           'Named, not hidden: it is on the rebuilt tab and on Explore moves.</p></div>'),
 
-      '<div class="scroll"><table><thead><tr><th>Hard rule</th><th>Today</th><th>Rebuilt</th></tr></thead>',
-      '<tbody>' + ruleRows + '</tbody></table></div>',
       '<p class="small muted">' + fmtN(mv.untouched) + ' of ' + fmtN(mv.total) + ' classes keep ',
       'their slot. ' + blocks + ' block sessions stay on campus. Gap days in cohorts\u2019 weeks: ' +
       (meta.gapDaysBefore != null ? meta.gapDaysBefore + ' \u2192 ' + meta.gapDays : 'n/a') + '.</p>',

@@ -1033,6 +1033,79 @@ test('solver: never sends block teaching offsite', () => {
   for (const c of model.classes) if (c.isBlock) assert.ok(a.get(c.id).room >= 0);
 });
 
+test('model: a class holds its room only in the weeks it is booked there', () => {
+  // belfast_classes.csv gives one dominant room and one week list covering
+  // every room a class uses. ENE806 is in BA-00-008 in weeks 7-8 and 12-14
+  // and elsewhere in weeks 1-5, so scoring the class file literally reported
+  // a clash with BMG715 in week 1 that has never happened.
+  const c = model.classes.find(x => x.title === 'ENE806/S2/LEC <7,8,10-12>*');
+  assert.ok(c, 'ENE806 lecture not in the model');
+  assert.ok(c.origRoomWeeks !== c.weeks,
+    'ENE806 should hold its dominant room for fewer weeks than it runs');
+  assert.ok((c.origRoomWeeks & ~c.weeks) === 0,
+    'a room week outside the weeks the class runs');
+  assert.strictEqual(c.origRoomWeeks & 1, 0, 'ENE806 is not in that room in week 1');
+});
+
+test('model: exam sittings use the rooms the exam actually booked', () => {
+  // Filling the extra sittings from the candidate list put BME104's resit in
+  // BC-02-308, which is CMM170's lecture room, and the baseline check duly
+  // reported a clash that does not exist.
+  //
+  // Where the history lists fewer rooms than the exam uses — BEN140 books four
+  // and appears once — the rest still come from the candidate list, because a
+  // sitting has to be somewhere. What must hold is that no booked room is
+  // passed over in favour of an invented one.
+  const sittings = new Map();
+  for (const c of model.classes) {
+    if (!c.isShadow) continue;
+    if (!sittings.has(c.shadowOf)) sittings.set(c.shadowOf, []);
+    sittings.get(c.shadowOf).push(c.origRoom);
+  }
+  let checked = 0;
+  for (const [pid, rooms] of sittings) {
+    const parent = model.byId.get(pid);
+    const booked = [...new Set((parent.bookedRooms || []).map(b => b.room))]
+      .filter(r => r !== parent.homeRoom);
+    const want = Math.min(booked.length, rooms.length);
+    const got = rooms.filter(r => booked.includes(r)).length;
+    if (booked.length) checked++;
+    assert.strictEqual(got, want,
+      `${parent.module || pid}: ${got} of ${want} sittings in rooms the exam booked`);
+  }
+  assert.ok(checked > 0, 'no exam had its other rooms in the booking history');
+});
+
+test('checker: today\'s timetable is judged from its own bookings', () => {
+  // Every pair of bookings that really shares a room today is shared teaching
+  // the model already accepts, so the room rule holds as it stands. Judged
+  // through the class model instead it scored hundreds of clashes, none real.
+  const baseline = new Map(model.classes.map(c =>
+    [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom, weeks: c.origRoomWeeks }]));
+  const opts = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
+  assert.ok(model.currentOccupancy.length > 3000, 'no per-room booking history loaded');
+  const booked = C.check(model, baseline, Object.assign({ occupancy: model.currentOccupancy }, opts));
+  assert.strictEqual(booked.counts.roomClash, 0,
+    `today's bookings double-book a room ${booked.counts.roomClash} times`);
+});
+
+test('checker: a placement without its own weeks reserves the whole term', () => {
+  // The rebuild's placements carry no week mask, because a class there holds
+  // one room for as long as it runs. Losing that would let the search stack
+  // two classes in one room and call it clean.
+  const a = model.classes.find(x => !x.isFixed && x.weeks);
+  const b = model.classes.find(x => x !== a && !x.isFixed && (x.weeks & a.weeks) &&
+    !model.mayShareRoom.has(model.shareKey(a.id, b_id(x))));
+  function b_id(x) { return x.id; }
+  assert.ok(b, 'no second class to stack');
+  const assign = new Map(model.classes.map(c =>
+    [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom }]));
+  assign.set(a.id, { day: 0, start: 9 * 60 + 15, room: a.cand[0] });
+  assign.set(b.id, { day: 0, start: 9 * 60 + 15, room: a.cand[0] });
+  const r = C.check(model, assign, { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 });
+  assert.ok(r.counts.roomClash > 0, 'two classes in one room went unreported');
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)

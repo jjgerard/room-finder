@@ -876,7 +876,10 @@
     };
 
     document.getElementById('method').innerHTML = window.TTMethod.html(H);
-    selectTab('method');
+    // A link may name the timetable to open — the picker on Fix a clash
+    // points here rather than carrying its own copy of the term list.
+    var want = (location.search.match(/[?&]t=([a-zA-Z]+)/) || [])[1];
+    selectTab(want && H.terms[want] ? want : 'method');
   }).catch(function (e) {
     document.getElementById('banner').innerHTML =
       '<div class="note warn"><p style="margin:0">' + esc(e.message) + '</p></div>';

@@ -36,9 +36,16 @@ console.log(`clash edges: ${model.cannotShareTime.length} of ${model.edgeStats.t
             (model.edgeStats.dropped ? `, ${model.edgeStats.dropped} dropped as unevidenced` : '') +
             (model.edgeStats.staffDropped ? `, ${model.edgeStats.staffDropped} staff-proxy dropped` : ''));
 
+// The baseline carries the weeks each class is actually in its original room,
+// which is not its full week list when it is split across rooms. Without that
+// the comparison reports clashes today that never happen.
 const baseline = new Map(model.classes.map(c =>
-  [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom }]));
-const base = C.check(model, baseline, CHECK_OPTS);
+  [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom, weeks: c.origRoomWeeks }]));
+// Judged from the bookings themselves: the class file cannot say which
+// weeks a split class is in which room, and scoring it as if it were in
+// its dominant room all term reported 288 clashes that never happen.
+const base = C.check(model, baseline,
+  Object.assign({ occupancy: model.currentOccupancy }, CHECK_OPTS));
 console.log(`today's timetable, judged against the hard rules: ${base.total} violations ` +
             `(${base.counts.roomClash} room, ${base.counts.linkedOrder} lecture/seminar)\n`);
 

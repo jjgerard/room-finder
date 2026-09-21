@@ -629,6 +629,9 @@ footer .wrap { padding: 0; }
   cursor: pointer;
   line-height: 1.25;
 }
+a.drop-item { text-decoration: none; }
+.appbar nav a.drop-item { color: var(--ink-2); padding: 9px 16px; border-radius: 0; }
+.appbar nav a.drop-item:hover { background: var(--accent-weak); color: var(--accent); }
 .drop-item .sub { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .drop-item:hover { background: var(--accent-weak); color: var(--accent); }
 .drop-item[aria-current="true"] { color: var(--accent); }

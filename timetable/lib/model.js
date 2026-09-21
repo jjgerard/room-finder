@@ -279,6 +279,59 @@ function load(dir, opts) {
     };
   });
 
+  // ---- what each class actually occupies, room by room --------------------
+  //
+  // belfast_classes.csv gives a class ONE dominant room and one week list
+  // covering every room it uses. That is lossy in a way that invents clashes:
+  // ENE806 is in BA-00-008 in weeks 7-8 and 12-14 and elsewhere in weeks 1-5,
+  // but the class file says "BA-00-008, weeks 1,2,4,5,7,8,12,13,14", so BMG715
+  // holding that room in week 1 looks like a double-booking. Checked this way,
+  // today's timetable scored 288 room clashes, none of them real.
+  //
+  // terms.json has the truth: one row per class-room booking, each with its
+  // own weeks. Join on the booking title and keep, per class, the weeks it is
+  // in its dominant room and the other rooms it uses.
+  const bookingsByTitle = new Map();
+  try {
+    const terms = JSON.parse(fs.readFileSync(path.join(dir, 'terms.json'), 'utf8'));
+    const rows = ((opts.term === 'autumn' ? terms.autumn : terms.springCurrent) || {}).rows || [];
+    for (const row of rows) {
+      const t = row[2];
+      if (!bookingsByTitle.has(t)) bookingsByTitle.set(t, []);
+      bookingsByTitle.get(t).push({ room: row[6], day: row[3], start: row[4], dur: row[5],
+                                    weeks: weekMask(row[8]) });
+    }
+  } catch (e) { /* no booking history: every class keeps its full week mask */ }
+
+  for (const c of classes) {
+    // Rows under this title, the ones in the same slot first: a title can
+    // cover two sittings, and the class file sometimes merges them.
+    const rows = (bookingsByTitle.get(c.title) || []);
+    const here = rows.filter(r => r.day === c.origDay && r.start === c.origStart);
+    const use = here.length ? here : rows;
+    c.bookedRooms = use.map(r => ({ room: r.room, weeks: r.weeks }));
+    const mine = use.filter(r => r.room === c.origRoom);
+    if (mine.length) {
+      c.origRoomWeeks = mine.reduce((m, r) => m | r.weeks, 0);
+    } else if (here.length) {
+      // The class file's dominant room is not one this booking uses. That
+      // happens where it merged two sittings under one title — BME104's class
+      // test and its resit are different rooms in different weeks, and the
+      // class file carries the test's room with both sets of weeks. A row
+      // matching on title, day and start is the better witness, so take its
+      // room; otherwise the baseline puts the class in a room it never had.
+      c.origRoom = here[0].room;
+      c.homeRoom = here[0].room;
+      c.homeRoomName = rooms[here[0].room] ? rooms[here[0].room].name : c.homeRoomName;
+      c.origRoomWeeks = here.filter(r => r.room === here[0].room)
+                            .reduce((m, r) => m | r.weeks, 0);
+    } else {
+      // No witness at all: the full mask over-reserves rather than under-
+      // reserving, which is the safe direction.
+      c.origRoomWeeks = c.weeks;
+    }
+  }
+
   // An exam is not a normal class: it may legitimately occupy several rooms at
   // once, so the one-room-per-class rule does not apply to it. It is modelled as
   // several sub-classes pinned to the same slot, which reuses the component
@@ -293,9 +346,20 @@ function load(dir, opts) {
   for (const c of classes) {
     if (c.activity !== 'EXM' || c.nRooms < 2 || c.isFixed) continue;
     const taken = new Set([c.homeRoom]);
+    // The other rooms the exam really used, from the booking history. Taking
+    // them from the candidate list instead put sittings in rooms the exam
+    // never touched — BME104's resit landed in BC-02-308, which is CMM170's
+    // lecture room, and the baseline check duly reported a clash that has
+    // never happened. Candidates are still the fallback where the history
+    // does not reach, because a sitting has to be somewhere.
+    const booked = (c.bookedRooms || []).map(b => b.room).filter(r => r !== c.homeRoom);
     for (let k = 1; k < c.nRooms; k++) {
-      const room = c.cand.find(r => !taken.has(r));
-      if (room === undefined) break; // not enough candidate rooms to go round
+      let room = booked.find(r => !taken.has(r));
+      let weeks = null;
+      if (room === undefined) room = c.cand.find(r => !taken.has(r));
+      else weeks = (c.bookedRooms.filter(b => b.room === room)
+                     .reduce((m, b) => m | b.weeks, 0)) || null;
+      if (room === undefined) break; // not enough rooms to go round
       taken.add(room);
       shadows.push(Object.assign({}, c, {
         id: nextShadowId++,
@@ -305,6 +369,7 @@ function load(dir, opts) {
         homeRoom: room,
         homeRoomName: rooms[room].name,
         origRoom: room,
+        origRoomWeeks: weeks == null ? c.weeks : weeks,
         nRooms: 1,
         isMultiRoom: false,
       }));
@@ -606,6 +671,7 @@ function load(dir, opts) {
   // deriving it from the class file gave 328 pairs of which only 33 were real,
   // which would have licensed 295 genuine double-bookings.
   const mayShareRoom = new Set();
+  const currentOccupancy = [];
   const shareKey = (a, b) => (a < b ? a + ':' + b : b + ':' + a);
   {
     const idsByTitle = new Map();
@@ -621,6 +687,15 @@ function load(dir, opts) {
         const k = row[6] + '|' + row[3];
         if (!byRoomDay.has(k)) byRoomDay.set(k, []);
         byRoomDay.get(k).push({ title: row[2], start: row[4], dur: row[5], weeks: weekMask(row[8]) });
+        // Today's room usage as booked: room, day, slot and weeks all per
+        // booking. The class file cannot express this — it gives a class one
+        // room, one slot and one week list covering everything it does — so
+        // the current timetable is judged against the rule from here instead.
+        currentOccupancy.push({
+          title: row[2], module: row[0], room: row[6], day: row[3],
+          start: row[4], dur: row[5], weeks: weekMask(row[8]),
+          ids: idsByTitle.get(row[2]) || [],
+        });
       }
       for (const list of byRoomDay.values()) {
         for (let i = 0; i < list.length; i++) {
@@ -716,7 +791,7 @@ function load(dir, opts) {
     cannotShareTime, cannotShareDay, cannotShareDayRaw,
     preservedAdjacency, preservedSlot, examRooms,
     openRooms, roomSubjects, sourceCand, rebuiltCandidates: rebuild, retypedRooms: retyped,
-    mayShareRoom, shareKey,
+    mayShareRoom, shareKey, currentOccupancy,
     clashMode, edgeStats, splitCohorts,
     shadowCount: shadows.length,
     linkedGroups: [...linkedGroups.entries()].map(([key, members]) => ({ key, members })),
