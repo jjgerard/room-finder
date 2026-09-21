@@ -749,8 +749,39 @@ function load(dir, opts) {
     }
   }
 
+  // Modules that share no students, whatever the programme lists say.
+  //
+  // A programme-year is treated as a cohort that must never be double-booked,
+  // which is right for a full-time year and wrong for a part-time one, where
+  // the list is what a student MAY take rather than what they all do. POL310
+  // and POL507 are linked only through "BSc Hons Politics and IntStds PT
+  // (8525) Y4", a part-time year with three modules between them; the other
+  // two programmes linking those modules already overlap themselves eleven
+  // times in the current timetable, so the model correctly ignores those.
+  // Where somebody knows the two are never taken together, saying so here
+  // beats waiting for the timetable to evidence it.
+  const notShared = new Set();
+  let dropsNotShared = 0;
+  try {
+    for (const row of rd('not_shared.csv')) {
+      const a = String(row.module_a || '').trim(), b = String(row.module_b || '').trim();
+      if (a && b) notShared.add(a < b ? a + '|' + b : b + '|' + a);
+    }
+  } catch (e) { /* no exclusions */ }
+  if (notShared.size) {
+    const before = cannotShareTime.length;
+    const unrelated = (x, y) => {
+      const a = String(x.module || ''), b = String(y.module || '');
+      return notShared.has(a < b ? a + '|' + b : b + '|' + a);
+    };
+    cannotShareTime = cannotShareTime.filter(([x, y]) => !unrelated(byId.get(x), byId.get(y)));
+    cannotShareDayRaw = cannotShareDayRaw.filter(([x, y]) => !unrelated(byId.get(x), byId.get(y)));
+    dropsNotShared = before - cannotShareTime.length;
+  }
+
   const clashMode = opts.clashes || 'all';
-  const edgeStats = { total: cannotShareTime.length, dropped: 0, staffDropped: 0 };
+  const edgeStats = { total: cannotShareTime.length + dropsNotShared, dropped: 0,
+                      staffDropped: 0, notShared: dropsNotShared };
   if (clashMode !== 'all') {
     cannotShareTime = cannotShareTime.filter(([x, y]) => {
       const a = byId.get(x), b = byId.get(y);
