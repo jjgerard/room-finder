@@ -235,9 +235,9 @@
     return [
       '<h2>Autumn 2026, the same way</h2>',
       '<p>The autumn term went through the same pipeline: ' + fmtN(rows.length) + ' room-bookings, ',
-      'the same eight rules, the same search. Judged from its own bookings it breaks 78 of them ',
-      'as it stands \u2014 76 lecture and seminar pairs pulled apart, two sessions outside the ',
-      'week, and no room double-booked.</p>',
+      'the same eight rules, the same search. Judged from its own bookings it breaks ' +
+      (t.score ? fmtN(nowTotal(t.score)) + ' of them as it stands' : 'some of them as it stands') +
+      (t.score ? ' \u2014 ' + breakdown(t.score.now) + '.' : '.') + '</p>',
       (left
         ? '<div class="note warn"><p style="margin:0"><strong>The rebuild leaves ' + left +
           ' unresolved.</strong> Named on its tab rather than hidden. Autumn is shown for ' +
@@ -246,6 +246,9 @@
         : '<div class="note good"><p style="margin:0"><strong>Every hard rule holds in the ' +
           'autumn rebuild too.</strong> It is shown for reading rather than re-checked here, ' +
           'so this count is the solver\u2019s own.</p></div>'),
+      autumnTiles(t),
+      hourChartRows(H, 'autumn', 'autumnNew', 'When autumn teaches'),
+
       '<p class="small muted">Getting there took corrections rather than a better search, and ',
       'the corrections came from timetabling: sixty-two confirmed cohort sizes across the ',
       'two terms, two classes ',
@@ -255,6 +258,52 @@
       'room back to the classes that were queueing for it, and the count fell with each one, ',
       'from eight to ' + (left ? left : 'none') + '.</p>',
     ].join('');
+  }
+
+  function nowTotal(score) {
+    return RULE_ORDER.reduce(function (n, k) { return n + (score.now[k] || 0); }, 0);
+  }
+
+  /** Autumn's rule counts, tile for tile with spring's. */
+  function autumnTiles(t) {
+    var sc = t.score;
+    if (!sc) return '';
+    function tile(v, k, sub, cls) {
+      return '<div class="stat ' + cls + '"><div class="t">today</div><div class="v">' + v +
+        '</div><div class="k">' + k + '</div><div class="r">' + sub + '</div></div>';
+    }
+    var broken = RULE_ORDER.filter(function (k) { return sc.now[k]; });
+    if (!broken.length) return '';
+    return '<div class="stats">' + broken.map(function (k) {
+      return tile(fmtN(sc.now[k]), TILE_LABELS[k], 'rebuilt: ' + fmtN(sc.fixed[k] || 0), 'warn');
+    }).join('') + '</div>' +
+      (sc.overflow
+        ? '<p class="small muted">' + sc.overflow + ' sessions in the rebuild still finish after ' +
+          '17:15, because the chain of classes they belong to is longer than a teaching day. The ' +
+          'rule excuses those; it does not pretend they are inside it.</p>'
+        : '');
+  }
+
+  /**
+   * The same hour-by-hour picture as spring's, for a term whose model the
+   * browser never loads: counted from the display rows instead, which carry
+   * the day, the hour and the length of every booking.
+   */
+  function hourChartRows(H, nowKey, newKey, title) {
+    var A = (H.terms[nowKey] || {}).rows, B = (H.terms[newKey] || {}).rows;
+    if (!A || !B) return '';
+    var SLOT0 = 9 * 60 + 15, n = 8;
+    var now = new Array(n).fill(0), rebuilt = new Array(n).fill(0);
+    [[A, now], [B, rebuilt]].forEach(function (pair) {
+      pair[0].forEach(function (r) {
+        for (var i = 0; i < n; i++) {
+          var s = SLOT0 + i * 60, e = s + 60;
+          if (r.start < e && s < r.start + r.dur) pair[1][i]++;
+        }
+      });
+    });
+    return barChart(now, rebuilt, title,
+      'Room-bookings running in each hour of the teaching day, as autumn stands and rebuilt.');
   }
 
   function graphic() {
@@ -371,24 +420,13 @@
    * three-hour lecture is in all three of its bars — which is what somebody
    * asking "how busy is 2pm" means.
    */
-  function hourChart(model, assign) {
-    // The teaching day runs 09:15 to 17:15, so the bars are its eight slots
-    // rather than clock hours: counting 9-to-10 and 17-to-18 as hours makes
-    // the two ends look quiet when they are only partly inside the day.
-    var SLOT0 = 9 * 60 + 15, n = 8;
-    var now = new Array(n).fill(0), rebuilt = new Array(n).fill(0);
-    model.classes.forEach(function (c) {
-      if (!c.attended) return;
-      for (var k = 0; k < 2; k++) {
-        var p = k === 0 ? { start: c.origStart } : assign.get(c.id);
-        if (!p) continue;
-        var into = k === 0 ? now : rebuilt;
-        for (var i = 0; i < n; i++) {
-          var s = SLOT0 + i * 60, e = s + 60;
-          if (p.start < e && s < p.start + c.dur) into[i]++;
-        }
-      }
-    });
+  /**
+   * Two bars an hour: how it stands, and how it is rebuilt. Kept apart from
+   * the counting so a term whose model the browser never loads can draw the
+   * same picture from its display rows.
+   */
+  function barChart(now, rebuilt, title, aria) {
+    var n = now.length;
     var peak = Math.max.apply(null, now.concat(rebuilt)) || 1;
     var W = 620, chartH = 150, base = chartH + 26, colW = W / n;
     var bars = '', labels = '';
@@ -416,9 +454,8 @@
     return [
       '<div class="algo-graphic"><div class="algo-inner" style="min-width:600px">',
       '<svg viewBox="0 0 ' + W + ' ' + (base + 46) + '" role="img" ',
-      'aria-label="Classes running in each hour of the day, today against the rebuild. ',
-      'The rebuild empties the 9am and 4pm ends and carries the middle of the day instead.">',
-      '<text x="40" y="16" class="g-title">Classes running in each hour of the teaching day</text>',
+      'aria-label="' + aria + '">',
+      '<text x="40" y="16" class="g-title">' + title + '</text>',
       grid, bars, labels,
       '<rect x="44" y="' + (base + 26) + '" width="11" height="11" rx="2" class="g-barNow"/>',
       '<text x="62" y="' + (base + 36) + '" class="g-small g-muted">as it stands</text>',
@@ -428,6 +465,29 @@
       'slots are the ones worth emptying</text>',
       '</svg></div></div>',
     ].join('');
+  }
+
+  function hourChart(model, assign) {
+    // The teaching day runs 09:15 to 17:15, so the bars are its eight slots
+    // rather than clock hours: counting 9-to-10 and 17-to-18 as hours makes
+    // the two ends look quiet when they are only partly inside the day.
+    var SLOT0 = 9 * 60 + 15, n = 8;
+    var now = new Array(n).fill(0), rebuilt = new Array(n).fill(0);
+    model.classes.forEach(function (c) {
+      if (!c.attended) return;
+      for (var k = 0; k < 2; k++) {
+        var p = k === 0 ? { start: c.origStart } : assign.get(c.id);
+        if (!p) continue;
+        var into = k === 0 ? now : rebuilt;
+        for (var i = 0; i < n; i++) {
+          var s = SLOT0 + i * 60, e = s + 60;
+          if (p.start < e && s < p.start + c.dur) into[i]++;
+        }
+      }
+    });
+    return barChart(now, rebuilt, 'Classes running in each hour of the teaching day',
+      'Classes running in each hour of the day, today against the rebuild.');
+
   }
 
   /** Why a block session cannot find a room: the grid is cut vertically. */

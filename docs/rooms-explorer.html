@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rooms · Belfast Timetable</title>
+<meta name="description" content="Every room, what it holds and what is in it — in any of the four timetables.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="appbar">
+  <span class="mark" aria-hidden="true"></span>
+  <h1>Belfast Timetable</h1>
+  <nav>
+    <a href="index.html">About</a>
+    <span class="bar-menu" id="nav-terms">
+      <button class="bar-link" id="nav-terms-btn" aria-haspopup="true" aria-expanded="false">Timetables</button>
+      <div class="bar-drop" role="menu">
+        <a class="drop-item" role="menuitem" href="index.html?t=autumn">Autumn 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNow">Spring 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNew">Spring 2026<span class="sub">rebuilt</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=autumnNew">Autumn 2026<span class="sub">rebuilt</span></a>
+      </div>
+    </span>
+    <a href="explore.html">Fix a clash</a>
+    <a href="rooms-explorer.html" aria-current="page">Rooms</a>
+    <a href="rooms.html">Room needs</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <h2 class="term-title">Rooms<span>what each one holds, and how hard it works</span></h2>
+
+  <div class="card pad" style="margin-bottom:16px">
+    <div class="grid2">
+      <div>
+        <label class="fld" for="q">Find a room</label>
+        <div class="box"><input id="q" type="search" placeholder="Name or building — e.g. BC-03, Orpheus, lab" autocomplete="off"></div>
+      </div>
+      <div>
+        <label class="fld" for="term">Timetable</label>
+        <select id="term">
+          <option value="autumn">Autumn 2026, as it stands</option>
+          <option value="springNow">Spring 2026, as it stands</option>
+          <option value="autumnNew">Autumn 2026, rebuilt</option>
+          <option value="springNew">Spring 2026, rebuilt</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div class="chips" id="f-type" role="group" aria-label="Kind of room">
+        <button class="chip" data-k="all" aria-pressed="true">All</button>
+        <button class="chip" data-k="general" aria-pressed="false">General</button>
+        <button class="chip" data-k="theatre" aria-pressed="false">Theatres</button>
+        <button class="chip" data-k="computer" aria-pressed="false">Computer</button>
+        <button class="chip" data-k="specialist" aria-pressed="false">Specialist</button>
+        <button class="chip" data-k="idle" aria-pressed="false">Never used</button>
+      </div>
+      <span class="small muted" style="margin-left:auto" id="count"></span>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <div class="scroll"><table id="tbl">
+      <thead><tr>
+        <th>Room</th><th>Kind</th><th>Seats</th><th>Hours a week</th><th>Busiest day</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+  <p class="small muted" id="more"></p>
+
+  <div id="detail" hidden></div>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Hours are counted per week of the term a booking runs, so a class in six weeks of twelve
+    counts for half. Capacity comes from the room inventory, topped up from Ulster's own booker
+    where it was blank. Source and solver:
+    <a href="https://github.com/jjgerard/room-finder">jjgerard/room-finder</a>.
+  </div>
+</footer>
+
+<script src="assets/model.js"></script>
+<script>
+(function () {
+  'use strict';
+  var M = window.TTModel, DAYS = M.DAYS, fmt = M.fmt;
+  var H = null, term = 'autumn', kind = 'all', open = null;
+  var LIMIT = 120;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function weekCount(mask) {
+    var n = 0;
+    for (var w = 0; w < 16; w++) if (mask & (1 << w)) n++;
+    return n || 1;
+  }
+
+  /**
+   * Every room, with what the chosen timetable puts in it.
+   *
+   * Hours are per week rather than per term: a three-hour class running six
+   * weeks of twelve occupies the room for half the hours a weekly one does,
+   * and counting them the same would make an occasional room look busy.
+   */
+  function rooms() {
+    var t = H.terms[term];
+    var byRoom = {};
+    t.rows.forEach(function (r) {
+      var g = byRoom[r.room] || (byRoom[r.room] = { rows: [], hours: 0, days: [0, 0, 0, 0, 0] });
+      g.rows.push(r);
+      var weeks = weekCount(r.weeks);
+      g.hours += (r.dur / 60) * weeks / 12;
+      if (r.day >= 0 && r.day < 5) g.days[r.day] += r.dur / 60;
+    });
+    return H.model.rooms.map(function (room, i) {
+      var g = byRoom[i] || { rows: [], hours: 0, days: [0, 0, 0, 0, 0] };
+      var busiest = g.days.indexOf(Math.max.apply(null, g.days));
+      return {
+        id: i, name: room.name, type: room.type,
+        capacity: room.capacityKnown ? room.capacity : null,
+        hours: g.hours, rows: g.rows,
+        busiest: g.rows.length ? busiest : -1,
+        busiestHours: g.days[busiest] || 0,
+      };
+    });
+  }
+
+  function matches(r) {
+    var q = document.getElementById('q').value.trim().toLowerCase();
+    if (kind === 'idle' && r.rows.length) return false;
+    if (kind !== 'all' && kind !== 'idle' && r.type !== kind) return false;
+    if (!q) return true;
+    return r.name.toLowerCase().indexOf(q) >= 0 || r.type.indexOf(q) >= 0;
+  }
+
+  function render() {
+    var list = rooms().filter(matches)
+      .sort(function (a, b) { return b.hours - a.hours || a.name.localeCompare(b.name); });
+    var body = document.querySelector('#tbl tbody');
+    body.innerHTML = list.slice(0, LIMIT).map(function (r) {
+      return '<tr data-room="' + r.id + '"' + (open === r.id ? ' class="set"' : '') + '>' +
+        '<td><strong>' + esc(r.name) + '</strong></td>' +
+        '<td class="small muted">' + esc(r.type) + '</td>' +
+        '<td>' + (r.capacity == null ? '<span class="muted">—</span>' : r.capacity) + '</td>' +
+        '<td>' + (r.rows.length ? r.hours.toFixed(1) : '<span class="muted">never used</span>') + '</td>' +
+        '<td class="small">' + (r.busiest >= 0
+          ? DAYS[r.busiest] + ' <span class="muted">' + r.busiestHours.toFixed(1) + 'h</span>'
+          : '') + '</td></tr>';
+    }).join('');
+    body.querySelectorAll('tr').forEach(function (tr) {
+      tr.onclick = function () { show(Number(tr.dataset.room)); };
+    });
+
+    var used = list.filter(function (r) { return r.rows.length; }).length;
+    document.getElementById('count').textContent =
+      list.length + ' rooms · ' + used + ' in use · ' + (list.length - used) + ' never used';
+    document.getElementById('more').textContent = list.length > LIMIT
+      ? 'Showing the busiest ' + LIMIT + ' of ' + list.length + '.' : '';
+    if (open !== null) show(open, true);
+  }
+
+  /** One room's week, hour by hour, in the timetable being viewed. */
+  function show(id, keep) {
+    open = id;
+    var r = rooms()[id];
+    var el = document.getElementById('detail');
+    el.hidden = false;
+    var byDay = [[], [], [], [], []];
+    r.rows.forEach(function (x) { if (x.day >= 0 && x.day < 5) byDay[x.day].push(x); });
+    byDay.forEach(function (list) { list.sort(function (a, b) { return a.start - b.start; }); });
+    var cols = byDay.map(function (list, d) {
+      return '<div><h4 class="small" style="margin:0 0 6px">' + DAYS[d] + '</h4>' +
+        (list.length
+          ? list.map(function (x) {
+              return '<div class="small" style="margin-bottom:6px">' +
+                '<strong>' + fmt(x.start) + '</strong> ' + esc(x.module || x.activity) +
+                ' <span class="muted">' + esc(x.activity) + ' · ' +
+                (x.dur / 60) + 'h · weeks ' + esc(x.weeksText) + '</span></div>';
+            }).join('')
+          : '<p class="small muted">nothing</p>') + '</div>';
+    }).join('');
+    el.innerHTML = '<h3>' + esc(r.name) + '</h3>' +
+      '<p class="small muted">' + esc(r.type) +
+      (r.capacity == null ? ', capacity unrecorded' : ', ' + r.capacity + ' seats') +
+      ' · ' + r.rows.length + ' bookings · ' + r.hours.toFixed(1) + ' hours in an average week</p>' +
+      '<div class="card pad" style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px">' +
+      cols + '</div>';
+    if (!keep) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  document.getElementById('q').addEventListener('input', render);
+  document.getElementById('term').addEventListener('change', function (e) {
+    term = e.target.value;
+    open = null;
+    document.getElementById('detail').hidden = true;
+    render();
+  });
+  document.getElementById('f-type').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip');
+    if (!b) return;
+    kind = b.dataset.k;
+    document.querySelectorAll('#f-type .chip').forEach(function (x) {
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    render();
+  });
+
+  // The picker, same behaviour as the other pages.
+  (function () {
+    var wrap = document.getElementById('nav-terms');
+    var trigger = document.getElementById('nav-terms-btn');
+    if (!wrap || !trigger) return;
+    var hoverable = function () { return matchMedia('(hover: hover)').matches; };
+    function open2() { wrap.classList.add('open'); trigger.setAttribute('aria-expanded', 'true'); }
+    function close2() { wrap.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); }
+    wrap.onmouseenter = function () { if (hoverable()) open2(); };
+    wrap.onmouseleave = function () { if (hoverable()) close2(); };
+    trigger.onclick = function (e) {
+      e.stopPropagation();
+      if (!wrap.classList.contains('open')) open2();
+      else if (!hoverable()) close2();
+    };
+    document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) close2(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close2(); });
+  })();
+
+  M.loadTimetable().then(function (h) {
+    H = h;
+    // Offer only the timetables this build actually has.
+    var sel = document.getElementById('term');
+    [].slice.call(sel.options).forEach(function (o) {
+      if (!h.terms[o.value]) o.remove();
+    });
+    term = sel.value;
+    render();
+  }).catch(function (e) {
+    document.getElementById('count').textContent = e.message;
+  });
+})();
+</script>
+
+</body>
+</html>

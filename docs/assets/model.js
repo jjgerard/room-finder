@@ -142,6 +142,9 @@
       var t = packed.terms[key];
       terms[key] = {
         key: key, label: t.label, sub: t.sub, checkable: !!t.checkable,
+        // A term the browser has no model for carries its own scorecard,
+        // computed where the model exists.
+        score: t.score || null,
         rows: t.rows.map(function (r) {
           return {
             module: r[R.module], activity: r[R.activity], title: r[R.title],

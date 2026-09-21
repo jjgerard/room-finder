@@ -189,20 +189,26 @@ if (OUT) {
   // autumn's file once carried a class the run had counted as clean — and a
   // number nobody can reproduce from the file is worth nothing.
   {
+    // A FRESH model, not the one the run has been mutating: components.js
+    // marks classes exempt from the teaching-day rule as it builds, and
+    // checking against the model the solver has already touched lets a
+    // violation through that a reader loading the file cold would see.
+    const fresh = load(null, { clashes: CLASHES, term: TERM });
+    require('./lib/components').build(fresh);
     const written = JSON.parse(fs.readFileSync(path.join(dir, solFile), 'utf8'));
     const back = new Map(written.rows.map(r => [r.id, r]));
-    const reread = new Map(model.classes.map(c => {
+    const reread = new Map(fresh.classes.map(c => {
       const r = back.get(c.id);
       return [c.id, r
         ? { day: r.day, start: r.start, room: r.room, extra: r.extra }
         : { day: c.origDay, start: c.origStart, room: c.origRoom }];
     }));
-    const again = C.check(model, reread, CHECK_OPTS);
+    const again = C.check(fresh, reread, CHECK_OPTS);
     console.log(`re-read from the file and checked again: ${again.total} violations`);
     if (again.total !== chk.total) {
       console.log('   MISMATCH with the run\'s own count of ' + chk.total + ':');
       for (const v of again.violations.slice(0, 5)) {
-        const c = model.byId.get(v.a);
+        const c = fresh.byId.get(v.a);
         console.log(`   ${v.kind}: ${c.module || c.activity}/${c.activity} ` +
                     `start ${reread.get(v.a).start} dur ${c.dur}`);
       }
