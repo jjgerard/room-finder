@@ -49,6 +49,7 @@
       <span class="small muted" style="font-weight:600">Week</span>
       <div class="chips" id="f-weeks"></div>
       <button id="f-weeks-all" class="chip" style="border-style:dashed">All</button>
+      <button id="f-weeks-none" class="chip" style="border-style:dashed">None</button>
     </div>
     <div class="row" style="margin-top:12px">
       <span class="small muted" style="font-weight:600">Day</span>
@@ -867,6 +868,14 @@
       state.weeks = null;
       document.querySelectorAll('#f-weeks .chip').forEach(function (b) {
         b.setAttribute('aria-pressed', 'true');
+      });
+      render(); refreshAll();
+    };
+    // The way to pick two weeks out of sixteen without unticking fourteen.
+    document.getElementById('f-weeks-none').onclick = function () {
+      state.weeks = 0;
+      document.querySelectorAll('#f-weeks .chip').forEach(function (b) {
+        b.setAttribute('aria-pressed', 'false');
       });
       render(); refreshAll();
     };

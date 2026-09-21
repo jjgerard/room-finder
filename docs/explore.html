@@ -42,15 +42,15 @@
     <div class="grid2">
       <div>
         <label class="fld" for="q">Find a class</label>
-        <input type="search" id="q" placeholder="Module code, title, or room — e.g. CMM151" autocomplete="off">
+        <input type="search" id="q" placeholder="Module code, title, or room — e.g. CMM111" autocomplete="off">
       </div>
       <div>
         <label class="fld" for="which">Starting from</label>
         <select id="which">
-          <option value="autumn">Autumn 2026, as it stands</option>
+          <option value="autumn" selected>Autumn 2026, as it stands</option>
           <option value="springNow">Spring 2026, as it stands</option>
           <option value="autumnNew">Autumn 2026, rebuilt</option>
-          <option value="springNew" selected>Spring 2026, rebuilt</option>
+          <option value="springNew">Spring 2026, rebuilt</option>
         </select>
       </div>
     </div>
@@ -83,8 +83,8 @@
   </div>
 
   <div id="hint" class="note">
-    <p style="margin:0">Type a module code above to begin — try <strong>CMM151</strong>,
-    <strong>LAW140</strong>, or a room like <strong>BC-03-123</strong>.</p>
+    <p style="margin:0">Type a module code above to begin — try <strong>CMM111</strong>,
+    <strong>CMM350</strong>, or a room like <strong>BC-03-123</strong>.</p>
   </div>
 
 </main>
@@ -129,12 +129,16 @@
   // Which timetable the what-if runs against. Autumn's model lives in its own
   // file and is fetched the first time it is asked for.
   var TERMS = {
-    autumn:    { file: 'data/autumn.json', solved: false, label: 'Autumn 2026, as it stands' },
-    autumnNew: { file: 'data/autumn.json', solved: true,  label: 'Autumn 2026, rebuilt' },
-    springNow: { file: null,               solved: false, label: 'Spring 2026, as it stands' },
-    springNew: { file: null,               solved: true,  label: 'Spring 2026, rebuilt' },
+    autumn:    { file: 'data/autumn.json', solved: false, label: 'Autumn 2026, as it stands',
+                 eg: ['CMM111', 'CMM350'] },
+    autumnNew: { file: 'data/autumn.json', solved: true,  label: 'Autumn 2026, rebuilt',
+                 eg: ['CMM111', 'CMM350'] },
+    springNow: { file: null,               solved: false, label: 'Spring 2026, as it stands',
+                 eg: ['CMM151', 'LAW140'] },
+    springNew: { file: null,               solved: true,  label: 'Spring 2026, rebuilt',
+                 eg: ['CMM151', 'LAW140'] },
   };
-  var H = null, which = 'springNew', term = null, selected = null;
+  var H = null, which = 'autumn', term = null, selected = null;
 
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (ch) {
@@ -290,8 +294,15 @@
     document.getElementById('panel').hidden = true;
     var q = document.getElementById('q');
     var spec = TERMS[key];
+    // The examples have to exist in the timetable being explored, or the
+    // first thing the page suggests returns nothing.
+    var examples = '<p style="margin:0">Type a module code above to begin \u2014 try <strong>' +
+      spec.eg[0] + '</strong>, <strong>' + spec.eg[1] +
+      '</strong>, or a room like <strong>BC-03-123</strong>.</p>';
     if (!spec.file) {
       term = null;
+      hint.className = 'note';
+      hint.innerHTML = examples;
       search(q.value);
       return;
     }
@@ -299,7 +310,8 @@
     M.loadModel(spec.file, H).then(function (built) {
       if (which !== key) return;        // the reader moved on while it loaded
       term = built;
-      hint.textContent = '';
+      hint.className = 'note';
+      hint.innerHTML = examples;
       search(q.value);
     }).catch(function (e) {
       hint.className = 'note warn';
