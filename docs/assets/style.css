@@ -271,6 +271,10 @@ li { margin-bottom: 6px; }
 /* A whole-module chip, ahead of its individual classes. */
 .chip.mod { border-color: var(--accent); color: var(--accent); }
 
+/* Which term a row of cards belongs to. */
+.term-sub { font-size: 13px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted); margin: 18px 0 0; }
+
 /* ---------- callouts ---------- */
 
 .note {

@@ -246,9 +246,6 @@
         : '<div class="note good"><p style="margin:0"><strong>Every hard rule holds in the ' +
           'autumn rebuild too.</strong> It is shown for reading rather than re-checked here, ' +
           'so this count is the solver\u2019s own.</p></div>'),
-      autumnTiles(t),
-      hourChartRows(H, 'autumn', 'autumnNew', 'When autumn teaches'),
-
       '<p class="small muted">Getting there took corrections rather than a better search, and ',
       'the corrections came from timetabling: sixty-two confirmed cohort sizes across the ',
       'two terms, two classes ',
@@ -265,7 +262,7 @@
   }
 
   /** Autumn's rule counts, tile for tile with spring's. */
-  function autumnTiles(t) {
+  function autumnTiles(t, heading) {
     var sc = t.score;
     if (!sc) return '';
     function tile(v, k, sub, cls) {
@@ -274,7 +271,8 @@
     }
     var broken = RULE_ORDER.filter(function (k) { return sc.now[k]; });
     if (!broken.length) return '';
-    return '<div class="stats">' + broken.map(function (k) {
+    return '<h4 class="term-sub">' + heading + '</h4><div class="stats">' +
+      broken.map(function (k) {
       return tile(fmtN(sc.now[k]), TILE_LABELS[k], 'rebuilt: ' + fmtN(sc.fixed[k] || 0), 'warn');
     }).join('') + '</div>' +
       (sc.overflow
@@ -467,7 +465,7 @@
     ].join('');
   }
 
-  function hourChart(model, assign) {
+  function hourChart(model, assign, title) {
     // The teaching day runs 09:15 to 17:15, so the bars are its eight slots
     // rather than clock hours: counting 9-to-10 and 17-to-18 as hours makes
     // the two ends look quiet when they are only partly inside the day.
@@ -485,7 +483,7 @@
         }
       }
     });
-    return barChart(now, rebuilt, 'Classes running in each hour of the teaching day',
+    return barChart(now, rebuilt, title || 'Classes running in each hour of the teaching day',
       'Classes running in each hour of the day, today against the rebuild.');
 
   }
@@ -667,14 +665,15 @@
 
       graphic(),
 
-      '<h3>What Spring 2026 breaks</h3>',
+      '<h3>Differences between the current approach and the rebuild</h3>',
       '<p class="small muted">The large number is how often the timetable as it stands breaks ',
       'that rule, counted from the bookings themselves; underneath it, the same count in the ',
-      'rebuild. The other ' + (RULE_ORDER.length - brokenNow.length) + ' hard rules already hold ',
-      'today and still do in the rebuild.</p>',
+      'rebuild. Rules that already hold today, and still do, are left out.</p>',
+      '<h4 class="term-sub">Spring 2026</h4>',
       '<div class="stats">',
       ruleTiles,
       '</div>',
+      autumnTiles(H.terms.autumnNew, 'Autumn 2026'),
       '<p class="small muted">The room rule itself already holds today: ' + TODAY.sharedRoomPairs +
       ' pairs of bookings do hold one room at the same time, and every one of them is shared ',
       'teaching \u2014 architecture and art studios, the hospitality kitchen, a joint sports ',
@@ -683,6 +682,9 @@
       'room, one of them ' + TODAY.maxRooms + ', which is ' + fmtN(TODAY.splitExtra) + ' of the ',
       'term\u2019s ' + fmtN(TODAY.roomBookings) + ' room-bookings. All ' + b2b + ' of ' + groups +
       ' lecture+seminar pairs run back-to-back.</p>',
+
+      hourChart(model, a.solved, 'Spring 2026: classes running in each hour'),
+      hourChartRows(H, 'autumn', 'autumnNew', 'Autumn 2026: bookings running in each hour'),
 
       // ------------------------------------------------ why it always clashes
       '<h2>The current method will always clash</h2>',
@@ -703,8 +705,6 @@
       '<li><strong>The rest is settled by hand</strong> in the weeks before term, one email at ',
       'a time. It recurs every year because the method produces it, not the term.</li>',
       '</ul>',
-
-      hourChart(model, a.solved),
 
       stripeGraphic(),
 
