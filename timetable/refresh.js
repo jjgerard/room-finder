@@ -34,13 +34,20 @@ function arg(name, dflt) {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt;
 }
 
-const IN = arg('in', '');
+// Either `--in <file>` or just the path. Typing `node timetable/refresh.js `
+// and dragging the downloaded file onto the terminal window is the shortest
+// route on both Windows and macOS, and neither pastes a `--in` for you.
+const loose = process.argv.slice(2).find((a, i) =>
+  !a.startsWith('--') && /\.json$/i.test(a) &&
+  process.argv[i + 1] !== '--in' && process.argv[i + 1] !== '--out');
+const IN = arg('in', loose || '');
 const DATA = path.join(__dirname, 'data');
 const TERMS = path.join(DATA, 'terms.json');
 const DRY = process.argv.includes('--dry-run');
 
 if (!IN) {
-  console.error('usage: node timetable/refresh.js --in <snapshot.json> [--dry-run]');
+  console.error('usage: node timetable/refresh.js <snapshot.json> [--dry-run]\n' +
+                '   or: type the command, then drag the downloaded file onto this window');
   process.exit(1);
 }
 
@@ -128,6 +135,29 @@ terms.note = `Autumn 2026 and the current Spring 2026 timetable. Room indices ma
   `appears once per room. ${KEY} refreshed from Resource Booker on ` +
   `${String(snap.takenAt).slice(0, 10)}.`;
 fs.writeFileSync(TERMS, JSON.stringify(terms));
-console.log(`\nwrote ${TERMS}`);
-console.log('next: node timetable/export.js  (and re-solve if much moved — the rebuilt');
-console.log('      terms are solutions to the timetable as it was)');
+console.log(`\nwrote ${path.relative(path.join(__dirname, '..'), TERMS)}`);
+
+// Run the export too. terms.json and docs/data are a pair — a refreshed first
+// one with a stale second publishes a timetable that no longer exists, and
+// leaving that as a second command somebody has to remember is how it would
+// happen. --no-export is for anybody assembling several changes first.
+if (process.argv.includes('--no-export')) {
+  console.log('next: node timetable/export.js');
+} else {
+  console.log('packing the site data\u2026\n');
+  const { spawnSync } = require('child_process');
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'export.js')],
+                      { stdio: 'inherit' });
+  if (r.status !== 0) {
+    console.error('\nthe export failed — terms.json is updated, docs/data is not.');
+    process.exit(1);
+  }
+}
+
+console.log('\nDone. Commit the changes to publish them.');
+if (added.length || gone.length) {
+  console.log('The rebuilt terms are still solutions to the timetable as it was; if much');
+  console.log('has moved, re-solve them:');
+  console.log('  node timetable/solve.js --term autumn --seeds 30 --clashes evidenced ' +
+              '--out docs/data');
+}

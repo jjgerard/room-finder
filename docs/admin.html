@@ -139,15 +139,23 @@
   <!-- ------------------------------------------------------------ step 4 -->
   <section class="card pad step">
     <h3><span class="num">4</span> Write it, in the repo</h3>
-    <p class="small muted">This page cannot write to the repository. When the comparison above
-      looks right, run these where you have the code checked out. <strong>Nothing to install
-      for this part</strong> — both scripts use only what Node ships with, so they work in a
+    <p class="small muted">A web page cannot write into a folder on your disk, so this last
+      step is a terminal — but it is <strong>one command</strong>, and there is
+      <strong>nothing to install</strong>: it uses only what Node ships with, so it works in a
       fresh clone with no <code>npm install</code>.</p>
+    <p class="small muted">Easiest way to avoid typing the path: type the command below as far
+      as the space, then <strong>drag the downloaded file onto the terminal window</strong> —
+      it pastes its own path. Then press Enter.</p>
     <pre class="card pad mono small" style="overflow-x:auto"><code id="cmds"></code></pre>
     <div class="row">
       <button id="copy-cmds" type="button">Copy the commands</button>
       <span class="small muted" id="cmds-note"></span>
     </div>
+    <p class="small muted">It prints what it changed, packs the site data, and stops if the
+      snapshot looks like a failed fetch. Add <code>--dry-run</code> to see the same
+      comparison as above without writing anything. Then <code>git commit</code> and
+      <code>git push</code> to publish.</p>
+
     <div class="note warn" style="margin-top:14px"><p style="margin:0">
       <strong>This refreshes the timetables as they stand, not the rebuild.</strong> The clash
       graph — which classes share students — was inferred from the timetable as it was, and the
@@ -433,11 +441,11 @@
   // ---------------------------------------------------------------- step 4
 
   function cmds() {
-    var f = 'snapshot-' + $('term').value + '.json';
-    return 'node timetable/refresh.js --in ~/Downloads/' + f + ' --dry-run\n' +
-           'node timetable/refresh.js --in ~/Downloads/' + f + '\n' +
-           'node timetable/export.js\n' +
-           'node timetable/test.js';
+    // One line, ending in a space, so the downloaded file can be dragged onto
+    // the terminal to supply its own path. refresh.js packs the site data
+    // itself — leaving that as a separate command somebody has to remember is
+    // how a refreshed terms.json ends up published with stale site data.
+    return 'node timetable/refresh.js ';
   }
   function showCmds() { $('cmds').textContent = cmds(); }
   $('term').addEventListener('change', showCmds);

@@ -352,13 +352,14 @@ about 550 rooms, four at a time, two or three minutes — and writes
 The signed-in profile is kept in `.auth/`, which is gitignored because it holds a live
 Microsoft session. After the first run `--headless` works and it needs no attention.
 
-To write it in:
+To write it in — one command, which packs the site data itself:
 
 ```
-node timetable/refresh.js --in timetable/data/snapshot-autumn.json
-node timetable/export.js
-node timetable/test.js
+node timetable/refresh.js timetable/data/snapshot-autumn.json
 ```
+
+Type it as far as the space and drag the file onto the terminal window if you would
+rather not type a path. `--dry-run` shows what would change and writes nothing.
 
 `refresh.js` refuses a snapshot that has lost more than a fifth of the term, because
 that is a fetch that died rather than a quiet week, and the file it would overwrite is
