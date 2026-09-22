@@ -242,13 +242,22 @@ if (fs.existsSync(autumnSolPath)) {
       }),
       classes: autumnModel.classes.length,
       groups: autumnModel.linkedGroups.length,
-      // Sessions that finish after 17:15 because their linked chain is longer
-      // than the teaching day. The rule excuses them; the page should still
-      // say how many there are.
-      overflow: autumnModel.classes.filter(c => {
-        const a = solvedAssign.get(c.id);
-        return a && !c.isFixed && a.start + c.dur > C.DAY_END;
-      }).length,
+      // Sessions that finish after 17:15. The rule excuses them, for one of
+      // two reasons, and the page should say which: a linked chain longer than
+      // a teaching day, or a session pinned in the evening dragging the class
+      // chained in front of it past the end. Reporting both as chain length
+      // was wrong for COM772, whose chain is 300 minutes.
+      overflow: (() => {
+        const out = { chain: 0, pinned: 0 };
+        for (const c of autumnModel.classes) {
+          const a = solvedAssign.get(c.id);
+          if (!a || c.isFixed || a.start + c.dur <= C.DAY_END) continue;
+          const comp = autumnComps[c.component];
+          if (comp && comp.span > C.DAY_WIDTH) out.chain++; else out.pinned++;
+        }
+        out.total = out.chain + out.pinned;
+        return out;
+      })(),
     };
   }
 
@@ -289,6 +298,9 @@ const springNewRows = model.classes.map(c => {
 // ---- the model behind the rebuilt term, for checking and suggestions --------
 const packed = {
   meta: solution.meta,
+  // When this file was built. meta.generated is the day SPRING was solved, so
+  // it said 2026-09-21 on a file whose autumn term had been re-solved since.
+  generated: new Date().toISOString().slice(0, 10),
   rooms: model.rooms.map(r => [r.name, r.type, r.capacity]),
   programmes: progName,
   modTitles: Object.fromEntries(modTitle),

@@ -166,6 +166,9 @@
       roomTypes: packed.roomTypes || [],
       // How many corrections timetabling has supplied, by kind.
       corrections: packed.corrections || null,
+      // When this data file was built, which is not the same as the day any
+      // one term was solved.
+      generated: packed.generated || null,
     };
   }
 

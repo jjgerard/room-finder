@@ -219,7 +219,7 @@
         }
       }
       return { module: slot.module, title: slot.title, rooms: slot.rooms,
-               cls: cls || cands[0] || null };
+               day: slot.day, start: slot.start, cls: cls || cands[0] || null };
     }).sort(function (a, b) { return b.rooms.length - a.rooms.length; });
   }
 
@@ -256,8 +256,9 @@
           'reading, not checked in your browser the way spring is, so this count is the ' +
           'solver\u2019s own.</p></div>'
         : '<div class="note good"><p style="margin:0"><strong>Every hard rule holds in the ' +
-          'autumn rebuild too.</strong> It is shown for reading rather than re-checked here, ' +
-          'so this count is the solver\u2019s own.</p></div>'),
+          'autumn rebuild too.</strong> Autumn\u2019s model is not loaded on this page, so ' +
+          'unlike spring it is not re-checked in your browser \u2014 the check ran when the ' +
+          'file was built, against the same rules and the same teaching day.</p></div>'),
       corrections(H, left),
     ].join('');
   }
@@ -326,11 +327,32 @@
           'rebuild infers them from the sessions that already run back-to-back \u2014 which is ' +
           'why today breaks none of them. The rebuild keeps all ' + fmtN(sc.groups) + '.</p>'
         : '') +
-      (sc.overflow
-        ? '<p class="small muted">' + sc.overflow + ' sessions in the rebuild still finish after ' +
-          '17:15, because the chain of classes they belong to is longer than a teaching day. The ' +
-          'rule excuses those; it does not pretend they are inside it.</p>'
-        : '');
+      overflowNote(sc.overflow);
+  }
+
+  /**
+   * Sessions the rebuild leaves finishing after 17:15, and why. There are two
+   * reasons and they are not interchangeable: a chain of classes longer than a
+   * teaching day cannot fit whatever you do, while a pinned evening session
+   * drags whatever is chained in front of it past the end. Reporting both as
+   * chain length was wrong for the one class in the second group.
+   */
+  function overflowNote(o) {
+    if (!o) return '';
+    // Older data files carry a plain number.
+    if (typeof o === 'number') o = { total: o, chain: o, pinned: 0 };
+    if (!o.total) return '';
+    // One reason reads as a clause; two need counting, so they get a colon.
+    var both = o.chain && o.pinned;
+    var chain = 'the chain of classes they belong to is longer than a teaching day';
+    var pin = 'a session pinned in the evening pulls the class chained in front of it past ' +
+      'the end';
+    var why = both
+      ? ': ' + o.chain + ' because ' + chain + ', and ' + o.pinned + ' because ' + pin
+      : ', because ' + (o.chain ? chain : pin);
+    return '<p class="small muted">' + o.total + ' session' + (o.total === 1 ? '' : 's') +
+      ' in the rebuild still finish' + (o.total === 1 ? 'es' : '') + ' after 17:15' + why +
+      '. The rule excuses those; it does not pretend they are inside it.</p>';
   }
 
   /**
@@ -413,7 +435,7 @@
       '<rect x="20" y="300" width="300" height="106" rx="8" class="g-leftover"/>',
       '<text x="36" y="322" class="g-label g-badtext">what is left for whoever books last</text>',
       '<text x="36" y="344" class="g-small">• an 08:15 start, or a 17:15 finish</text>',
-      '<text x="36" y="364" class="g-small">• the class split across two or three rooms</text>',
+      '<text x="36" y="364" class="g-small">\u2022 a different room part-way through the term</text>',
       '<text x="36" y="384" class="g-small">• a gap between the lecture and its seminar</text>',
       '</g>',
 
@@ -636,8 +658,8 @@
       'arrangements that are equally correct.</p>',
       '<p class="small muted">The tail is short in both terms: no autumn start ended worse ' +
       'than ' + (SWEEP.autumn.dist.length - 1) + ', and ' +
-      (SWEEP.autumn.dist[1] + SWEEP.autumn.dist[2]) + ' of ' + SWEEP.seeds +
-      ' ended at the floor or one above it. That is a reversal: under the room sizes first ',
+      (SWEEP.autumn.dist[0] + SWEEP.autumn.dist[1]) + ' of ' + SWEEP.seeds +
+      ' ended on nothing or one. That is a reversal: under the room sizes first ',
       'read off the booking data, autumn could not get near this at all. What changed was the ',
       'data, not the search \u2014 the confirmed cohort sizes, the room types a module actually ',
       'needs, and the rooms a module is pinned to.</p>',
@@ -829,8 +851,10 @@
       ruleTiles += tile(fmtN(moved.length), 'One class using several rooms through the term',
         'rebuilt: ' + fmtN(movedAfter), 'warn',
         few(moved.map(function (x) {
+          // A module can wander in two different slots; without the slot the
+          // two entries read as the same class listed twice.
           return '<strong>' + esc(x.module) + '</strong> <span class="muted">' +
-            x.rooms.length + ' rooms' +
+            M.DAYS[x.day] + ' ' + M.fmt(x.start) + ' \u00b7 ' + x.rooms.length + ' rooms' +
             (x.cls ? ' \u2192 ' + esc(roomLabel(model, x.cls.room)) : '') + '</span>';
         })));
     }
@@ -855,7 +879,8 @@
       '<h3>Differences between the current approach and the rebuild</h3>',
       '<p class="small muted">The large number is how often the timetable as it stands breaks ',
       'that rule, counted from the bookings themselves; underneath it, the same count in the ',
-      'rebuild. Rules that already hold today, and still do, are left out.</p>',
+      'rebuild. A rule neither term breaks is left out; a zero means that term already keeps ',
+      'it, and the rebuild still does.</p>',
       '<h4 class="term-sub">Spring 2026</h4>',
       '<div class="stats">',
       ruleTiles,
@@ -866,11 +891,11 @@
           TODAY.sharedRoomPairs + ' pairs of bookings do hold one room at the same time, and ' +
           'every one of them is shared teaching \u2014 architecture and art studios, the ' +
           'hospitality kitchen, a joint sports physiology lab \u2014 which the rebuild keeps. ' +
-          'What the term does have is splitting: ' + fmtN(TODAY.splitBookings) + ' of ' +
-          fmtN(TODAY.bookings) + ' bookings use more than one room, one of them ' +
-          TODAY.maxRooms + ', which is ' + fmtN(TODAY.splitExtra) + ' of the term\u2019s ' +
-          fmtN(TODAY.roomBookings) + ' room-bookings. All ' + b2b + ' of ' + groups +
-          ' lecture+seminar pairs run back-to-back.</p>'
+          fmtN(TODAY.splitBookings) + ' of the term\u2019s ' + fmtN(TODAY.bookings) +
+          ' bookings use more than one room, one of them ' + TODAY.maxRooms + ', and almost ' +
+          'all of that is parallel teaching the rebuild books in full. The ' +
+          fmtN(moved.length) + ' above are the ones nobody could hold a single room for. ' +
+          'All ' + b2b + ' of ' + groups + ' lecture+seminar pairs run back-to-back.</p>'
         : '<p class="small muted">All ' + b2b + ' of ' + groups + ' lecture+seminar pairs run ' +
           'back-to-back.</p>',
 
@@ -887,9 +912,8 @@
       '<li><strong>Nobody holds the whole picture.</strong> A school sees its own clashes. It ',
       'cannot see that its 2pm booking is what forces another school\u2019s cohort to 08:15.</li>',
       '<li><strong>So the rules bend instead of the calendar.</strong> When nothing fits, a class ',
-      'is split across rooms' +
-      (TODAY ? ' (' + fmtN(TODAY.splitBookings) + ' of ' + fmtN(TODAY.bookings) +
-               ' bookings, one across ' + TODAY.maxRooms + ')' : '') +
+      'moves to a different room part-way through the term' +
+      (TODAY ? ' (' + fmtN(moved.length) + ' of ' + fmtN(TODAY.bookings) + ' bookings)' : '') +
       ', or a gap opens between a lecture and its seminar (' + gappy + ' of ' + groups + ').</li>',
       TODAY
         ? '<li><strong>And the day stretches.</strong> ' + fmtN(TODAY.outside) + ' of ' +
@@ -937,7 +961,7 @@
       '<h2>Before you rely on it</h2>',
       '<div class="note warn"><p style="margin:0"><strong>The clash data is inferred.</strong> ',
       '"These two share students" was read off the current timetable, and the result is solved ',
-      'against <strong>' + (meta.clashEdges || '?') + ' of ' + (meta.clashEdgesTotal || '?') +
+      'against <strong>' + fmtN(meta.clashEdges || 0) + ' of ' + fmtN(meta.clashEdgesTotal || 0) +
       '</strong> inferred pairs \u2014 those it actually evidences. Real enrolment data would ',
       'settle it.</p></div>',
       '<div class="note warn"><p style="margin:0"><strong>Most class sizes are room capacities, ',
@@ -958,8 +982,8 @@
       'node timetable/solve.js --term spring --seeds 30 --clashes evidenced --out docs/data\n',
       'node timetable/solve.js --term autumn --seeds 30 --clashes evidenced --out docs/data</code></pre>',
       '<p class="small muted"><code>constraints.js</code> runs unchanged in node and the browser, ',
-      'so this page checks the rules with the same code that enforced them. Data generated ' +
-      (meta.generated || 'unknown') + '.</p>',
+      'so this page checks the rules with the same code that enforced them. Data built ' +
+      (H.generated || meta.generated || 'unknown') + '.</p>',
 
       '</div>',
     ].join('');
