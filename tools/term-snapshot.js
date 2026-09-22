@@ -19,7 +19,7 @@
  *
  *   snapshotTerm({
  *     term: 'autumn',
- *     from: '2026-09-21', to: '2026-12-11',   // first Monday to last Friday
+ *     from: '2026-09-21', to: '2026-12-18',   // first Monday to last Friday
  *     weekOneMonday: '2026-09-21',
  *   })
  *
@@ -78,6 +78,9 @@
       return nativeFetch.apply(this, arguments);
     };
   }
+
+  /** Whether the app has been seen making a request this can replay. */
+  function ready() { return !!auth.headers; }
 
   function headerCopy() {
     var out = {};
@@ -199,7 +202,9 @@
       out.push(a === b ? String(a) : a + '–' + b);
       i++;
     }
-    return out.join(',');
+    // ", " — the separator terms.json already uses. A bare comma made 89
+    // untouched bookings read as moved when the two were compared.
+    return out.join(', ');
   }
 
   // ------------------------------------------------------------------ naming
@@ -207,15 +212,43 @@
   // An event name is the timetable code: CMM125_S1/LEC/01, BMG715/S2/LEC/SEM/HLA*.
   // The module is the leading code; the activity is the first segment that is
   // one of the codes the data uses.
-  var ACTIVITIES = ['LEC', 'SEM', 'TUT', 'LAB', 'PRA', 'WOR', 'COM', 'EXM', 'OTH'];
+  // Worked out from the 5,637 bookings already in the data: the activity is
+  // the first title segment that starts with one of these, and the longest
+  // form has to be tried first or PRAC is eaten by PRA. Matching whole
+  // segments against a flat list got a third of them wrong — SEM2+ and PRAC
+  // both fell through to OTH.
+  var CODES = [
+    ['LECTURE', 'LEC'], ['LEC', 'LEC'],
+    ['SEMINAR', 'SEM'], ['SEM', 'SEM'],
+    ['TUTORIAL', 'TUT'], ['TUT', 'TUT'],
+    ['LABS', 'LAB'], ['LAB', 'LAB'],
+    ['PRACTICAL', 'PRA'], ['PRAC', 'PRA'], ['PRA', 'PRA'],
+    ['WORKSHOP', 'WOR'], ['WORK', 'WOR'], ['WOR', 'WOR'],
+    ['COMPUTING', 'COM'], ['COMP', 'COM'],
+    ['CLASS TEST', 'EXM'], ['EXAM', 'EXM'], ['EXM', 'EXM'],
+    ['STUDIO', 'OTH'], ['OTH', 'OTH'],
+  ];
+  // An exam is usually named rather than coded, and the estates bookings that
+  // hold a room for an exam week are named only.
+  var EXAMISH = /\bexam|\bclass test|\bassessment\b|\bresit\b|\bmoot\b/i;
 
   function parseName(name) {
     var s = String(name || '');
     var module = (s.match(/^([A-Z]{2,4}\d{3,4})/) || [])[1] || '';
     var activity = '';
-    s.split(/[/_+\s]+/).forEach(function (part) {
-      if (!activity && ACTIVITIES.indexOf(part.toUpperCase()) >= 0) activity = part.toUpperCase();
-    });
+    var segs = s.split('/');
+    for (var i = 0; i < segs.length && !activity; i++) {
+      var seg = segs[i].trim();
+      // The first segment is the module code, not an activity.
+      if (i === 0 && /^[A-Z]{2,4}\d{3,4}/i.test(seg)) continue;
+      var up = seg.toUpperCase();
+      for (var j = 0; j < CODES.length; j++) {
+        if (up.indexOf(CODES[j][0]) === 0) { activity = CODES[j][1]; break; }
+      }
+    }
+    // Only when no segment carries a code: a lecture whose title mentions a
+    // class test is still a lecture.
+    if (!activity && EXAMISH.test(s)) activity = 'EXM';
     return { module: module, activity: activity || 'OTH', title: s };
   }
 
@@ -229,15 +262,30 @@
     if (missing.length) {
       return Promise.reject(new Error('snapshotTerm needs ' + missing.join(', ')));
     }
-    if (!auth.headers) {
-      return Promise.reject(new Error(
-        'No request from the app seen yet. Do something in the page first — type in ' +
-        'the resource search box, or click the calendar’s next arrow — then run this again.'));
-    }
     var btid = (location.pathname.match(/booking-types\/([0-9a-f-]{36})/i) || [])[1];
     if (!btid) return Promise.reject(new Error('Open a booking-type page first (.../app/booking-types/<id>).'));
 
-    console.log('Listing Belfast rooms…');
+    // Pasted into a console, this runs long after the app has made the
+    // requests it makes on load, so there is nothing to have captured yet.
+    // Telling the person to "do something in the page first" put the burden in
+    // the wrong place, and was the usual reason a run went nowhere. Provoke a
+    // request instead, and give up only when the app will not make one.
+    var wait = Promise.resolve();
+    if (!ready()) {
+      console.log('Waiting for the app to make a request this can replay\u2026');
+      wait = nudge()
+        .then(function () { return ready() ? null : nudge(); })
+        .then(function () {
+          if (!ready()) {
+            throw new Error('The app has not sent a request this script can replay. Click ' +
+              'something in the page \u2014 the room search box, or the calendar\u2019s next ' +
+              'arrow \u2014 and run it again.');
+          }
+        });
+    }
+
+    return wait.then(function () {
+    console.log('Listing Belfast rooms\u2026');
     return callRetry('BookingTypes/' + btid + '/BookableResourceGroupsAndResources', {
       Query: 'B_', ItemsPerPage: 800, Properties: [], ResourceGroupIdentities: [], LoadedIdentities: [],
     }).then(function (r) {
@@ -293,17 +341,23 @@
         };
         console.log(rows.length + ' bookings from ' + events + ' events (' + outside +
                     ' outside the range, dropped).');
-        var blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'snapshot-' + opts.term + '.json';
-        a.click();
+        // The automated runner takes the value back through the driver and
+        // writes the file itself, so it asks for no download.
+        if (opts.download !== false) {
+          var blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'snapshot-' + opts.term + '.json';
+          a.click();
+        }
         return out;
       });
+    });
     });
   }
 
   window.snapshotTerm = snapshotTerm;
-  console.log('snapshotTerm ready. Do something in the page first so it can see the app’s ' +
-              'own request, then call it — see the comment at the top of this file.');
+  window.snapshotReady = ready;
+  console.log('snapshotTerm ready \u2014 call it with the term and its dates; see the comment',
+              'at the top of this file.');
 })();

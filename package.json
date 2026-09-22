@@ -1,0 +1,14 @@
+{
+  "name": "belfast-timetable",
+  "private": true,
+  "description": "Rebuilds Ulster Belfast's timetable so every class gets one room, and publishes the result.",
+  "scripts": {
+    "test": "node timetable/test.js",
+    "build": "node timetable/export.js",
+    "fetch:autumn": "node tools/fetch-term.mjs --term autumn",
+    "fetch:spring": "node tools/fetch-term.mjs --term spring"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  }
+}

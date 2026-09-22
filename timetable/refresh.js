@@ -6,7 +6,7 @@
 //
 //   1. open Resource Booker, sign in, open a booking-type page
 //   2. paste tools/term-snapshot.js into the console
-//   3. snapshotTerm({ term: 'autumn', from: '2026-09-21', to: '2026-12-11',
+//   3. snapshotTerm({ term: 'autumn', from: '2026-09-21', to: '2026-12-18',
 //                     weekOneMonday: '2026-09-21' })
 //   4. node timetable/refresh.js --in ~/Downloads/snapshot-autumn.json
 //   5. node timetable/export.js

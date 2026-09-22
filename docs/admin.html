@@ -46,7 +46,18 @@
 
   <!-- ------------------------------------------------------------ step 2 -->
   <section class="card pad step">
-    <h3><span class="num">2</span> Copy the reader, and run it there</h3>
+    <h3><span class="num">2</span> Read the term</h3>
+    <div class="note good"><p style="margin:0"><strong>One command does all of this.</strong>
+      <code>node tools/fetch-term.mjs --term autumn</code> opens a real browser, waits while you
+      sign in, reads the term and writes the file. The first run asks for the booking-type
+      address; after that the signed-in profile is kept in <code>.auth/</code> and it needs no
+      attention at all. Use it in preference to the console — the console can only capture the
+      app's headers from requests made <em>after</em> you paste, and by then the app has
+      usually made the ones it makes on load, which is why a paste often sits there doing
+      nothing. The runner installs the capture before the page's own code, so there is no
+      window to miss.</p></div>
+    <p class="small muted" style="margin-bottom:14px">What follows is the same reader by hand,
+      for when node is not to hand.</p>
     <div class="grid2">
       <div>
         <label class="fld" for="term">Term</label>
@@ -179,7 +190,7 @@
   // Autumn 2026 runs from the Monday of week 1; spring's dates are the
   // operator's to set, so they are only defaults.
   var DEFAULTS = {
-    autumn: { w1: '2026-09-21', from: '2026-09-21', to: '2026-12-11' },
+    autumn: { w1: '2026-09-21', from: '2026-09-21', to: '2026-12-18' },
     spring: { w1: '2027-01-25', from: '2027-01-25', to: '2027-05-14' },
   };
   ['w1', 'from', 'to'].forEach(function (k) { remember(k, $(k), DEFAULTS.autumn[k]); });

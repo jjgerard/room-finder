@@ -1,0 +1,4 @@
+node_modules/
+# The signed-in browser profile the refresh reuses. It holds a live Microsoft
+# session for whoever ran it — never commit it.
+.auth/
