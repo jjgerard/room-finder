@@ -8,25 +8,23 @@
 (function () {
   'use strict';
 
-  // Facts about the CURRENT spring timetable that the packed data does not
-  // carry directly. Measured once from the source bookings, quoted here so the
-  // prose cannot drift from them; see scratchpad notes in the repo history.
-  var TODAY = {
-    bookings: 2095,          // distinct bookings in spring 2026
-    splitBookings: 215,      // of those, using two or more rooms
-    maxRooms: 31,            // the worst one, an exam
-    // Pairs of different bookings holding one room at the same time, counted
-    // from the per-room history. All of them are studio teaching — ARC, ART,
-    // HTM, DES — where several year groups share a studio on purpose, so this
-    // is not a fault to be fixed. Nothing else in the term shares a room.
-    sharedRoomPairs: 183,
-    splitExtra: 600,         // room-bookings that exist only because of splitting
-    at0915: 862,             // bookings starting at 09:15
-    at0815: 397,             // bookings starting at 08:15
-    outside: 560,            // room-bookings outside 09:15-17:15
-    outsideOf: 3302,
-    roomBookings: 3302,     // one row per class-room booking
-  };
+  /**
+   * Facts about a term AS IT STANDS, computed in timetable/export.js from the
+   * term's own bookings and shipped beside them.
+   *
+   * These used to be a block of literals here, measured once. That held only
+   * while the bookings never changed — and timetable/refresh.js can now pull a
+   * fresh snapshot from Resource Booker, after which typed-in numbers would go
+   * on describing a term that no longer exists, with nothing on the page to
+   * say so. Reading them from the data means a refresh moves them.
+   *
+   * A term whose file predates this returns null, and the caller leaves the
+   * sentence out rather than quoting a figure it cannot stand behind.
+   */
+  function todayOf(H, key) {
+    var t = H.terms && H.terms[key];
+    return (t && t.today) || null;
+  }
 
   // Every seed of a 30-seed sweep per term, run with the same rules and data
   // the site ships: `node timetable/solve.js --term <t> --seeds 30 --clashes
@@ -36,19 +34,16 @@
   // finished with no hard violation; `dist` is how many seeds ended on 0, 1,
   // 2 ... violations; `published` is the seed the shipped file came from.
   // None of the clean seeds needed to split a class across two rooms.
+  //
+  // Unlike the figures above, these cannot be computed in the browser: it has
+  // one timetable per term, not thirty. They are measured once and quoted, and
+  // the command that produces them is on the page.
   var SWEEP = {
     seeds: 30,
     spring: { zero: 6, dist: [6, 9, 6, 7, 1, 1], published: 7,
               clean: [6, 7, 8, 15, 21, 28] },
-    // Autumn cannot reach zero, and the reason is fixed rather than found:
-    // COM772's lecture is chained to a session starting at 18:15, which the
-    // model pins because evening teaching stays where it is, so the lecture
-    // must run 15:15-18:15 and overflow the teaching day by an hour. Every
-    // arrangement carries it. `floor` is that unavoidable count, and `zero`
-    // counts the seeds that reach it.
-    autumn: { zero: 8, floor: 1, dist: [0, 8, 15, 5, 2], published: 4,
-              clean: [3, 4, 9, 15, 20, 25, 27, 29],
-              forced: 'COM772\u2019s lecture, chained to a pinned 18:15 session' },
+    autumn: { zero: 8, dist: [8, 15, 5, 2], published: 4,
+              clean: [3, 4, 9, 15, 20, 25, 27, 29] },
   };
 
   function fmtN(n) { return Number(n).toLocaleString(); }
@@ -253,7 +248,10 @@
   function autumnSection(H) {
     var t = H.terms && H.terms.autumnNew;
     if (!t) return '';
-    var left = Number((t.sub.match(/(\d+) unresolved/) || [])[1] || 0);
+    // From the scorecard, which is computed against the site's own teaching
+    // day, rather than parsed back out of the label.
+    var left = t.score && t.score.left ? t.score.left.length
+      : Number((t.sub.match(/(\d+) unresolved/) || [])[1] || 0);
     var rows = (H.terms.autumn || {}).rows || [];
     return [
       '<h2>Autumn 2026, the same way</h2>',
@@ -269,15 +267,33 @@
         : '<div class="note good"><p style="margin:0"><strong>Every hard rule holds in the ' +
           'autumn rebuild too.</strong> It is shown for reading rather than re-checked here, ' +
           'so this count is the solver\u2019s own.</p></div>'),
-      '<p class="small muted">Getting there took corrections rather than a better search, and ',
-      'the corrections came from timetabling: sixty-two confirmed cohort sizes across the ',
-      'two terms, two classes ',
-      'told what kind of room they need, one told to keep the slot it has. Five modules were ',
-      'each believed to need all 350 seats of Lecture Theatre 1 because that is the room they ',
-      'sit in \u2014 only one of them does. ENH315 needs forty. Every such correction hands a ',
-      'room back to the classes that were queueing for it, and the count fell with each one, ',
-      'from eight to ' + (left ? left : 'none') + '.</p>',
+      corrections(H, left),
     ].join('');
+  }
+
+  /**
+   * What it took to get the term clean, counted from the correction files
+   * themselves. Written into the prose these went stale the moment anybody
+   * added a row, and there was nothing on the page to say they had.
+   */
+  function corrections(H, left) {
+    var c = H.corrections;
+    var parts = [];
+    if (c) {
+      if (c.sizes) parts.push(fmtN(c.sizes) + ' confirmed cohort size' + (c.sizes === 1 ? '' : 's'));
+      if (c.roomTypes) parts.push(c.roomTypes + ' class' + (c.roomTypes === 1 ? '' : 'es') +
+        ' told what kind of room they need');
+      if (c.roomReqs) parts.push(c.roomReqs + ' told which room');
+      if (c.keepSlot) parts.push(c.keepSlot + ' told to keep the slot it has');
+      if (c.mayShare) parts.push(c.mayShare + ' allowed to share a room');
+    }
+    return '<p class="small muted">Getting there took corrections rather than a better search, ' +
+      'and the corrections came from timetabling' +
+      (parts.length ? ': ' + parts.join(', ') + '. ' : '. ') +
+      'Five modules were each believed to need all 350 seats of Lecture Theatre 1 because that ' +
+      'is the room they sit in \u2014 only one of them does. ENH315 needs forty. Every such ' +
+      'correction hands a room back to the classes that were queueing for it, and the count ' +
+      'fell with each one, to ' + (left ? left : 'none') + '.</p>';
   }
 
   function nowTotal(score) {
@@ -772,6 +788,9 @@
     // not one class split six ways.
     var splitNew = 0;
 
+    // The term as it stands, from its own bookings. Spring, because that is
+    // the term these sentences are about; autumn's own figures are on its card.
+    var TODAY = todayOf(H, 'springNow');
     var bigRooms = model.rooms.filter(function (r) { return r.capacity >= 150; });
     var risky = atRisk(model);
     var tight = tightest(model);
@@ -867,14 +886,18 @@
       ruleTiles,
       '</div>',
       autumnTiles(H.terms.autumnNew, 'Autumn 2026', H),
-      '<p class="small muted">The room rule itself already holds today: ' + TODAY.sharedRoomPairs +
-      ' pairs of bookings do hold one room at the same time, and every one of them is shared ',
-      'teaching \u2014 architecture and art studios, the hospitality kitchen, a joint sports ',
-      'physiology lab \u2014 which the rebuild keeps. What the term does have is splitting: ' +
-      fmtN(TODAY.splitBookings) + ' of ' + fmtN(TODAY.bookings) + ' bookings use more than one ',
-      'room, one of them ' + TODAY.maxRooms + ', which is ' + fmtN(TODAY.splitExtra) + ' of the ',
-      'term\u2019s ' + fmtN(TODAY.roomBookings) + ' room-bookings. All ' + b2b + ' of ' + groups +
-      ' lecture+seminar pairs run back-to-back.</p>',
+      TODAY
+        ? '<p class="small muted">The room rule itself already holds today: ' +
+          TODAY.sharedRoomPairs + ' pairs of bookings do hold one room at the same time, and ' +
+          'every one of them is shared teaching \u2014 architecture and art studios, the ' +
+          'hospitality kitchen, a joint sports physiology lab \u2014 which the rebuild keeps. ' +
+          'What the term does have is splitting: ' + fmtN(TODAY.splitBookings) + ' of ' +
+          fmtN(TODAY.bookings) + ' bookings use more than one room, one of them ' +
+          TODAY.maxRooms + ', which is ' + fmtN(TODAY.splitExtra) + ' of the term\u2019s ' +
+          fmtN(TODAY.roomBookings) + ' room-bookings. All ' + b2b + ' of ' + groups +
+          ' lecture+seminar pairs run back-to-back.</p>'
+        : '<p class="small muted">All ' + b2b + ' of ' + groups + ' lecture+seminar pairs run ' +
+          'back-to-back.</p>',
 
       hourChart(model, a.solved, 'Spring 2026: classes running in each hour'),
       hourChartRows(H, 'autumn', 'autumnNew', 'Autumn 2026: bookings running in each hour'),
@@ -889,12 +912,15 @@
       '<li><strong>Nobody holds the whole picture.</strong> A school sees its own clashes. It ',
       'cannot see that its 2pm booking is what forces another school\u2019s cohort to 08:15.</li>',
       '<li><strong>So the rules bend instead of the calendar.</strong> When nothing fits, a class ',
-      'is split across rooms (' + fmtN(TODAY.splitBookings) + ' of ' + fmtN(TODAY.bookings) +
-      ' bookings, one across ' + TODAY.maxRooms + '), or a gap opens between a lecture and its ',
-      'seminar (' + gappy + ' of ' + groups + ').</li>',
-      '<li><strong>And the day stretches.</strong> ' + fmtN(TODAY.outside) + ' of ' +
-      fmtN(TODAY.outsideOf) + ' room-bookings fall outside 9\u20135; ' + fmtN(TODAY.at0815) +
-      ' start at 08:15.</li>',
+      'is split across rooms' +
+      (TODAY ? ' (' + fmtN(TODAY.splitBookings) + ' of ' + fmtN(TODAY.bookings) +
+               ' bookings, one across ' + TODAY.maxRooms + ')' : '') +
+      ', or a gap opens between a lecture and its seminar (' + gappy + ' of ' + groups + ').</li>',
+      TODAY
+        ? '<li><strong>And the day stretches.</strong> ' + fmtN(TODAY.outside) + ' of ' +
+          fmtN(TODAY.roomBookings) + ' room-bookings fall outside 9\u20135; ' +
+          fmtN(TODAY.at0815) + ' start at 08:15.</li>'
+        : '',
       '<li><strong>The rest is settled by hand</strong> in the weeks before term, one email at ',
       'a time. It recurs every year because the method produces it, not the term.</li>',
       '</ul>',

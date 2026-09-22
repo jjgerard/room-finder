@@ -145,6 +145,9 @@
         // A term the browser has no model for carries its own scorecard,
         // computed where the model exists.
         score: t.score || null,
+        // And, for a term as it stands, the figures the About page compares
+        // against — counted in export.js so an S+ refresh moves them.
+        today: t.today || null,
         rows: t.rows.map(function (r) {
           return {
             module: r[R.module], activity: r[R.activity], title: r[R.title],
@@ -161,6 +164,8 @@
       rooms: rooms, programmes: packed.programmes, modTitles: packed.modTitles || {},
       // The room-type overrides the solver is using, for the page that edits them.
       roomTypes: packed.roomTypes || [],
+      // How many corrections timetabling has supplied, by kind.
+      corrections: packed.corrections || null,
     };
   }
 

@@ -67,6 +67,114 @@ function displayRow(r, progs, changed) {
   return [r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], progs, changed || ''];
 }
 
+// Facts about a term AS IT STANDS, for the About page's comparisons.
+//
+// These used to be a block of numbers typed into docs/assets/method.js, taken
+// once from the source bookings. That was fine while the bookings never
+// changed; it stopped being fine the moment timetable/refresh.js could pull a
+// new snapshot from Resource Booker, because the page would go on quoting the
+// old term with no way to tell. Computing them here means a refresh updates
+// them, and the definitions live next to the data they are taken from rather
+// than in a comment beside a literal.
+//
+// Every definition below reproduces the figure it replaced, exactly.
+// How many corrections timetabling has supplied, by kind. The About page says
+// what it took to get a term clean — "sixty-two confirmed cohort sizes, two
+// classes told what kind of room they need" — and those were counted by hand
+// into the prose. They are rows in files right here, so count them: the next
+// correction should move the sentence without anybody remembering to.
+function correctionCounts() {
+  const rows = file => {
+    const p = path.join(__dirname, 'data', file);
+    if (!fs.existsSync(p)) return 0;
+    return fs.readFileSync(p, 'utf8').trim().split(/\r?\n/).slice(1)
+      .filter(l => l.trim()).length;
+  };
+  return {
+    sizes: rows('class_sizes.csv'),
+    roomTypes: rows('room_types.csv'),
+    keepSlot: rows('keep_slot.csv'),
+    mayShare: rows('may_share_room.csv'),
+    roomReqs: rows('room_requirements.csv'),
+    notShared: rows('not_shared.csv'),
+  };
+}
+
+function todayStats(rows) {
+  const R = { title: 2, day: 3, start: 4, dur: 5, room: 6, weeks: 8 };
+  const DAY_START = 9 * 60 + 15, DAY_END = 17 * 60 + 15;
+
+  // A "booking" is a timetable code. The same code appearing against three
+  // rooms is one booking in three rooms, not three bookings — which is the
+  // whole point of the comparison, so it has to be counted that way.
+  const roomsOf = new Map();
+  for (const r of rows) {
+    const k = r[R.title];
+    if (!roomsOf.has(k)) roomsOf.set(k, new Set());
+    roomsOf.get(k).add(r[R.room]);
+  }
+  const counts = [...roomsOf.values()].map(s => s.size);
+  const split = counts.filter(n => n > 1);
+
+  // Two different bookings holding one room at the same moment in a week they
+  // share. Every one of these in spring is shared teaching — studios, the
+  // hospitality kitchen, a joint physiology lab — which the rebuild keeps, so
+  // the page quotes it to show the room rule already holds rather than as a
+  // fault. Weeks matter: two bookings in one room in weeks 1-6 and 7-12 never
+  // meet, and counting them as a clash was what once made the site report 288
+  // room clashes that do not happen.
+  let sharedRoomPairs = 0;
+  const byRoomDay = new Map();
+  for (const r of rows) {
+    const k = r[R.room] + '|' + r[R.day];
+    if (!byRoomDay.has(k)) byRoomDay.set(k, []);
+    byRoomDay.get(k).push(r);
+  }
+  for (const list of byRoomDay.values()) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j];
+        if (a[R.title] === b[R.title]) continue;
+        if (!(a[R.start] < b[R.start] + b[R.dur] && b[R.start] < a[R.start] + a[R.dur])) continue;
+        if (!(weekMask(a[R.weeks]) & weekMask(b[R.weeks]))) continue;
+        sharedRoomPairs++;
+      }
+    }
+  }
+
+  return {
+    roomBookings: rows.length,          // one row per class-room booking
+    bookings: roomsOf.size,             // distinct timetable codes
+    splitBookings: split.length,        // codes using more than one room
+    maxRooms: counts.length ? Math.max(...counts) : 0,
+    splitExtra: split.reduce((n, x) => n + x - 1, 0),
+    sharedRoomPairs,
+    at0915: rows.filter(r => r[R.start] === DAY_START).length,
+    at0815: rows.filter(r => r[R.start] === DAY_START - 60).length,
+    outside: rows.filter(r => r[R.start] < DAY_START ||
+                              r[R.start] + r[R.dur] > DAY_END).length,
+  };
+}
+
+/** "1-6,8" -> bitmask. The week text is all the display rows carry. */
+function weekMask(pattern) {
+  let mask = 0;
+  String(pattern == null ? '' : pattern).split(',').forEach(part => {
+    part = part.trim().replace(/\u2013/g, '-');
+    if (!part) return;
+    const dash = part.indexOf('-', 1);
+    if (dash > 0) {
+      const a = parseInt(part.slice(0, dash), 10), b = parseInt(part.slice(dash + 1), 10);
+      if (isNaN(a) || isNaN(b)) return;
+      for (let w = Math.max(1, a); w <= Math.min(16, b); w++) mask |= 1 << (w - 1);
+    } else {
+      const v = parseInt(part, 10);
+      if (!isNaN(v) && v >= 1 && v <= 16) mask |= 1 << (v - 1);
+    }
+  });
+  return mask;
+}
+
 const autumnRows = terms.autumn.rows.map(r =>
   displayRow(r, modProgs.get(r[0]) || []));
 
@@ -185,10 +293,15 @@ const packed = {
   programmes: progName,
   modTitles: Object.fromEntries(modTitle),
   terms: {
-    autumn: { label: 'Autumn 2026', sub: 'as it stands', rows: autumnRows, checkable: 0 },
-    springNow: { label: 'Spring 2026', sub: 'as it stands', rows: springNowRows, checkable: 0 },
+    autumn: { label: 'Autumn 2026', sub: 'as it stands', rows: autumnRows, checkable: 0,
+              today: todayStats(autumnRows) },
+    springNow: { label: 'Spring 2026', sub: 'as it stands', rows: springNowRows, checkable: 0,
+                 today: todayStats(springNowRows) },
     springNew: { label: 'Spring 2026', sub: 'rebuilt', rows: springNewRows, checkable: 1 },
   },
+  // What timetabling has corrected, for the About page's account of how a term
+  // got clean.
+  corrections: correctionCounts(),
   classes: packClasses(model, solved, c => c.programmes.map(p => progId(p))),
   cand: model.classes.map(c => c.cand),
   // Rooms of a kind each class can use, whatever their size: what a
