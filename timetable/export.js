@@ -96,7 +96,9 @@ if (fs.existsSync(autumnSolPath)) {
         a ? a.room : c.origRoom, c.nWeeks, c.weeksText],
       progs, a ? a.changed : '');
   });
-  autumnNewUnresolved = autumnSol.meta.hardViolations || 0;
+  // Set below, from the score computed against the site's teaching day —
+  // never from the solution file's own count.
+  autumnNewUnresolved = 0;
   // The same shape the spring model is packed in, so the browser can hydrate
   // it with the same code. It goes in its own file: Fix a clash needs it and
   // nothing else does, so the pages that only show a timetable should not pay
@@ -118,10 +120,18 @@ if (fs.existsSync(autumnSolPath)) {
       return [c.id, { day: a ? a.day : c.origDay, start: a ? a.start : c.origStart,
                       room: a ? a.room : c.origRoom, extra: a && a.extra }];
     }));
+    const fixedChk = C.check(autumnModel, solvedAssign, opts);
     autumnScore = {
       now: C.check(autumnModel, baseline,
         Object.assign({ occupancy: autumnModel.currentOccupancy }, opts)).counts,
-      fixed: C.check(autumnModel, solvedAssign, opts).counts,
+      fixed: fixedChk.counts,
+      // What is still broken, by name. The solution file's own count came
+      // from a run that graded itself against a widened teaching day and
+      // said 0; this one uses the day the site enforces.
+      left: fixedChk.violations.map(v => {
+        const c = autumnModel.byId.get(v.a);
+        return { kind: v.kind, what: `${c.module || c.activity}/${c.activity}` };
+      }),
       classes: autumnModel.classes.length,
       groups: autumnModel.linkedGroups.length,
       // Sessions that finish after 17:15 because their linked chain is longer
@@ -148,8 +158,13 @@ if (fs.existsSync(autumnSolPath)) {
     groups: autumnModel.linkedGroups.map(g => [g.key, ...g.members.map(m => m.id)]),
     comps: autumnComps.map(c => c.members.map(m => [m.cls.id, m.off])),
   };
+  // The solution file's own count, not the site's: it came from a run that
+  // graded itself against a widened teaching day. The real figure is printed
+  // with the term list below, from autumnScore.
   console.log(`  autumn rebuilt: ${autumnNewRows.length} rows, ` +
-              `${autumnSol.meta.hardViolations} hard violations`);
+              `${Object.values(autumnScore.fixed).reduce((n, v) => n + v, 0)} hard violations` +
+              (autumnScore.left.length
+                ? ` (${autumnScore.left.map(x => x.kind + ' ' + x.what).join(', ')})` : ''));
 }
 
 // The rebuilt term comes from the solver, so its programmes are per class.
@@ -204,6 +219,10 @@ const packed = {
   groups: model.linkedGroups.map(g => [g.key, ...g.members.map(m => m.id)]),
   comps: components.map(c => c.members.map(m => [m.cls.id, m.off])),
 };
+
+if (autumnNewRows && autumnScore) {
+  autumnNewUnresolved = Object.values(autumnScore.fixed).reduce((n, v) => n + v, 0);
+}
 
 if (autumnNewRows) {
   // Say so while it is not clean. The tab is display-only, so a visitor has no

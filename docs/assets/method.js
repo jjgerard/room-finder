@@ -40,8 +40,15 @@
     seeds: 30,
     spring: { zero: 6, dist: [6, 9, 6, 7, 1, 1], published: 7,
               clean: [6, 7, 8, 15, 21, 28] },
-    autumn: { zero: 8, dist: [8, 15, 5, 2], published: 4,
-              clean: [3, 4, 9, 15, 20, 25, 27, 29] },
+    // Autumn cannot reach zero, and the reason is fixed rather than found:
+    // COM772's lecture is chained to a session starting at 18:15, which the
+    // model pins because evening teaching stays where it is, so the lecture
+    // must run 15:15-18:15 and overflow the teaching day by an hour. Every
+    // arrangement carries it. `floor` is that unavoidable count, and `zero`
+    // counts the seeds that reach it.
+    autumn: { zero: 8, floor: 1, dist: [0, 8, 15, 5, 2], published: 4,
+              clean: [3, 4, 9, 15, 20, 25, 27, 29],
+              forced: 'COM772\u2019s lecture, chained to a pinned 18:15 session' },
   };
 
   function fmtN(n) { return Number(n).toLocaleString(); }
@@ -524,68 +531,74 @@
   }
 
   /**
-   * How many of 30 starting points reached zero, per term. One grouped bar per
-   * violation count, so the shape is visible as well as the headline: a run
-   * that lands on 0 or 1 nearly every time is a different claim from one that
-   * scrapes a single clean seed out of thirty.
+   * How many of 30 starting points reached each violation count, one row per
+   * term. Two rows rather than paired bars with a legend: the question the
+   * chart answers is how the two terms differ, and a reader should not have to
+   * match a colour to a key to see it. Each row carries its own name, and the
+   * column a reader cares about is the first one.
    */
   function sweepChart() {
+    var TERMS = [
+      { key: 'spring', name: 'Spring 2026', cls: 'g-barNow' },
+      { key: 'autumn', name: 'Autumn 2026', cls: 'g-barAut' },
+    ];
     var n = Math.max(SWEEP.spring.dist.length, SWEEP.autumn.dist.length);
-    var sp = [], au = [];
-    for (var i = 0; i < n; i++) {
-      sp.push(SWEEP.spring.dist[i] || 0);
-      au.push(SWEEP.autumn.dist[i] || 0);
-    }
-    var peak = Math.max.apply(null, sp.concat(au)) || 1;
-    var W = 620, chartH = 140, base = chartH + 26;
-    var bars = '', labels = '';
-    for (var j = 0; j < n; j++) {
-      var x = 44 + j * ((W - 60) / n);
-      var bw = ((W - 60) / n - 14) / 2;
-      var ha = Math.round(sp[j] / peak * chartH), hb = Math.round(au[j] / peak * chartH);
-      // Zero is the column that matters, so it is drawn in the good colour and
-      // the rest in the warning one.
-      var cls = j === 0 ? 'g-barGood' : 'g-barNow';
-      // The tallest bar reaches the peak gridline, so a count printed above it
-      // lands on the rule and on the title. Print inside wherever it fits.
-      function count(v, cx, h) {
-        var inside = h >= 22;
-        return '<text x="' + cx + '" y="' + (base - h + (inside ? 14 : -4)) + '" ' +
+    var peak = 1;
+    TERMS.forEach(function (t) {
+      t.dist = [];
+      for (var i = 0; i < n; i++) {
+        var v = SWEEP[t.key].dist[i] || 0;
+        t.dist.push(v);
+        if (v > peak) peak = v;
+      }
+    });
+
+    var W = 620, GUT = 104, barH = 62, rowH = 88, top = 30;
+    var colW = (W - GUT - 16) / n;
+    var bw = Math.min(46, colW - 12);
+    var body = '';
+
+    TERMS.forEach(function (t, ri) {
+      var base = top + ri * rowH + barH + 6;
+      // The term's name sits against its own bars, so the row needs no key.
+      body += '<text x="' + (GUT - 12) + '" y="' + (base - barH / 2 + 4) + '" ' +
+        'class="g-small g-rowname" text-anchor="end">' + t.name + '</text>';
+      body += '<line x1="' + GUT + '" y1="' + base + '" x2="' + (W - 12) + '" y2="' + base +
+        '" class="g-axis"/>';
+      for (var j = 0; j < n; j++) {
+        var v = t.dist[j];
+        var h = Math.round(v / peak * barH);
+        var x = GUT + j * colW + (colW - bw) / 2;
+        // The zero column is the one the chart exists to show, in both rows.
+        var cls = j === 0 ? 'g-barGood' : t.cls;
+        body += '<rect x="' + x + '" y="' + (base - h) + '" width="' + bw + '" height="' + h +
+          '" rx="2" class="' + cls + '"/>';
+        var inside = h >= 20;
+        body += '<text x="' + (x + bw / 2) + '" y="' + (base - h + (inside ? 14 : -4)) + '" ' +
           'class="g-small ' + (inside ? 'g-barText' : 'g-muted') + '" text-anchor="middle">' +
           v + '</text>';
       }
-      bars += '<rect x="' + x + '" y="' + (base - ha) + '" width="' + bw + '" height="' + ha +
-        '" rx="2" class="' + cls + '"/>' + count(sp[j], x + bw / 2, ha);
-      bars += '<rect x="' + (x + bw + 4) + '" y="' + (base - hb) + '" width="' + bw +
-        '" height="' + hb + '" rx="2" class="' + cls + '" opacity="0.55"/>' +
-        count(au[j], x + bw + 4 + bw / 2, hb);
-      labels += '<text x="' + (x + bw + 2) + '" y="' + (base + 14) + '" class="g-small ' +
-        (j === 0 ? 'g-oktext' : 'g-muted') + '" text-anchor="middle">' + j + '</text>';
+    });
+
+    // One shared x axis, under the lower row.
+    var axisY = top + TERMS.length * rowH + 2;
+    var labels = '';
+    for (var j2 = 0; j2 < n; j2++) {
+      labels += '<text x="' + (GUT + j2 * colW + colW / 2) + '" y="' + axisY + '" ' +
+        'class="g-small ' + (j2 === 0 ? 'g-oktext' : 'g-muted') + '" text-anchor="middle">' +
+        j2 + '</text>';
     }
-    var grid = '<line x1="40" y1="' + base + '" x2="' + (W - 8) + '" y2="' + base +
-      '" class="g-axis"/>' +
-      '<line x1="40" y1="' + (base - chartH) + '" x2="' + (W - 8) + '" y2="' +
-      (base - chartH) + '" class="g-axis g-faint"/>' +
-      '<text x="36" y="' + (base - chartH + 4) + '" class="g-small g-muted" ' +
-      'text-anchor="end">' + peak + '</text>' +
-      '<text x="36" y="' + (base + 4) + '" class="g-small g-muted" text-anchor="end">0</text>';
+    labels += '<text x="' + (GUT + (W - GUT - 16) / 2) + '" y="' + (axisY + 18) + '" ' +
+      'class="g-small g-muted" text-anchor="middle">hard violations left at the end of the ' +
+      'run \u2014 <tspan class="g-oktext">0 means every rule holds</tspan></text>';
+
     return [
       '<div class="algo-graphic"><div class="algo-inner" style="min-width:600px">',
-      '<svg viewBox="0 0 ' + W + ' ' + (base + 64) + '" role="img" aria-label="',
-      'Of 30 starting points per term, ' + SWEEP.spring.zero + ' reached zero violations in ',
-      'spring and ' + SWEEP.autumn.zero + ' in autumn.">',
+      '<svg viewBox="0 0 ' + W + ' ' + (axisY + 30) + '" role="img" aria-label="',
+      'Of ' + SWEEP.seeds + ' starting points per term, ' + SWEEP.spring.zero +
+      ' reached zero violations in spring and ' + SWEEP.autumn.zero + ' in autumn.">',
       '<text x="40" y="16" class="g-title">Seeds by the number of violations they ended on</text>',
-      grid, bars, labels,
-      '<text x="' + (W / 2) + '" y="' + (base + 32) + '" class="g-small g-muted" ',
-      'text-anchor="middle">hard violations left at the end of the run</text>',
-      // Colour says whether a column is the clean one; opacity says which term.
-      '<rect x="110" y="' + (base + 44) + '" width="11" height="11" rx="2" class="g-barNow"/>',
-      '<text x="128" y="' + (base + 54) + '" class="g-small g-muted">Spring 2026</text>',
-      '<rect x="222" y="' + (base + 44) + '" width="11" height="11" rx="2" class="g-barNow" ',
-      'opacity="0.55"/>',
-      '<text x="240" y="' + (base + 54) + '" class="g-small g-muted">Autumn 2026</text>',
-      '<rect x="340" y="' + (base + 44) + '" width="11" height="11" rx="2" class="g-barGood"/>',
-      '<text x="358" y="' + (base + 54) + '" class="g-small g-oktext">every rule holds</text>',
+      body, labels,
       '</svg></div></div>',
     ].join('');
   }
@@ -595,11 +608,26 @@
    * anyone can re-run a named one rather than take the count on trust.
    */
   function sweepSection() {
+    // Every clean one is shipped, so each seed is a link to the timetable
+    // itself rather than a number to take on trust.
+    var TAB = { spring: 'springNew', autumn: 'autumnNew' };
     function line(key, label) {
       var t = SWEEP[key];
-      return '<li><strong>' + label + ': ' + t.zero + ' of ' + SWEEP.seeds +
-        '</strong> starting points finished with every rule holding — seeds ' +
-        t.clean.join(', ') + '. The published term is seed ' + t.published + '.</li>';
+      var links = t.clean.map(function (n) {
+        return '<a href="?t=' + TAB[key] + '&seed=' + n + '">' + n + '</a>' +
+               (n === t.published ? ' <span class="small muted">(published)</span>' : '');
+      }).join(', ');
+      // A term with an unavoidable violation has no clean seeds to claim, so
+      // it says what the floor is and which seeds reach it instead.
+      return t.floor
+        ? '<li><strong>' + label + ': ' + t.zero + ' of ' + SWEEP.seeds +
+          '</strong> starting points got as close as the term allows \u2014 ' + links +
+          '. None reaches zero, and none can: ' + t.forced + ', so it runs an hour past ' +
+          'the teaching day whatever else moves. That one overflow is the only rule any of ' +
+          'them breaks.</li>'
+        : '<li><strong>' + label + ': ' + t.zero + ' of ' + SWEEP.seeds +
+          '</strong> starting points finished with every rule holding \u2014 ' + links +
+          '. Each one opens as a timetable you can read.</li>';
     }
     return [
       '<h2>It is not one lucky starting point</h2>',
@@ -615,14 +643,18 @@
       'left — so splitting never bought a clean term.</li>',
       '</ul>',
       sweepChart(),
-      '<p class="small muted">The tail is short: no autumn start ended worse than ' +
-      (SWEEP.autumn.dist.length - 1) + ', and ' +
-      (SWEEP.autumn.dist[0] + SWEEP.autumn.dist[1]) + ' of ' + SWEEP.seeds +
-      ' ended on nothing or one. Autumn is now the easier term of the two to finish cleanly, ',
-      'which is a reversal — under the room sizes first read off the booking data it could ',
-      'not get near zero at all. What changed was the data, not the search: the confirmed ',
-      'cohort sizes, the room types a module actually needs, and the rooms a module is pinned ',
-      'to.</p>',
+      '<p class="small muted">All ' + (SWEEP.spring.zero + SWEEP.autumn.zero) + ' of them are ',
+      'published, not just the two the rest of the site is built from. The picker at the top of ',
+      'either rebuilt timetable switches between them, and the Rooms calendar takes the same ',
+      'picker \u2014 which rooms a term leans on is the thing that differs most between two ',
+      'arrangements that are equally correct.</p>',
+      '<p class="small muted">The tail is short in both terms: no autumn start ended worse ' +
+      'than ' + (SWEEP.autumn.dist.length - 1) + ', and ' +
+      (SWEEP.autumn.dist[1] + SWEEP.autumn.dist[2]) + ' of ' + SWEEP.seeds +
+      ' ended at the floor or one above it. That is a reversal: under the room sizes first ',
+      'read off the booking data, autumn could not get near this at all. What changed was the ',
+      'data, not the search \u2014 the confirmed cohort sizes, the room types a module actually ',
+      'needs, and the rooms a module is pinned to.</p>',
     ].join('');
   }
 
@@ -867,6 +899,8 @@
       'a time. It recurs every year because the method produces it, not the term.</li>',
       '</ul>',
 
+      sweepSection(),
+
       stripeGraphic(),
 
       '<h3>The modules most exposed</h3>',
@@ -897,8 +931,6 @@
       (meta.gapDaysBefore != null ? meta.gapDaysBefore + ' \u2192 ' + meta.gapDays : 'n/a') + '.</p>',
 
       autumnSection(H),
-
-      sweepSection(),
 
       // ------------------------------------------------ caveats
       '<h2>Before you rely on it</h2>',

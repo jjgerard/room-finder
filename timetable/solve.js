@@ -31,7 +31,14 @@ const START = arg('start', 'current');   // current | scatter | mixed
 // than today's timetable, and it keeps the result recognisable.
 const FROM = arg('from', '');
 let priorRows = null;
-const CHECK_OPTS = { dayStart: 7 * 60 + 15, dayEnd: 23 * 60 + 15 };
+// The run's own report must use the same teaching day the solver optimises
+// against and the site checks with — DAY_START to DAY_END. It used to widen
+// the window to 07:15-23:15 here, which is not a rule anybody holds: the
+// solver was placing classes correctly against 09:15-17:15 (HARD_MIN and
+// HARD_MAX in solver.js) and then grading itself against a sixteen-hour day.
+// Autumn's rebuild reported 0 violations for months while carrying one, and
+// the site's own scorecard, which always used the real day, said 1.
+const CHECK_OPTS = {};
 
 const model = load(null, { clashes: CLASHES, term: TERM });
 console.log(`Belfast ${TERM}: ${model.classes.length} classes (one-off bookings excluded), ` +

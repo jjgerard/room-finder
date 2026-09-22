@@ -25,6 +25,7 @@
 <main class="wrap">
 
   <h2 class="term-title" id="termTitle" hidden></h2>
+  <div class="seedbar" id="seedbar" hidden></div>
 
   <div id="banner"></div>
 
@@ -104,6 +105,7 @@
 
 <script src="assets/model.js"></script>
 <script src="assets/constraints.js"></script>
+<script src="assets/seeds.js"></script>
 <script src="assets/method.js"></script>
 <script>
 (function () {
@@ -599,6 +601,38 @@
     });
   }
 
+  // ---------------- the clean sweeps ----------------
+  // Which of a rebuilt term's clean timetables is on screen, and the same
+  // thing as an assignment the checker can judge. Null means the published
+  // one, which is what the model itself carries.
+  var seedAssign = null;
+
+  /**
+   * The picker above a rebuilt term. Choosing one rewrites that term's rows
+   * in place, so everything downstream — grid, list, filters, summary — is
+   * about the chosen timetable without knowing this control exists.
+   */
+  function drawSeedbar(key) {
+    var el = document.getElementById('seedbar');
+    if (!window.TTSeeds || !window.TTSeeds.FILES[key]) { el.hidden = true; return; }
+    window.TTSeeds.mount(el, H, key, H.terms[key].seed, function (seed, entry) {
+      // The spring model is the one this page carries, so its verdict can be
+      // recomputed for the chosen timetable. Autumn's model lives in its own
+      // file and is not worth a megabyte to restate a number the file was
+      // checked against when it was written.
+      seedAssign = (key === 'springNew') ? window.TTSeeds.assignment(H.model, entry) : null;
+      markSplits(H.terms[key]);
+      try { drawBanner(); } catch (err) { /* the grid still has to draw */ }
+      buildWeeks();
+      pickers.forEach(function (p) { p.refresh(); });
+      render();
+    }).then(function (pack) {
+      // Landing on the tab: the rows already hold the published timetable, so
+      // there is nothing to rewrite, but the verdict must match it.
+      if (pack && key === 'springNew' && H.terms[key].seed == null) seedAssign = null;
+    });
+  }
+
   // ---------------- tabs ----------------
   function selectTab(key) {
     tab = key;
@@ -611,13 +645,19 @@
     document.getElementById('summary').parentElement.hidden = isMethod;
     document.getElementById('method').hidden = !isMethod;
 
-    document.getElementById('chip-changed').hidden = key !== 'springNew';
-    document.getElementById('chip-split').hidden = key === 'springNew';
-    if (key === 'springNew') { state.split = false; document.getElementById('chip-split').setAttribute('aria-pressed', 'false'); }
+    // Both rebuilt terms carry a moved-from-today flag per booking, and
+    // neither has a class split across rooms — that is the fault they exist
+    // to remove — so the two chips follow the rebuild, not spring alone.
+    var isNew = key === 'springNew' || key === 'autumnNew';
+    document.getElementById('chip-changed').hidden = !isNew;
+    document.getElementById('chip-split').hidden = isNew;
+    if (isNew) { state.split = false; document.getElementById('chip-split').setAttribute('aria-pressed', 'false'); }
     else { state.changed = false; document.getElementById('chip-changed').setAttribute('aria-pressed', 'false'); }
 
     document.getElementById('legend-extra').textContent =
-      key === 'springNew' ? 'Dashed edge = moved from today' : 'Outlined = same room double-booked';
+      isNew ? 'Dashed edge = moved from today' : 'Outlined = same room double-booked';
+
+    drawSeedbar(key);
 
     // The banner is decoration; if it throws, the timetable must still draw.
     // Letting an exception here abort selectTab left the tab highlighted while
@@ -645,13 +685,24 @@
           ? 'The rebuilt autumn is in the same menu, for comparison.'
           : 'Shown for reference \u2014 the rebuild covers Spring only.') + '</p></div>';
     } else if (tab === 'autumnNew') {
-      var left = (H.terms.autumnNew.sub.match(/(\d+) unresolved/) || [])[1];
+      var sc = H.terms.autumnNew.score || {};
+      var left = (sc.left || []).length;
+      var seedTxt = H.terms.autumnNew.seed != null
+        ? ' You are looking at starting point ' + H.terms.autumnNew.seed + '.' : '';
+      // A violation nothing can remove is not an unfinished rebuild, and
+      // calling it one invites a reader to wait for a fix that cannot come.
+      // Name it instead: COM772's lecture is chained to a session the model
+      // pins at 18:15, so it runs past the teaching day in every arrangement.
       el.innerHTML = left
-        ? '<div class="note warn"><p style="margin:0"><strong>Autumn 2026, rebuilt \u2014 still ' +
-          esc(left) + ' unresolved.</strong> Built the same way as the spring rebuild and ' +
-          'not finished: ' + esc(left) + ' placements still break a hard rule.</p></div>'
+        ? '<div class="note warn"><p style="margin:0"><strong>Autumn 2026, rebuilt \u2014 ' +
+          left + ' session' + (left === 1 ? '' : 's') + ' still outside the rules.</strong> ' +
+          esc(sc.left.map(function (x) { return x.what; }).join(', ')) +
+          (sc.left.every(function (x) { return x.kind === 'window'; })
+            ? ' runs past 17:15 because it is chained to a session the model pins in the ' +
+              'evening, so no arrangement of the term can move it. Nothing else breaks a rule.'
+            : ' still breaks a hard rule.') + seedTxt + '</p></div>'
         : '<div class="note good"><p style="margin:0"><strong>Autumn 2026, rebuilt.</strong> ' +
-          'Built the same way as the spring rebuild.</p></div>';
+          'Built the same way as the spring rebuild.' + seedTxt + '</p></div>';
     } else if (tab === 'springNow') {
       el.innerHTML = '<div class="note warn"><p style="margin:0"><strong>Spring 2026, as it stands.</strong> ' +
         'Bookings marked <em>split across rooms</em> are the problem being fixed: one class ' +
@@ -666,8 +717,12 @@
 
   function checkRebuild() {
     var Cn = window.TTConstraints;
-    var fixed = Cn.check(H.model, H.assign.solved, CHECK_OPTS);
-    var mv = Cn.movement(H.model, H.assign.solved);
+    // Whichever of the clean timetables is showing, not always the published
+    // one: a verdict describing a grid the reader is not looking at is worse
+    // than no verdict.
+    var a = seedAssign || H.assign.solved;
+    var fixed = Cn.check(H.model, a, CHECK_OPTS);
+    var mv = Cn.movement(H.model, a);
     var v = document.getElementById('verdict');
     if (!v) return;
     if (fixed.total === 0) {
@@ -676,6 +731,7 @@
       // was asked of it before they care where the checking happened.
       v.innerHTML = '<p style="margin:0 0 8px"><strong>0 violations across all ' +
         H.model.classes.length.toLocaleString() + ' classes.</strong></p>' +
+        '<details class="rule-drop"><summary>The eight rules it was checked against</summary>' +
         '<ul class="rule-list">' +
         '<li>One room per class \u2014 exams aside, which may fill several</li>' +
         '<li>No two classes in one room at once</li>' +
@@ -685,9 +741,11 @@
         '<li>Exams keep their module\u2019s slot, and stay with the class they follow</li>' +
         '<li>No new same-day pairing for a cohort</li>' +
         '<li>Everything inside the teaching day</li>' +
-        '</ul>' +
+        '</ul></details>' +
         '<p style="margin:8px 0 0">' + mv.untouched.toLocaleString() + ' of ' +
-        mv.total.toLocaleString() + ' classes are exactly where they are today. ' +
+        mv.total.toLocaleString() + ' classes are exactly where they are today' +
+        (H.terms.springNew.seed != null
+          ? ', in starting point ' + H.terms.springNew.seed : '') + '. ' +
         '<a href="#" id="to-method">How it was built</a>.</p>';
     } else {
       // A handful of named exceptions is a different thing from a broken
@@ -718,21 +776,11 @@
         (n > 5 ? ' (first 5 of ' + n + ')' : '') + ': ' + esc(named) + '. ' +
         '<a href="#" id="to-method">Why these are the ones left</a>.</p>';
     }
-    // Which clash graph this was solved against is a material caveat, not a
-    // footnote — under a 9-to-5 day it decides whether there is an answer.
-    var meta = H.model.meta || {};
-    if (meta.clashMode && meta.clashMode !== 'all') {
-      v.innerHTML += '<p style="margin:8px 0 0" class="small">Solved against <strong>' +
-        (meta.clashEdges || 0).toLocaleString() + ' of ' + (meta.clashEdgesTotal || 0).toLocaleString() +
-        '</strong> inferred clash pairs \u2014 those the current timetable actually evidences. ' +
-        '<a href="#" id="to-method2">Why, and what it assumes</a>.</p>';
-      var l2 = document.getElementById('to-method2');
-      if (l2) l2.onclick = function (e) { e.preventDefault(); selectTab('method'); };
-    }
-    ['to-method', 'to-method2'].forEach(function (id) {
-      var link = document.getElementById(id);
-      if (link) link.onclick = function (e) { e.preventDefault(); selectTab('method'); };
-    });
+    // Which clash graph this was solved against is a material caveat, but it
+    // is made in full on the About page — which every branch above links to —
+    // and repeating it under each verdict buried the verdict itself.
+    var link = document.getElementById('to-method');
+    if (link) link.onclick = function (e) { e.preventDefault(); selectTab('method'); };
   }
 
   /**
@@ -921,6 +969,24 @@
     // A link may name the timetable to open — the picker on Fix a clash
     // points here rather than carrying its own copy of the term list.
     var want = (location.search.match(/[?&]t=([a-zA-Z]+)/) || [])[1];
+    // A link may also name one of the clean timetables — the About page lists
+    // them all and each seed is a link here.
+    var wantSeed = Number((location.search.match(/[?&]seed=(\d+)/) || [])[1]);
+    if (want && H.terms[want] && wantSeed && window.TTSeeds.FILES[want]) {
+      window.TTSeeds.load(want).then(function (pack) {
+        if (pack) {
+          window.TTSeeds.apply(H, want, wantSeed, pack);
+          markSplits(H.terms[want]);
+          if (want === 'springNew') {
+            var e = null;
+            pack.seeds.forEach(function (x) { if (x.seed === wantSeed) e = x; });
+            seedAssign = e ? window.TTSeeds.assignment(H.model, e) : null;
+          }
+        }
+        selectTab(want);
+      });
+      return;
+    }
     selectTab(want && H.terms[want] ? want : 'method');
   }).catch(function (e) {
     document.getElementById('banner').innerHTML =

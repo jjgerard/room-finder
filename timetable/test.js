@@ -1120,6 +1120,36 @@ test('checker: a class may not begin after the teaching day has ended', () => {
   assert.ok(r.counts.window > 0, 'a class at 33:15 went unreported');
 });
 
+test('checker: the default teaching day is the one the site enforces', () => {
+  // The window rule is only as strong as the day it is given. solve.js used to
+  // pass a 07:15-23:15 window when reporting its own result, so a class
+  // running to 18:15 was counted clean by the run and dirty by the site.
+  assert.equal(C.DAY_START, 9 * 60 + 15);
+  assert.equal(C.DAY_END, 17 * 60 + 15);
+  const c = model.classes.find(x => !x.isFixed && !x.windowExempt && x.dur === 180);
+  assert.ok(c, 'no movable three-hour class to test with');
+  const assign = new Map(model.classes.map(x =>
+    [x.id, { day: x.origDay, start: x.origStart, room: x.origRoom, weeks: x.origRoomWeeks }]));
+  // 15:15 start, so it ends at 18:15 — inside a widened day, outside the real one.
+  assign.set(c.id, { day: 0, start: 15 * 60 + 15, room: c.origRoom });
+  const tight = C.check(model, assign, { occupancy: model.currentOccupancy });
+  const wide = C.check(model, assign,
+    { occupancy: model.currentOccupancy, dayEnd: 23 * 60 + 15 });
+  assert.ok(tight.counts.window > wide.counts.window,
+    'a class running to 18:15 was not reported against the default day');
+});
+
+test('solve.js grades itself against the same day it solves for', () => {
+  // The bug this guards was invisible in every other way: the solver placed
+  // classes correctly against 09:15-17:15 and then reported against a
+  // sixteen-hour day, so autumn read as 0 violations while carrying one.
+  const src = require('fs').readFileSync(
+    require('path').join(__dirname, 'solve.js'), 'utf8');
+  const line = (src.match(/const CHECK_OPTS = .*/) || [])[0] || '';
+  assert.ok(!/dayStart|dayEnd/.test(line),
+    'solve.js widens the teaching day when reporting: ' + line);
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)

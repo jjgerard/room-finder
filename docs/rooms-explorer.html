@@ -34,6 +34,8 @@
 
   <h2 class="term-title">Rooms<span>what each one holds, and how hard it works</span></h2>
 
+  <div class="seedbar" id="seedbar" hidden></div>
+
   <div class="card pad" style="margin-bottom:16px">
     <div class="grid2">
       <div>
@@ -104,6 +106,7 @@
 </footer>
 
 <script src="assets/model.js"></script>
+<script src="assets/seeds.js"></script>
 <script>
 (function () {
   'use strict';
@@ -320,8 +323,20 @@
   document.getElementById('q').addEventListener('input', render);
   document.getElementById('term').addEventListener('change', function (e) {
     term = e.target.value;
+    drawSeedbar();
     render();
   });
+
+  /**
+   * A rebuilt term has several timetables that break no rule, not one. Offer
+   * them here too: which rooms a term leans on is exactly the thing that
+   * differs between them, and this is the page for seeing that.
+   */
+  function drawSeedbar() {
+    var el = document.getElementById('seedbar');
+    if (!window.TTSeeds || !window.TTSeeds.FILES[term]) { el.hidden = true; return; }
+    window.TTSeeds.mount(el, H, term, H.terms[term].seed, function () { render(); });
+  }
   document.getElementById('f-type').addEventListener('click', function (e) {
     var b = e.target.closest('.chip');
     if (!b) return;
@@ -360,6 +375,7 @@
     });
     term = sel.value;
     buildWeeks();
+    drawSeedbar();
     render();
   }).catch(function (e) {
     document.getElementById('count').textContent = e.message;

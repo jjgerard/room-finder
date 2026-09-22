@@ -714,3 +714,36 @@ a.tab { text-decoration: none; }
   .tab-menu > .tab::after { top: 17px; }
   .tab-drop { max-width: calc(100vw - 24px); }
 }
+
+/* The clean-sweep picker: one button per timetable that finished with every
+   rule holding. Each carries its own numbers, because the point of the row is
+   that the alternatives differ — a bare list of seed numbers says nothing. */
+.seedbar { margin: 0 0 14px; }
+.seedbar[hidden] { display: none; }
+.seedbar-head { margin-bottom: 8px; }
+.seedbar-head strong { margin-right: 6px; }
+.seedbar-chips { gap: 8px; flex-wrap: wrap; }
+.chip.seed {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  line-height: 1.25; padding: 7px 11px; text-align: left;
+}
+.chip.seed .ttl { display: flex; align-items: center; gap: 6px; }
+.chip.seed .sub { font-size: 11px; color: var(--muted); font-weight: 400; }
+.chip.seed[aria-pressed="true"] .sub { color: inherit; opacity: .8; }
+.chip.seed .tag {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  border: 1px solid currentColor; border-radius: 3px; padding: 0 4px;
+  opacity: .7; font-weight: 600;
+}
+/* The seed chart labels each row with its term instead of carrying a key. */
+.algo-graphic .g-barAut { fill: var(--accent); }
+.algo-graphic .g-rowname { fill: var(--ink-2); font-weight: 600; }
+
+/* The verdict leads with its number; the rules behind it are a click away. */
+.rule-drop > summary {
+  cursor: pointer; font-weight: 600; font-size: 13px;
+  padding: 2px 0; list-style-position: inside;
+}
+.rule-drop > summary::marker { font-size: 11px; }
+.rule-drop[open] > summary { margin-bottom: 6px; }
+.rule-drop .rule-list { margin: 0; }
