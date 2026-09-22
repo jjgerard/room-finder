@@ -116,21 +116,55 @@
   // The token expires after a few minutes of bulk fetching. Recovering means
   // getting the app to make a request of its own; there is no way to renew it
   // from here, and no reason to want one.
-  function nudge() {
-    var inputs = document.querySelectorAll('input');
+  /** The input most likely to make the app fetch something when typed in. */
+  function searchBox() {
+    var best = null;
+    var inputs = document.querySelectorAll('input, textarea');
     for (var i = 0; i < inputs.length; i++) {
       var el = inputs[i];
-      if (el.type === 'hidden' || el.disabled) continue;
-      var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-      var was = el.value;
-      setter.call(el, was ? was.slice(0, -1) : 'a');
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      setter.call(el, was);
+      if (el.type === 'hidden' || el.type === 'checkbox' || el.type === 'radio') continue;
+      if (el.disabled || el.readOnly || !el.offsetParent) continue;
+      var hint = ((el.placeholder || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' +
+                  (el.name || '') + ' ' + (el.id || '')).toLowerCase();
+      if (/search|filter|find|room|resource|query/.test(hint)) return el;
+      if (!best) best = el;
+    }
+    return best;
+  }
+
+  /**
+   * Make the app fetch something, so its Authorization header can be replayed.
+   *
+   * Typing a character and taking it straight back out again gave a debounced
+   * search nothing to react to, so the value is left in place for a moment and
+   * cleared after — two chances at a request rather than none.
+   */
+  function nudge() {
+    var el = searchBox();
+    if (!el) return sleep(1500);
+    var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement : HTMLInputElement;
+    var setter = Object.getOwnPropertyDescriptor(proto.prototype, 'value').set;
+    var was = el.value;
+    try { el.focus(); } catch (e) { /* not focusable */ }
+    var fire = function (v) {
+      setter.call(el, v);
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
-      return sleep(2500);
-    }
-    return sleep(2500);
+      el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'a' }));
+    };
+    fire('b');
+    return sleep(1600).then(function () { fire(was); return sleep(1200); });
+  }
+
+  /** Poll until `test()` passes, or `ms` runs out. Resolves true/false. */
+  function waitUntil(test, ms, onTick) {
+    var until = Date.now() + ms, ticks = 0;
+    return (function step() {
+      if (test()) return Promise.resolve(true);
+      if (Date.now() > until) return Promise.resolve(false);
+      if (onTick && ++ticks % 10 === 0) onTick(Math.round((until - Date.now()) / 1000));
+      return sleep(1000).then(step);
+    })();
   }
 
   function callRetry(path, body, tries) {
@@ -274,14 +308,26 @@
     // request instead, and give up only when the app will not make one.
     var wait = Promise.resolve();
     if (!ready()) {
-      console.log('Waiting for the app to make a request this can replay\u2026');
+      // Typing at the page from script does not always convince a framework
+      // that something happened. Somebody is sitting in front of it, so ask
+      // them and wait, rather than giving up after two synthetic keystrokes
+      // and making them start again.
+      console.log('Waiting for the app to send a request this can replay\u2026');
+      console.log('If nothing happens in a few seconds, CLICK SOMETHING IN THE PAGE \u2014 the ' +
+                  'room search box, or the calendar\u2019s next arrow. This will carry on by ' +
+                  'itself as soon as it sees one.');
       wait = nudge()
-        .then(function () { return ready() ? null : nudge(); })
         .then(function () {
-          if (!ready()) {
-            throw new Error('The app has not sent a request this script can replay. Click ' +
-              'something in the page \u2014 the room search box, or the calendar\u2019s next ' +
-              'arrow \u2014 and run it again.');
+          return waitUntil(ready, 180000, function (left) {
+            console.log('  still waiting \u2014 click the room search box or the calendar ' +
+                        '(' + left + 's left)');
+          });
+        })
+        .then(function (ok) {
+          if (!ok) {
+            throw new Error('Three minutes without the app sending a request. Make sure this ' +
+              'is the booking page and you are signed in, then click the room search box and ' +
+              'run it again.');
           }
         });
     }

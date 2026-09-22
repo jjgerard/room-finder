@@ -84,10 +84,24 @@
         <strong>Console</strong> tab.</li>
       <li>If it says pasting is disabled, type <code>allow pasting</code> and press Enter.
         Chrome and Edge ask this once per profile.</li>
-      <li>Paste, press Enter. It reads about 550 rooms four at a time and downloads
+      <li>Paste, press Enter. It prints <em>Waiting for the app to send a request…</em> —
+        when it does, <strong>click the room search box in the page</strong>. It needs the
+        booking app to make one request of its own before it can borrow its credentials,
+        and a real click is the surest way to cause one.</li>
+      <li>It then reads about 550 rooms four at a time and downloads
         <code id="fname">snapshot-autumn.json</code>. Two or three minutes; it prints its
         progress as it goes.</li>
     </ol>
+
+    <details class="stat-list">
+      <summary>If it keeps saying it is waiting</summary>
+      <p class="small muted">It needs the booking app itself to send one request, which it
+        then replays — it never reads your token, and it cannot invent a request of its own
+        that would carry your credentials. Clicking the room search box, typing a letter in
+        it, or pressing the calendar's next arrow all do it. It waits three minutes and
+        continues the moment it sees one; a synthetic keystroke is tried first but a
+        framework will often ignore one.</p>
+    </details>
 
     <details class="stat-list">
       <summary>If the console will not take a paste</summary>
