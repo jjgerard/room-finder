@@ -649,6 +649,10 @@ footer .wrap { padding: 0; }
 .algo-graphic .g-loop { stroke: var(--good); color: var(--good); stroke-dasharray: 5 3; }
 .algo-graphic .g-barNow { fill: var(--muted); }
 .algo-graphic .g-barNew { fill: var(--accent); }
+/* The zero column of the seed sweep: the one the whole chart is asking about. */
+.algo-graphic .g-barGood { fill: var(--good); }
+/* A bar's own count, printed inside it when there is room. */
+.algo-graphic .g-barText { fill: #fff; font-weight: 600; }
 .algo-graphic .g-axis { stroke: var(--line); stroke-width: 1; }
 .algo-graphic .g-faint { stroke-dasharray: 3 3; }
 

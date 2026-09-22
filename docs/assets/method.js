@@ -28,6 +28,22 @@
     roomBookings: 3302,     // one row per class-room booking
   };
 
+  // Every seed of a 30-seed sweep per term, run with the same rules and data
+  // the site ships: `node timetable/solve.js --term <t> --seeds 30 --clashes
+  // evidenced`. The point is not the best seed — that one is published — but
+  // how many starts reach zero at all, which is what says the result is the
+  // search working rather than one lucky draw. `zero` counts the seeds that
+  // finished with no hard violation; `dist` is how many seeds ended on 0, 1,
+  // 2 ... violations; `published` is the seed the shipped file came from.
+  // None of the clean seeds needed to split a class across two rooms.
+  var SWEEP = {
+    seeds: 30,
+    spring: { zero: 6, dist: [6, 9, 6, 7, 1, 1], published: 7,
+              clean: [6, 7, 8, 15, 21, 28] },
+    autumn: { zero: 8, dist: [8, 15, 5, 2], published: 4,
+              clean: [3, 4, 9, 15, 20, 25, 27, 29] },
+  };
+
   function fmtN(n) { return Number(n).toLocaleString(); }
 
   function esc(v) {
@@ -507,6 +523,109 @@
     ].join('');
   }
 
+  /**
+   * How many of 30 starting points reached zero, per term. One grouped bar per
+   * violation count, so the shape is visible as well as the headline: a run
+   * that lands on 0 or 1 nearly every time is a different claim from one that
+   * scrapes a single clean seed out of thirty.
+   */
+  function sweepChart() {
+    var n = Math.max(SWEEP.spring.dist.length, SWEEP.autumn.dist.length);
+    var sp = [], au = [];
+    for (var i = 0; i < n; i++) {
+      sp.push(SWEEP.spring.dist[i] || 0);
+      au.push(SWEEP.autumn.dist[i] || 0);
+    }
+    var peak = Math.max.apply(null, sp.concat(au)) || 1;
+    var W = 620, chartH = 140, base = chartH + 26;
+    var bars = '', labels = '';
+    for (var j = 0; j < n; j++) {
+      var x = 44 + j * ((W - 60) / n);
+      var bw = ((W - 60) / n - 14) / 2;
+      var ha = Math.round(sp[j] / peak * chartH), hb = Math.round(au[j] / peak * chartH);
+      // Zero is the column that matters, so it is drawn in the good colour and
+      // the rest in the warning one.
+      var cls = j === 0 ? 'g-barGood' : 'g-barNow';
+      // The tallest bar reaches the peak gridline, so a count printed above it
+      // lands on the rule and on the title. Print inside wherever it fits.
+      function count(v, cx, h) {
+        var inside = h >= 22;
+        return '<text x="' + cx + '" y="' + (base - h + (inside ? 14 : -4)) + '" ' +
+          'class="g-small ' + (inside ? 'g-barText' : 'g-muted') + '" text-anchor="middle">' +
+          v + '</text>';
+      }
+      bars += '<rect x="' + x + '" y="' + (base - ha) + '" width="' + bw + '" height="' + ha +
+        '" rx="2" class="' + cls + '"/>' + count(sp[j], x + bw / 2, ha);
+      bars += '<rect x="' + (x + bw + 4) + '" y="' + (base - hb) + '" width="' + bw +
+        '" height="' + hb + '" rx="2" class="' + cls + '" opacity="0.55"/>' +
+        count(au[j], x + bw + 4 + bw / 2, hb);
+      labels += '<text x="' + (x + bw + 2) + '" y="' + (base + 14) + '" class="g-small ' +
+        (j === 0 ? 'g-oktext' : 'g-muted') + '" text-anchor="middle">' + j + '</text>';
+    }
+    var grid = '<line x1="40" y1="' + base + '" x2="' + (W - 8) + '" y2="' + base +
+      '" class="g-axis"/>' +
+      '<line x1="40" y1="' + (base - chartH) + '" x2="' + (W - 8) + '" y2="' +
+      (base - chartH) + '" class="g-axis g-faint"/>' +
+      '<text x="36" y="' + (base - chartH + 4) + '" class="g-small g-muted" ' +
+      'text-anchor="end">' + peak + '</text>' +
+      '<text x="36" y="' + (base + 4) + '" class="g-small g-muted" text-anchor="end">0</text>';
+    return [
+      '<div class="algo-graphic"><div class="algo-inner" style="min-width:600px">',
+      '<svg viewBox="0 0 ' + W + ' ' + (base + 64) + '" role="img" aria-label="',
+      'Of 30 starting points per term, ' + SWEEP.spring.zero + ' reached zero violations in ',
+      'spring and ' + SWEEP.autumn.zero + ' in autumn.">',
+      '<text x="40" y="16" class="g-title">Seeds by the number of violations they ended on</text>',
+      grid, bars, labels,
+      '<text x="' + (W / 2) + '" y="' + (base + 32) + '" class="g-small g-muted" ',
+      'text-anchor="middle">hard violations left at the end of the run</text>',
+      // Colour says whether a column is the clean one; opacity says which term.
+      '<rect x="110" y="' + (base + 44) + '" width="11" height="11" rx="2" class="g-barNow"/>',
+      '<text x="128" y="' + (base + 54) + '" class="g-small g-muted">Spring 2026</text>',
+      '<rect x="222" y="' + (base + 44) + '" width="11" height="11" rx="2" class="g-barNow" ',
+      'opacity="0.55"/>',
+      '<text x="240" y="' + (base + 54) + '" class="g-small g-muted">Autumn 2026</text>',
+      '<rect x="340" y="' + (base + 44) + '" width="11" height="11" rx="2" class="g-barGood"/>',
+      '<text x="358" y="' + (base + 54) + '" class="g-small g-oktext">every rule holds</text>',
+      '</svg></div></div>',
+    ].join('');
+  }
+
+  /**
+   * The sweep in words: the headline per term, and which seeds were clean, so
+   * anyone can re-run a named one rather than take the count on trust.
+   */
+  function sweepSection() {
+    function line(key, label) {
+      var t = SWEEP[key];
+      return '<li><strong>' + label + ': ' + t.zero + ' of ' + SWEEP.seeds +
+        '</strong> starting points finished with every rule holding — seeds ' +
+        t.clean.join(', ') + '. The published term is seed ' + t.published + '.</li>';
+    }
+    return [
+      '<h2>It is not one lucky starting point</h2>',
+      '<p class="small muted">The search starts from a random shuffle, so a single clean run ',
+      'proves less than it looks. Both terms were therefore run from ' + SWEEP.seeds +
+      ' different starting points, against the same rules and the same data this page checks ',
+      'with.</p>',
+      '<ul>',
+      line('spring', 'Spring 2026'),
+      line('autumn', 'Autumn 2026'),
+      '<li>No clean run had to <strong>split a class across two rooms</strong>. Six spring ',
+      'starts did fall back to splitting, and every one of them still ended with violations ',
+      'left — so splitting never bought a clean term.</li>',
+      '</ul>',
+      sweepChart(),
+      '<p class="small muted">The tail is short: no autumn start ended worse than ' +
+      (SWEEP.autumn.dist.length - 1) + ', and ' +
+      (SWEEP.autumn.dist[0] + SWEEP.autumn.dist[1]) + ' of ' + SWEEP.seeds +
+      ' ended on nothing or one. Autumn is now the easier term of the two to finish cleanly, ',
+      'which is a reversal — under the room sizes first read off the booking data it could ',
+      'not get near zero at all. What changed was the data, not the search: the confirmed ',
+      'cohort sizes, the room types a module actually needs, and the rooms a module is pinned ',
+      'to.</p>',
+    ].join('');
+  }
+
   function hourChart(model, assign, title) {
     // The teaching day runs 09:15 to 17:15, so the bars are its eight slots
     // rather than clock hours: counting 9-to-10 and 17-to-18 as hours makes
@@ -779,6 +898,8 @@
 
       autumnSection(H),
 
+      sweepSection(),
+
       // ------------------------------------------------ caveats
       '<h2>Before you rely on it</h2>',
       '<div class="note warn"><p style="margin:0"><strong>The clash data is inferred.</strong> ',
@@ -801,7 +922,8 @@
 
       '<h2>Reproducing it</h2>',
       '<pre class="card pad mono small" style="overflow-x:auto"><code>node timetable/test.js\n',
-      'node timetable/solve.js --seeds 30 --clashes evidenced --out docs/data</code></pre>',
+      'node timetable/solve.js --term spring --seeds 30 --clashes evidenced --out docs/data\n',
+      'node timetable/solve.js --term autumn --seeds 30 --clashes evidenced --out docs/data</code></pre>',
       '<p class="small muted"><code>constraints.js</code> runs unchanged in node and the browser, ',
       'so this page checks the rules with the same code that enforced them. Data generated ' +
       (meta.generated || 'unknown') + '.</p>',
