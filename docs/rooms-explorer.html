@@ -92,6 +92,8 @@
 
 </main>
 
+<div id="tip" role="tooltip"></div>
+
 <footer>
   <div class="wrap">
     Hours are counted per week of the term a booking runs, so a class in six weeks of twelve
@@ -118,6 +120,9 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
     });
   }
+  /** The module's name, not its code — "Linguistic Theory I", not "CMM350". */
+  function modName(code) { return (H.model.modTitles || {})[code] || ''; }
+
   function weekCount(mask) {
     var n = 0;
     for (var w = 0; w < 16; w++) if (mask & (1 << w)) n++;
@@ -221,7 +226,7 @@
         r.rows.forEach(function (x) {
           if (x.day !== d) return;
           if (week && !(x.weeks & (1 << (week - 1)))) return;
-          items.push({ x: x, hue: HUES[ri % HUES.length], room: r.name });
+          items.push({ x: x, hue: HUES[ri % HUES.length], room: r.name, seats: r.capacity });
         });
       });
       items.sort(function (a, b) { return a.x.start - b.x.start; });
@@ -243,13 +248,21 @@
         var top = (it.x.start - S0) * PX;
         var h = Math.max(16, it.x.dur * PX - 2);
         var w = 100 / nLanes;
+        var name = modName(it.x.module);
+        var tip = (it.x.module || it.x.activity) + (name ? ' \u2014 ' + name : '') + '\n' +
+                  it.x.activity + ' \u00b7 ' + fmt(it.x.start) + '\u2013' +
+                  fmt(it.x.start + it.x.dur) + '\n' +
+                  it.room + (it.seats != null ? ' \u00b7 ' + it.seats + ' seats'
+                                              : ' \u00b7 capacity not recorded') + '\n' +
+                  'Weeks ' + it.x.weeksText + '\n' + it.x.title;
         return '<div class="cal-block" style="top:' + top + 'px;height:' + h + 'px;left:' +
           (it.lane * w) + '%;width:calc(' + w + '% - 3px);' +
           'background:hsl(' + it.hue + ' 70% 94%);border-left:3px solid hsl(' + it.hue + ' 70% 55%)"' +
-          ' title="' + esc(it.room + ' · ' + (it.x.module || it.x.activity) + ' ' + it.x.activity +
-            ' · weeks ' + it.x.weeksText) + '">' +
-          '<strong>' + esc(it.x.module || it.x.activity) + '</strong> ' +
-          '<span class="muted">' + fmt(it.x.start) + '</span></div>';
+          ' data-tip="' + esc(tip) + '">' +
+          '<div class="m">' + esc(it.x.module || it.x.activity) + '</div>' +
+          (name && h > 34 ? '<div class="n">' + esc(name) + '</div>' : '') +
+          (h > 52 ? '<div class="r">' + esc(fmt(it.x.start)) + ' \u00b7 ' +
+            esc(it.x.activity) + '</div>' : '') + '</div>';
       }).join('');
       cols.push('<div class="cal-day"><div class="cal-head">' + DAYS[d] +
         (hidden ? ' <span class="muted">+' + hidden + '</span>' : '') + '</div>' +
@@ -289,6 +302,20 @@
   }
 
   document.getElementById('clear-rooms').onclick = function () { picked = []; render(); };
+
+  // Tooltip, as on the timetable pages: everything about the booking, on
+  // hover, without crowding the block itself.
+  var tip = document.getElementById('tip');
+  document.addEventListener('mouseover', function (e) {
+    var b = e.target.closest('[data-tip]');
+    if (b) { tip.innerHTML = esc(b.dataset.tip).replace(/\n/g, '<br>'); tip.style.opacity = '1'; }
+  });
+  document.addEventListener('mousemove', function (e) {
+    var b = e.target.closest('[data-tip]');
+    if (!b) { tip.style.opacity = '0'; return; }
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 8) + 'px';
+  });
 
   document.getElementById('q').addEventListener('input', render);
   document.getElementById('term').addEventListener('change', function (e) {
