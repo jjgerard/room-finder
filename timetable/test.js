@@ -1120,6 +1120,39 @@ test('checker: a class may not begin after the teaching day has ended', () => {
   assert.ok(r.counts.window > 0, 'a class at 33:15 went unreported');
 });
 
+test('components: a class a pin drags past the day is exempt from the end check', () => {
+  // Evening teaching stays where it is, so a session starting at 18:15 is
+  // pinned. A lecture chained back-to-back in front of it must then run
+  // 15:15-18:15 in every arrangement of the term — autumn's COM772. There is
+  // no search that fixes that, so the end check passes over it exactly as it
+  // does a session too long to fit in a day. The start check still applies,
+  // and a class that is itself pinned gains nothing: the rule already skips it.
+  const { build } = require('./lib/components');
+  const m = load(null, { clashes: 'evidenced', term: 'autumn' });
+  const built = build(m);
+  const forced = m.classes.filter(c => c.windowExempt && !c.isFixed &&
+    built.components[c.component].span <= C.DAY_WIDTH);
+  assert.ok(forced.length, 'no class is exempt by a pin, so the case is untested');
+  for (const c of forced) {
+    const comp = built.components[c.component];
+    const pin = comp.members.find(x => x.cls.isFixed);
+    assert.ok(pin, c.module + ' is exempt with no pin in its component');
+    const off = comp.members.find(x => x.cls.id === c.id).off;
+    const start = pin.cls.origStart - pin.off + off;
+    assert.ok(start + c.dur > C.DAY_END,
+      c.module + ' is exempt but its pin does not push it past the day');
+    assert.ok(start >= C.DAY_START,
+      c.module + ' is exempt and also starts before the day, which is never allowed');
+  }
+  // Spring has no such class, so the exemption must not be handing one out.
+  const sp = load(null, { clashes: 'evidenced', term: 'spring' });
+  const spBuilt = build(sp);
+  const spForced = sp.classes.filter(c => c.windowExempt && !c.isFixed &&
+    spBuilt.components[c.component].span <= C.DAY_WIDTH);
+  assert.equal(spForced.length, 0,
+    'spring gained a pin exemption: ' + spForced.map(c => c.module).join(', '));
+});
+
 test('checker: the default teaching day is the one the site enforces', () => {
   // The window rule is only as strong as the day it is given. solve.js used to
   // pass a 07:15-23:15 window when reporting its own result, so a class

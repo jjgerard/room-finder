@@ -11,7 +11,7 @@
 // component once and the members follow, which makes strict back-to-back true
 // by construction rather than something to repair afterwards.
 
-const { DAY_WIDTH } = require('./constraints');
+const { DAY_WIDTH, DAY_END } = require('./constraints');
 
 // Union-find carrying, for each node, its start offset from the set's root.
 function makeUF(n) {
@@ -85,7 +85,23 @@ function build(model) {
     // Too wide for the teaching day: the members are allowed to overflow past
     // the end, but still never to start before it.
     const tooWide = span > DAY_WIDTH;
-    for (const m of members) m.cls.windowExempt = tooWide;
+    // A pinned member fixes the whole component. Evening teaching stays where
+    // it is, so a session starting at 18:15 is pinned — and a lecture chained
+    // back-to-back in front of it must then run 15:15 to 18:15, an hour past
+    // the end of the teaching day, in every arrangement of the term. There is
+    // no search that fixes that, only a different pin, so it is exempt from
+    // the end check on exactly the same grounds as a session too long to fit
+    // in a day. It still may not start outside the day: the exemption covers
+    // where a class ENDS, never where it begins.
+    // Only a class that is not itself pinned needs this: the rule already
+    // passes over a pinned class, so widening the exemption to cover one would
+    // say nothing and hide what the flag is really for.
+    const pin = members.find(m => m.cls.isFixed);
+    const pinStart = pin ? pin.cls.origStart - pin.off : null;
+    for (const m of members) {
+      m.cls.windowExempt = tooWide || (pin != null && !m.cls.isFixed &&
+        pinStart + m.off + m.cls.dur > DAY_END);
+    }
     components.push({
       id: components.length,
       members,                       // [{cls, off}]
