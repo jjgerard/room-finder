@@ -137,7 +137,7 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   if (!best || rank < best.rank) {
     best = { rank, seed, chk, mv, soft, gaps, splits, drift, assign: a };
     console.log(line + '   <- best so far');
-  } else if (seed % 10 === 0) {
+  } else {
     console.log(line);
   }
 
