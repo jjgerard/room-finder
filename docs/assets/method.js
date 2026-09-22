@@ -26,24 +26,30 @@
     return (t && t.today) || null;
   }
 
-  // Every seed of a 30-seed sweep per term, run with the same rules and data
-  // the site ships: `node timetable/solve.js --term <t> --seeds 30 --clashes
+  // Every seed of a 30-seed sweep per term, run against the rules and data the
+  // site ships: `node timetable/solve.js --term <t> --seeds 30 --clashes
   // evidenced`. The point is not the best seed — that one is published — but
   // how many starts reach zero at all, which is what says the result is the
   // search working rather than one lucky draw. `zero` counts the seeds that
   // finished with no hard violation; `dist` is how many seeds ended on 0, 1,
   // 2 ... violations; `published` is the seed the shipped file came from.
-  // None of the clean seeds needed to split a class across two rooms.
   //
-  // Unlike the figures above, these cannot be computed in the browser: it has
-  // one timetable per term, not thirty. They are measured once and quoted, and
-  // the command that produces them is on the page.
+  // A seed names a search, not a timetable, and only for one version of the
+  // rules: the solver's own cost reads windowExempt, so the pin exemption
+  // moved every autumn seed onto a different path. These were measured after
+  // that change, and the packed timetables were regenerated from them, so a
+  // seed named here is one the command above reproduces. Re-measure both if
+  // the rules change again — a stale list would read as reproducible and not
+  // be, which is worse than no list.
+  //
+  // Unlike the figures computed above, these cannot be worked out in the
+  // browser: it holds one timetable per term, not thirty.
   var SWEEP = {
     seeds: 30,
     spring: { zero: 6, dist: [6, 9, 6, 7, 1, 1], published: 7,
               clean: [6, 7, 8, 15, 21, 28] },
-    autumn: { zero: 8, dist: [8, 15, 5, 2], published: 4,
-              clean: [3, 4, 9, 15, 20, 25, 27, 29] },
+    autumn: { zero: 10, dist: [10, 16, 4], published: 24,
+              clean: [1, 5, 9, 13, 14, 17, 23, 24, 28, 29] },
   };
 
   function fmtN(n) { return Number(n).toLocaleString(); }
