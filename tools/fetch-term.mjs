@@ -30,7 +30,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { chromium } from 'playwright';
+// Playwright is imported further down, on demand. A static import fails before
+// any of the checks below run, so somebody whose `npm install` had not
+// finished got a module-resolution stack trace instead of being told to
+// finish it.
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -71,10 +74,17 @@ const URL_ = arg('url', conf.bookingTypeUrl || '');
 const OK_URL = /^https:\/\/.+\/booking-types\/[0-9a-f-]{36}/i.test(URL_) ||
   /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/.+\/booking-types\/[0-9a-f-]{36}/i.test(URL_);
 if (!OK_URL) {
-  console.error('Give the booking-type page once with --url:\n' +
-                '  node tools/fetch-term.mjs --term autumn \\\n' +
-                '    --url https://…/app/booking-types/<id>\n' +
-                'It is remembered in .auth/config.json afterwards.');
+  // One line, no shell continuation: the previous message used a bash-style
+  // backslash, which PowerShell does not understand, so a Windows user
+  // copying it got a second, more confusing error.
+  console.error(
+    (URL_ ? 'That does not look like a booking-type page:\n  ' + URL_ + '\n\n'
+          : 'No booking-type page yet.\n\n') +
+    'Open Resource Booker, go to the booking page, and copy the address from\n' +
+    'the browser. It ends in /booking-types/ and a long id. Then:\n\n' +
+    '  node tools/fetch-term.mjs --term ' + TERM +
+    ' --url https://<your-host>/app/booking-types/<the-id>\n\n' +
+    'It is remembered in .auth/config.json afterwards.');
   process.exit(1);
 }
 if (conf.bookingTypeUrl !== URL_) {
@@ -83,15 +93,43 @@ if (conf.bookingTypeUrl !== URL_) {
 
 const SNAPSHOT = fs.readFileSync(path.join(HERE, 'term-snapshot.js'), 'utf8');
 
+// On Windows, PowerShell refuses npm's .ps1 wrapper unless the execution
+// policy allows it, so the fix is named for both shells.
+const INSTALL = process.platform === 'win32'
+  ? '  npm.cmd install\n  npx.cmd playwright install chromium'
+  : '  npm install\n  npx playwright install chromium';
+
+let chromium;
+try {
+  ({ chromium } = await import('playwright'));
+} catch {
+  console.error('Playwright is not installed. In this folder, run:\n\n' + INSTALL +
+                (process.platform === 'win32'
+                  ? '\n\n(the .cmd forms sidestep PowerShell\u2019s script policy)' : ''));
+  process.exit(1);
+}
+
 console.log(`${TERM}: ${FROM} to ${TO}, week 1 starts ${WEEK1}`);
 console.log(`profile: ${path.relative(ROOT, AUTH)}  (delete it to sign in as somebody else)`);
 
-const ctx = await chromium.launchPersistentContext(AUTH, {
-  headless: flag('headless'),
-  viewport: { width: 1360, height: 900 },
-  args: ['--disable-blink-features=AutomationControlled'],
-  ...(process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : {}),
-});
+let ctx;
+try {
+  ctx = await chromium.launchPersistentContext(AUTH, {
+    headless: flag('headless'),
+    viewport: { width: 1360, height: 900 },
+    args: ['--disable-blink-features=AutomationControlled'],
+    ...(process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : {}),
+  });
+} catch (e) {
+  // The package is there but the browser binary is not — a separate download,
+  // and the commonest thing to have skipped.
+  if (/Executable doesn'?t exist|please run.*install/i.test(e.message)) {
+    console.error('Playwright is installed but its browser is not. Run:\n\n' + INSTALL);
+  } else {
+    console.error('Could not start the browser:\n' + e.message);
+  }
+  process.exit(1);
+}
 
 // Before any of the app's own code: the same file the console route pastes.
 await ctx.addInitScript({ content: SNAPSHOT });
