@@ -110,6 +110,7 @@ try {
 }
 
 console.log(`${TERM}: ${FROM} to ${TO}, week 1 starts ${WEEK1}`);
+console.log('reader: waits for sign-in, polls');   // absent in older checkouts
 console.log(`profile: ${path.relative(ROOT, AUTH)}  (delete it to sign in as somebody else)`);
 
 let ctx;
@@ -214,6 +215,7 @@ if (!ready) {
     .catch(() => console.log('  the app is quiet; the reader will provoke it itself'));
 }
 
+console.log('on: ' + page.url());
 console.log('reading the term… (about 550 rooms, four at a time)');
 
 let snap;
@@ -222,7 +224,19 @@ try {
     o => window.snapshotTerm(o),
     { term: TERM, from: FROM, to: TO, weekOneMonday: WEEK1, download: false });
 } catch (e) {
-  console.error('\nthe read failed: ' + e.message);
+  // Say where the tab actually was. The commonest failure is the app having
+  // moved somewhere else — a login page, a landing route — and an error that
+  // does not name the URL leaves no way to tell that from a real fault.
+  let where = '(could not read the address)';
+  try { where = page.url(); } catch { /* page gone */ }
+  console.error('\nthe read failed: ' + e.message.split('\n')[0]);
+  console.error('the tab was on: ' + where);
+  if (!/\/booking-types\/[0-9a-f-]{36}/i.test(where)) {
+    console.error('\nThat is not the booking page, so the app had moved on by the time it\n' +
+                  'was read. If it is a sign-in page, sign in and run this again — the\n' +
+                  'session is kept. If it is some other page of the booking app, open the\n' +
+                  'booking page you want, copy the address, and pass it as --url.');
+  }
   await ctx.close();
   process.exit(1);
 }
