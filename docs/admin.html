@@ -46,18 +46,10 @@
 
   <!-- ------------------------------------------------------------ step 2 -->
   <section class="card pad step">
-    <h3><span class="num">2</span> Read the term</h3>
-    <div class="note good"><p style="margin:0"><strong>One command does all of this.</strong>
-      <code>node tools/fetch-term.mjs --term autumn</code> opens a real browser, waits while you
-      sign in, reads the term and writes the file. The first run asks for the booking-type
-      address; after that the signed-in profile is kept in <code>.auth/</code> and it needs no
-      attention at all. Use it in preference to the console — the console can only capture the
-      app's headers from requests made <em>after</em> you paste, and by then the app has
-      usually made the ones it makes on load, which is why a paste often sits there doing
-      nothing. The runner installs the capture before the page's own code, so there is no
-      window to miss.</p></div>
-    <p class="small muted" style="margin-bottom:14px">What follows is the same reader by hand,
-      for when node is not to hand.</p>
+    <h3><span class="num">2</span> Read the term, in that tab</h3>
+    <p class="small muted">Do this <strong>while looking at the booking page, signed in</strong>.
+      Nothing to install: it runs in the tab you already have open.</p>
+
     <div class="grid2">
       <div>
         <label class="fld" for="term">Term</label>
@@ -80,19 +72,39 @@
       </div>
     </div>
     <p class="small muted" id="range-note"></p>
+
     <div class="row" style="margin-top:6px">
-      <button id="copy" class="primary" type="button">Copy the script</button>
+      <button id="copy" class="primary" type="button">Copy the reader</button>
+      <button id="dl" type="button">Download it instead</button>
       <span class="small muted" id="copy-note"></span>
     </div>
+
     <ol class="small muted steps">
-      <li>In the Resource Booker tab, <strong>do one thing in the page first</strong> — type in the
-        room search box, or click the calendar's next arrow. The script borrows the headers the
-        app itself sends, and cannot see them until the app has sent something.</li>
-      <li>Open the console (F12 → Console). Some browsers make you type
-        <code>allow pasting</code> once before they will accept a paste.</li>
+      <li>Switch to the Resource Booker tab. Press <strong>F12</strong>, then the
+        <strong>Console</strong> tab.</li>
+      <li>If it says pasting is disabled, type <code>allow pasting</code> and press Enter.
+        Chrome and Edge ask this once per profile.</li>
       <li>Paste, press Enter. It reads about 550 rooms four at a time and downloads
-        <code id="fname">snapshot-autumn.json</code>. Two or three minutes.</li>
+        <code id="fname">snapshot-autumn.json</code>. Two or three minutes; it prints its
+        progress as it goes.</li>
     </ol>
+
+    <details class="stat-list">
+      <summary>If the console will not take a paste</summary>
+      <p class="small muted">Use <strong>Download it instead</strong>, then drag the saved
+        <code>.js</code> file onto the Sources panel, or open it and copy from there. Firefox
+        asks you to type <code>allow pasting</code> too; Safari needs Develop → Show JavaScript
+        Console turned on first.</p>
+    </details>
+
+    <details class="stat-list">
+      <summary>Or run it from a terminal instead</summary>
+      <p class="small muted">In a clone of the repository,
+        <code>node tools/fetch-term.mjs --term autumn --refresh</code> drives its own browser
+        and writes the file for you. It needs <code>npm install</code> and
+        <code>npx playwright install chromium</code> first — which is why the console route
+        above is the one to reach for when those are giving trouble.</p>
+    </details>
   </section>
 
   <!-- ------------------------------------------------------------ step 3 -->
@@ -114,7 +126,9 @@
   <section class="card pad step">
     <h3><span class="num">4</span> Write it, in the repo</h3>
     <p class="small muted">This page cannot write to the repository. When the comparison above
-      looks right, run these where you have the code checked out.</p>
+      looks right, run these where you have the code checked out. <strong>Nothing to install
+      for this part</strong> — both scripts use only what Node ships with, so they work in a
+      fresh clone with no <code>npm install</code>.</p>
     <pre class="card pad mono small" style="overflow-x:auto"><code id="cmds"></code></pre>
     <div class="row">
       <button id="copy-cmds" type="button">Copy the commands</button>
@@ -221,26 +235,54 @@
   ['w1', 'from', 'to'].forEach(function (k) { $(k).onchange = showRange; });
   onTerm();
 
-  $('copy').onclick = function () {
-    var note = $('copy-note');
-    note.textContent = 'fetching the script…';
-    fetch('assets/term-snapshot.js').then(function (r) {
+  /**
+   * The reader with this term's dates appended as the call that runs it, so
+   * there is nothing to edit by hand once it is pasted.
+   */
+  function reader() {
+    return fetch('assets/term-snapshot.js').then(function (r) {
       if (!r.ok) throw new Error('term-snapshot.js is not published (HTTP ' + r.status + ')');
       return r.text();
     }).then(function (src) {
-      var call = "\n\nsnapshotTerm({\n" +
+      return src + "\n\nsnapshotTerm({\n" +
         "  term: '" + $('term').value + "',\n" +
         "  from: '" + $('from').value + "', to: '" + $('to').value + "',\n" +
         "  weekOneMonday: '" + $('w1').value + "',\n" +
         "})\n";
-      return navigator.clipboard.writeText(src + call);
-    }).then(function () {
-      note.textContent = 'copied — paste it into the Resource Booker console';
-      note.className = 'small ok-text';
-    }).catch(function (e) {
-      note.textContent = e.message + ' (you can still copy tools/term-snapshot.js by hand)';
-      note.className = 'small warn-text';
     });
+  }
+
+  function say(msg, ok) {
+    var note = $('copy-note');
+    note.textContent = msg;
+    note.className = 'small ' + (ok ? 'ok-text' : 'warn-text');
+  }
+
+  $('copy').onclick = function () {
+    $('copy-note').textContent = 'fetching the reader…';
+    $('copy-note').className = 'small muted';
+    reader().then(function (text) {
+      // The clipboard API needs a secure context and a user gesture; both hold
+      // here, but a blocked permission still has to land somewhere useful.
+      return navigator.clipboard.writeText(text);
+    }).then(function () {
+      say('copied — paste it into the Resource Booker console', true);
+    }).catch(function (e) {
+      say(e.message + ' — try Download it instead', false);
+    });
+  };
+
+  // For a console that refuses a paste, and for anyone who would rather see
+  // what they are running before they run it.
+  $('dl').onclick = function () {
+    reader().then(function (text) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
+      a.download = 'read-' + $('term').value + '.js';
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+      say('downloaded read-' + $('term').value + '.js', true);
+    }).catch(function (e) { say(e.message, false); });
   };
 
   // ---------------------------------------------------------------- step 3
