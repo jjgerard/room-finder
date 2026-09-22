@@ -420,3 +420,14 @@ for (const f of ['constraints.js', 'suggest.js']) {
   fs.writeFileSync(path.join(ASSETS, f), banner + ';(function () {\n' + src + '\n})();\n');
   console.log(`copied lib/${f} -> docs/assets/${f}`);
 }
+
+// The snapshot script, served so docs/admin.html can hand it over with the
+// dates already filled in. Copied verbatim rather than wrapped: it is pasted
+// into another site's console, not loaded as a script here.
+{
+  const src = fs.readFileSync(path.join(ROOT, 'tools', 'term-snapshot.js'), 'utf8');
+  fs.writeFileSync(path.join(ASSETS, 'term-snapshot.js'),
+    '// GENERATED — copied from tools/term-snapshot.js by `node timetable/export.js`.\n' +
+    '// Edit the original, not this copy.\n' + src);
+  console.log('copied tools/term-snapshot.js -> docs/assets/term-snapshot.js');
+}

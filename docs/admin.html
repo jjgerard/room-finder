@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refresh the data · Belfast Timetable</title>
+<meta name="description" content="Pull the current timetables from Resource Booker and see what changed before anything is written.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="appbar">
+  <span class="mark" aria-hidden="true"></span>
+  <h1>Belfast Timetable</h1>
+  <nav>
+    <a href="index.html">About</a>
+    <a href="rooms-explorer.html">Rooms</a>
+    <a href="admin.html" aria-current="page">Refresh</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <h2 class="term-title">Refresh the data<span>pull the current timetables from Resource Booker</span></h2>
+
+  <div class="note" id="freshness"><p style="margin:0">Reading what the site currently holds…</p></div>
+
+  <!-- ------------------------------------------------------------ step 1 -->
+  <section class="card pad step">
+    <h3><span class="num">1</span> Sign in to Resource Booker</h3>
+    <p class="small muted">This page cannot sign you in or read the timetable itself. The API
+      wants a token that Microsoft issues inside the booking app, and a page on this domain has
+      no way to get one — so the reading happens in a tab you are already signed in to, and comes
+      back here as a file.</p>
+    <label class="fld" for="bt">Your booking-type page</label>
+    <div class="row">
+      <input id="bt" type="url" style="flex:1;min-width:280px"
+             placeholder="https://…/app/booking-types/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+      <button id="open" class="primary" type="button">Open it</button>
+    </div>
+    <p class="small muted" id="bt-note" style="margin-bottom:0">The address is kept in this
+      browser so you only type it once.</p>
+  </section>
+
+  <!-- ------------------------------------------------------------ step 2 -->
+  <section class="card pad step">
+    <h3><span class="num">2</span> Copy the reader, and run it there</h3>
+    <div class="grid2">
+      <div>
+        <label class="fld" for="term">Term</label>
+        <select id="term">
+          <option value="autumn">Autumn 2026</option>
+          <option value="spring">Spring 2026</option>
+        </select>
+      </div>
+      <div>
+        <label class="fld" for="w1">Monday of week 1</label>
+        <input id="w1" type="date">
+      </div>
+      <div>
+        <label class="fld" for="from">First day to read</label>
+        <input id="from" type="date">
+      </div>
+      <div>
+        <label class="fld" for="to">Last day to read</label>
+        <input id="to" type="date">
+      </div>
+    </div>
+    <p class="small muted" id="range-note"></p>
+    <div class="row" style="margin-top:6px">
+      <button id="copy" class="primary" type="button">Copy the script</button>
+      <span class="small muted" id="copy-note"></span>
+    </div>
+    <ol class="small muted steps">
+      <li>In the Resource Booker tab, <strong>do one thing in the page first</strong> — type in the
+        room search box, or click the calendar's next arrow. The script borrows the headers the
+        app itself sends, and cannot see them until the app has sent something.</li>
+      <li>Open the console (F12 → Console). Some browsers make you type
+        <code>allow pasting</code> once before they will accept a paste.</li>
+      <li>Paste, press Enter. It reads about 550 rooms four at a time and downloads
+        <code id="fname">snapshot-autumn.json</code>. Two or three minutes.</li>
+    </ol>
+  </section>
+
+  <!-- ------------------------------------------------------------ step 3 -->
+  <section class="card pad step">
+    <h3><span class="num">3</span> Check what changed</h3>
+    <p class="small muted">Drop the file here. Nothing is uploaded and nothing is written — this
+      is the same comparison <code>timetable/refresh.js --dry-run</code> makes, run in your
+      browser so you can see it before you touch the repo.</p>
+    <div id="drop" class="dropzone" tabindex="0" role="button"
+         aria-label="Choose or drop a snapshot file">
+      <strong>Drop <code>snapshot-….json</code> here</strong>
+      <span class="small muted">or click to choose it</span>
+      <input id="file" type="file" accept="application/json,.json" hidden>
+    </div>
+    <div id="report"></div>
+  </section>
+
+  <!-- ------------------------------------------------------------ step 4 -->
+  <section class="card pad step">
+    <h3><span class="num">4</span> Write it, in the repo</h3>
+    <p class="small muted">This page cannot write to the repository. When the comparison above
+      looks right, run these where you have the code checked out.</p>
+    <pre class="card pad mono small" style="overflow-x:auto"><code id="cmds"></code></pre>
+    <div class="row">
+      <button id="copy-cmds" type="button">Copy the commands</button>
+      <span class="small muted" id="cmds-note"></span>
+    </div>
+    <div class="note warn" style="margin-top:14px"><p style="margin:0">
+      <strong>This refreshes the timetables as they stand, not the rebuild.</strong> The clash
+      graph — which classes share students — was inferred from the timetable as it was, and the
+      API carries no enrolment data, so it stays as it is. The rebuilt terms are solutions to the
+      old timetable too: if much has moved, re-solve them
+      (<code>node timetable/solve.js --term autumn --seeds 30 --clashes evidenced --out docs/data</code>)
+      rather than leaving them claiming to be a repair of something that has changed.</p></div>
+  </section>
+
+</main>
+
+<script src="assets/model.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function fmtN(n) { return Number(n).toLocaleString(); }
+
+  // Remembered between visits. Only the booking-type address and the dates —
+  // never anything that could stand in for a credential.
+  function remember(key, el, dflt) {
+    var saved = null;
+    try { saved = localStorage.getItem('ttadmin.' + key); } catch (e) { /* private window */ }
+    el.value = saved || dflt || '';
+    el.addEventListener('change', function () {
+      try { localStorage.setItem('ttadmin.' + key, el.value); } catch (e) { /* ignore */ }
+    });
+  }
+
+  // ------------------------------------------------------- what we hold now
+
+  var SHIPPED = null;   // the packed timetable, for the comparison in step 3
+
+  fetch('data/timetable.json').then(function (r) { return r.json(); }).then(function (d) {
+    SHIPPED = d;
+    var t = d.terms;
+    $('freshness').innerHTML =
+      '<p style="margin:0"><strong>The site is showing data built ' + esc(d.generated || '?') +
+      '.</strong> Autumn as it stands: ' + fmtN(t.autumn.rows.length) + ' bookings. Spring as it ' +
+      'stands: ' + fmtN(t.springNow.rows.length) + '. Those two are what a refresh replaces.</p>';
+  }).catch(function (e) {
+    $('freshness').className = 'note warn';
+    $('freshness').innerHTML = '<p style="margin:0">Could not read the current data: ' +
+      esc(e.message) + '</p>';
+  });
+
+  // ------------------------------------------------------------ step 1 & 2
+
+  remember('bt', $('bt'));
+  $('open').onclick = function () {
+    var url = $('bt').value.trim();
+    if (!/^https:\/\/.+\/booking-types\/[0-9a-f-]{36}/i.test(url)) {
+      $('bt-note').textContent = 'That does not look like a booking-type page — it should end ' +
+        'in /booking-types/ and a long id.';
+      $('bt-note').className = 'small warn-text';
+      return;
+    }
+    try { localStorage.setItem('ttadmin.bt', url); } catch (e) { /* ignore */ }
+    window.open(url, '_blank', 'noopener');
+  };
+
+  // Autumn 2026 runs from the Monday of week 1; spring's dates are the
+  // operator's to set, so they are only defaults.
+  var DEFAULTS = {
+    autumn: { w1: '2026-09-21', from: '2026-09-21', to: '2026-12-11' },
+    spring: { w1: '2027-01-25', from: '2027-01-25', to: '2027-05-14' },
+  };
+  ['w1', 'from', 'to'].forEach(function (k) { remember(k, $(k), DEFAULTS.autumn[k]); });
+
+  function onTerm() {
+    var t = $('term').value;
+    $('fname').textContent = 'snapshot-' + t + '.json';
+    // Only move the dates if they are still another term's defaults, so a
+    // corrected date is never overwritten.
+    ['w1', 'from', 'to'].forEach(function (k) {
+      var other = t === 'autumn' ? 'spring' : 'autumn';
+      if (!$(k).value || $(k).value === DEFAULTS[other][k]) $(k).value = DEFAULTS[t][k];
+    });
+    showRange();
+  }
+
+  function showRange() {
+    var w1 = $('w1').value, from = $('from').value, to = $('to').value;
+    if (!w1 || !from || !to) { $('range-note').textContent = ''; return; }
+    var days = (Date.parse(to) - Date.parse(from)) / 86400000;
+    var weeks = Math.floor((Date.parse(from) - Date.parse(w1)) / 604800000) + 1;
+    var msg = Math.round(days / 7 + 0.5) + ' weeks, starting at week ' + weeks + '.';
+    if (days < 0) msg = 'The last day is before the first.';
+    else if (weeks !== 1) msg += ' The first day read is not in week 1 — deliberate?';
+    $('range-note').textContent = msg;
+  }
+  $('term').onchange = onTerm;
+  ['w1', 'from', 'to'].forEach(function (k) { $(k).onchange = showRange; });
+  onTerm();
+
+  $('copy').onclick = function () {
+    var note = $('copy-note');
+    note.textContent = 'fetching the script…';
+    fetch('assets/term-snapshot.js').then(function (r) {
+      if (!r.ok) throw new Error('term-snapshot.js is not published (HTTP ' + r.status + ')');
+      return r.text();
+    }).then(function (src) {
+      var call = "\n\nsnapshotTerm({\n" +
+        "  term: '" + $('term').value + "',\n" +
+        "  from: '" + $('from').value + "', to: '" + $('to').value + "',\n" +
+        "  weekOneMonday: '" + $('w1').value + "',\n" +
+        "})\n";
+      return navigator.clipboard.writeText(src + call);
+    }).then(function () {
+      note.textContent = 'copied — paste it into the Resource Booker console';
+      note.className = 'small ok-text';
+    }).catch(function (e) {
+      note.textContent = e.message + ' (you can still copy tools/term-snapshot.js by hand)';
+      note.className = 'small warn-text';
+    });
+  };
+
+  // ---------------------------------------------------------------- step 3
+  //
+  // The same comparison timetable/refresh.js makes. It is repeated here rather
+  // than shared because that script runs in node against the CSV room table
+  // and this one runs in a browser against the packed file — but the two must
+  // agree, so the rules are stated the same way and the thresholds match.
+
+  var REFUSE_BELOW = 0.8;   // same as refresh.js
+
+  function compare(snap) {
+    var terms = { autumn: 'autumn', spring: 'springNow', springCurrent: 'springNow' };
+    var key = terms[snap.term];
+    if (!key) throw new Error('the snapshot says its term is "' + snap.term +
+                              '" — expected autumn or spring');
+    if (!SHIPPED) throw new Error('the current data has not loaded yet');
+    var before = SHIPPED.terms[key].rows;
+
+    // Room names come back from the API with a campus prefix.
+    var id = {};
+    SHIPPED.rooms.forEach(function (r, i) { id[r[0]] = i; });
+    var strip = function (n) { return String(n).replace(/^[BCM]_/, '').trim(); };
+
+    var rows = [], unknown = {}, dropped = 0;
+    (snap.rows || []).forEach(function (r) {
+      var rid = id[strip(r[6])];
+      if (rid === undefined) {
+        unknown[strip(r[6])] = (unknown[strip(r[6])] || 0) + 1;
+        dropped++;
+        return;
+      }
+      rows.push([r[0], r[1], r[2], r[3], r[4], r[5], rid, r[7], r[8]]);
+    });
+
+    var sig = function (r) { return [r[2], r[3], r[4], r[5], r[6], r[8]].join('|'); };
+    var was = {}, now = {};
+    before.forEach(function (r) { was[sig(r)] = true; });
+    rows.forEach(function (r) { now[sig(r)] = true; });
+    return {
+      key: key,
+      before: before.length,
+      after: rows.length,
+      added: rows.filter(function (r) { return !was[sig(r)]; }),
+      gone: before.filter(function (r) { return !now[sig(r)]; }),
+      unknown: Object.keys(unknown).map(function (n) { return [n, unknown[n]]; })
+        .sort(function (a, b) { return b[1] - a[1]; }),
+      dropped: dropped,
+      refused: rows.length < before.length * REFUSE_BELOW,
+    };
+  }
+
+  var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  function line(r) {
+    return esc(r[2]) + ' <span class="muted">' + DAYS[r[3]] + ' ' +
+      window.TTModel.fmt(r[4]) + ' · weeks ' + esc(r[8]) + '</span>';
+  }
+
+  function report(snap) {
+    var c = compare(snap);
+    var out = [];
+    out.push('<div class="note ' + (c.refused ? 'warn' : c.added.length ? '' : 'good') +
+      '"><p style="margin:0"><strong>' + fmtN(c.before) + ' bookings on file → ' +
+      fmtN(c.after) + ' in the snapshot.</strong> ' +
+      fmtN(c.added.length) + ' new or moved, ' + fmtN(c.gone.length) + ' no longer there.' +
+      (c.dropped ? ' ' + fmtN(c.dropped) + ' dropped — the room is not in the inventory.' : '') +
+      '</p></div>');
+
+    if (c.refused) {
+      out.push('<div class="note warn"><p style="margin:0"><strong>refresh.js will refuse ' +
+        'this.</strong> It has lost more than a fifth of the term, which is what a fetch that ' +
+        'died half way through looks like. Check the date range, and that the run finished — ' +
+        'then take it again rather than forcing it through.</p></div>');
+    }
+    if (c.unknown.length) {
+      out.push('<p class="small"><strong>' + c.unknown.length + ' room' +
+        (c.unknown.length === 1 ? '' : 's') + ' not in <code>belfast_rooms.csv</code>:</strong> ' +
+        c.unknown.slice(0, 8).map(function (u) {
+          return esc(u[0]) + ' <span class="muted">(' + u[1] + ')</span>';
+        }).join(', ') + (c.unknown.length > 8 ? ' …' : '') +
+        '<br><span class="muted">Their bookings are left out. A new room has to be added to the ' +
+        'inventory before it can hold anything.</span></p>');
+    }
+    [['added', 'New or moved'], ['gone', 'No longer there']].forEach(function (p) {
+      var list = c[p[0]];
+      if (!list.length) return;
+      out.push('<details class="stat-list" open><summary>' + p[1] + ' (' + fmtN(list.length) +
+        ')</summary><ul>' +
+        list.slice(0, 40).map(function (r) { return '<li>' + line(r) + '</li>'; }).join('') +
+        '</ul>' + (list.length > 40
+          ? '<p class="small muted">and ' + fmtN(list.length - 40) + ' more</p>' : '') +
+        '</details>');
+    });
+    if (!c.added.length && !c.gone.length) {
+      out.push('<p class="small muted">Nothing has moved. There is no need to write anything.</p>');
+    }
+    $('report').innerHTML = out.join('');
+  }
+
+  function take(file) {
+    $('report').innerHTML = '<p class="small muted">Reading ' + esc(file.name) + '…</p>';
+    var fr = new FileReader();
+    fr.onload = function () {
+      try { report(JSON.parse(fr.result)); }
+      catch (e) {
+        $('report').innerHTML = '<div class="note warn"><p style="margin:0">' +
+          esc(e.message) + '</p></div>';
+      }
+    };
+    fr.onerror = function () {
+      $('report').innerHTML = '<div class="note warn"><p style="margin:0">Could not read that ' +
+        'file.</p></div>';
+    };
+    fr.readAsText(file);
+  }
+
+  var drop = $('drop');
+  drop.onclick = function () { $('file').click(); };
+  drop.onkeydown = function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); }
+  };
+  $('file').onchange = function () { if (this.files[0]) take(this.files[0]); };
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function (e) {
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) take(f);
+  });
+
+  // ---------------------------------------------------------------- step 4
+
+  function cmds() {
+    var f = 'snapshot-' + $('term').value + '.json';
+    return 'node timetable/refresh.js --in ~/Downloads/' + f + ' --dry-run\n' +
+           'node timetable/refresh.js --in ~/Downloads/' + f + '\n' +
+           'node timetable/export.js\n' +
+           'node timetable/test.js';
+  }
+  function showCmds() { $('cmds').textContent = cmds(); }
+  $('term').addEventListener('change', showCmds);
+  showCmds();
+
+  $('copy-cmds').onclick = function () {
+    navigator.clipboard.writeText(cmds()).then(function () {
+      $('cmds-note').textContent = 'copied';
+      $('cmds-note').className = 'small ok-text';
+    }).catch(function () {
+      $('cmds-note').textContent = 'could not copy — select the text above';
+      $('cmds-note').className = 'small warn-text';
+    });
+  };
+})();
+</script>
+
+</body>
+</html>
