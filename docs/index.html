@@ -58,7 +58,7 @@
       <div class="chips" id="f-days"></div>
       <div class="chips" id="f-flags">
         <button class="chip" data-f="changed" aria-pressed="false" id="chip-changed" hidden>Moved only</button>
-        <button class="chip" data-f="split" aria-pressed="false" id="chip-split" hidden>Split across rooms</button>
+        <button class="chip" data-f="split" aria-pressed="false" id="chip-split" hidden>Moves between rooms</button>
       </div>
       <button id="f-clear" style="margin-left:auto">Clear all</button>
     </div>
@@ -159,17 +159,21 @@
     return true;
   }
 
-  // Mark bookings that share a module, slot and weeks but sit in several rooms.
+  // Mark the classes taught in one room and then another across the term.
+  //
+  // This used to mark any booking whose rows shared a slot, which meant it
+  // marked parallel teaching — MEC114's 350 students in seven rooms at once,
+  // the fine art studios in fourteen — as a fault. The rebuilt spring term
+  // therefore reported 499 bookings "split across rooms" directly beneath
+  // "0 violations", counting the rooms it had deliberately kept. See
+  // M.wanderingSlots for what actually counts.
   function markSplits(term) {
-    var by = new Map();
-    term.rows.forEach(function (r) {
-      var k = r.title + '|' + r.day + '|' + r.start + '|' + r.weeksText;
-      if (!by.has(k)) by.set(k, []);
-      by.get(k).push(r);
-    });
-    by.forEach(function (list) {
-      var split = list.length > 1;
-      list.forEach(function (r) { r.isSplit = split; r.splitCount = list.length; });
+    term.rows.forEach(function (r) { r.isSplit = false; r.splitCount = 0; });
+    M.wanderingSlots(term.rows).forEach(function (slot) {
+      slot.rows.forEach(function (r) {
+        r.isSplit = true;
+        r.splitCount = slot.rooms.length;   // rooms it moves between, not rows
+      });
     });
   }
 
@@ -353,7 +357,8 @@
         '<td class="mono">' + fmt(r.start) + '</td>' +
         '<td class="mono">' + (r.dur / 60) + 'h</td>' +
         '<td><span class="tag ' + (TYPE_CLASS[room.type] || 't-general') + '"></span>' + esc(room.name) +
-          (r.isSplit ? ' <span class="pill neutral">+' + (r.splitCount - 1) + '</span>' : '') + '</td>' +
+          (r.isSplit ? ' <span class="pill neutral" title="moves between ' + r.splitCount +
+            ' rooms across the term">+' + (r.splitCount - 1) + '</span>' : '') + '</td>' +
         '<td class="mono">' + (room.capacityKnown ? room.capacity : '—') + '</td>' +
         '<td class="mono">' + esc(r.weeksText) + '</td>' +
         (showChanged ? '<td>' + (chTxt ? '<span class="pill no">' + chTxt + '</span>'
@@ -369,12 +374,19 @@
     if (tab === 'method') return;
     var list = rows().filter(matches);
     var roomSet = new Set(list.map(function (r) { return r.room; }));
-    var split = list.filter(function (r) { return r.isSplit; }).length;
+    // Classes, not rows: three rows of one wandering class is one class that
+    // moves, and saying 3 next to "1,870 bookings" reads as three of them.
+    var splitKeys = {};
+    list.forEach(function (r) {
+      if (r.isSplit) splitKeys[r.title + '|' + r.day + '|' + r.start] = true;
+    });
+    var split = Object.keys(splitKeys).length;
     var moved = list.filter(function (r) { return r.changed; }).length;
     document.getElementById('summary').innerHTML =
       '<strong>' + list.length.toLocaleString() + '</strong> bookings · ' +
       '<strong>' + roomSet.size + '</strong> rooms' +
-      (split ? ' · <span class="warn" style="color:var(--warn);font-weight:600">' + split + '</span> split across rooms' : '') +
+      (split ? ' · <span class="warn" style="color:var(--warn);font-weight:600">' + split +
+               '</span> move between rooms' : '') +
       (tab === 'springNew' && moved ? ' · <strong>' + moved + '</strong> moved from today' : '');
     if (view === 'grid') drawGrid(list); else drawList(list);
   }
@@ -705,8 +717,10 @@
           'Built the same way as the spring rebuild.' + seedTxt + '</p></div>';
     } else if (tab === 'springNow') {
       el.innerHTML = '<div class="note warn"><p style="margin:0"><strong>Spring 2026, as it stands.</strong> ' +
-        'Bookings marked <em>split across rooms</em> are the problem being fixed: one class ' +
-        'occupying two or three rooms. Compare with the rebuilt tab.</p></div>';
+        'Bookings marked <em>moves between rooms</em> are the problem being fixed: a class ' +
+        'meeting in one room for part of the term and another room for the rest, because ' +
+        'nobody could hold one room for all of it. A class in several rooms <em>at once</em> ' +
+        'is parallel teaching and is kept. Compare with the rebuilt tab.</p></div>';
     } else if (tab === 'springNew') {
       el.innerHTML = '<div id="verdict" class="note">Checking the rebuilt timetable in your browser…</div>';
       checkRebuild();

@@ -864,6 +864,75 @@ test('export: the browser is given the grandfathered sharing pairs', () => {
     'the export ships a different number of sharing pairs than the model has');
 });
 
+test('export: a rebuilt term has no class moving between rooms', () => {
+  // The fault the rebuild exists to remove, checked the way the site counts
+  // it. The site used to count any booking whose rows shared a slot, which
+  // marked parallel teaching as a fault and made the rebuilt spring term
+  // report 499 bookings "split across rooms" under "0 violations". What
+  // counts is a class whose rooms are NEVER occupied together — one room for
+  // part of the term, another for the rest.
+  const fs = require('fs');
+  const path = require('path');
+  const file = path.join(__dirname, '..', 'docs', 'data', 'timetable.json');
+  if (!fs.existsSync(file)) return;               // not exported yet; CI exports first
+  const packed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const R = { module: 0, title: 2, day: 3, start: 4, room: 6, weeks: 8 };
+
+  const mask = pattern => {
+    let m = 0;
+    String(pattern == null ? '' : pattern).split(',').forEach(part => {
+      part = part.trim().replace(/\u2013/g, '-');
+      const dash = part.indexOf('-', 1);
+      if (dash > 0) {
+        const a = parseInt(part.slice(0, dash), 10), b = parseInt(part.slice(dash + 1), 10);
+        if (isNaN(a) || isNaN(b)) return;
+        for (let w = Math.max(1, a); w <= Math.min(16, b); w++) m |= 1 << (w - 1);
+      } else {
+        const v = parseInt(part, 10);
+        if (!isNaN(v) && v >= 1 && v <= 16) m |= 1 << (v - 1);
+      }
+    });
+    return m;
+  };
+
+  const wandering = rows => {
+    const slots = new Map();
+    for (const r of rows) {
+      if (!r[R.module]) continue;                 // institutional, not taught
+      const k = [r[R.title], r[R.day], r[R.start]].join('|');
+      if (!slots.has(k)) slots.set(k, []);
+      slots.get(k).push(r);
+    }
+    const out = [];
+    for (const [k, list] of slots) {
+      const ids = [...new Set(list.map(r => r[R.room]))];
+      if (ids.length < 2) continue;
+      let parallel = false;
+      for (let w = 0; w < 16 && !parallel; w++) {
+        let here = 0;
+        for (const rm of ids) {
+          if (list.some(r => r[R.room] === rm && (mask(r[R.weeks]) & (1 << w)))) here++;
+        }
+        if (here > 1) parallel = true;            // two rooms at once: kept
+      }
+      if (!parallel) out.push(k);
+    }
+    return out;
+  };
+
+  for (const key of ['springNew', 'autumnNew']) {
+    const t = packed.terms[key];
+    if (!t) continue;
+    const bad = wandering(t.rows);
+    assert.equal(bad.length, 0,
+      key + ' has a class taught in one room and then another: ' + bad.slice(0, 3).join(', '));
+  }
+  // And the terms as they stand still have some, or the detection is broken
+  // rather than the timetable being perfect.
+  assert.ok(wandering(packed.terms.springNow.rows).length > 0,
+    'spring as it stands has none, which means nothing is being detected');
+});
+
 test('sizes: a cohort figure never inflates a teaching group', () => {
   // The dangerous direction. A module's confirmed size is the whole cohort;
   // applying it to "SEM Group C" would put 220 students in a seminar of 60.

@@ -192,6 +192,55 @@
     });
   }
 
+  /**
+   * Classes taught in one room and then another across the term.
+   *
+   * This is the fault the rebuild exists to remove, and it is NOT the same as
+   * a class holding several rooms. MEC114's tutorial teaches 350 students in
+   * seven rooms in the same hour, and the fine art studios keep fourteen:
+   * that is parallel teaching, and the rebuild books every one of them. What
+   * is wrong is a class meeting in one room for six weeks and another for the
+   * rest, because nobody could hold one room for the term.
+   *
+   * So a slot only counts when its rooms are never occupied together: if any
+   * single week has two of them in use, the class is teaching in parallel and
+   * is left alone. Counting rooms instead of weeks is what made the rebuilt
+   * spring term report 499 bookings "split across rooms" while breaking no
+   * rule — it was counting the parallel teaching it had deliberately kept.
+   *
+   * Bookings with no module code are institutional rather than taught — room
+   * bookings for staff training, applicant days — and are not the timetable's
+   * to fix.
+   *
+   * @param rows display rows, with `weeks` as a bitmask
+   * @return [{title, module, day, start, rooms: [id], rows}]
+   */
+  function wanderingSlots(rows) {
+    var slots = {};
+    rows.forEach(function (r) {
+      if (!r.module) return;
+      var k = r.title + '|' + r.day + '|' + r.start;
+      (slots[k] || (slots[k] = [])).push(r);
+    });
+    var out = [];
+    Object.keys(slots).forEach(function (k) {
+      var list = slots[k], seen = {};
+      list.forEach(function (r) { seen[r.room] = true; });
+      var ids = Object.keys(seen).map(Number);
+      if (ids.length < 2) return;
+      for (var w = 0; w < 16; w++) {
+        var n = 0;
+        ids.forEach(function (rm) {
+          if (list.some(function (r) { return r.room === rm && (r.weeks & (1 << w)); })) n++;
+        });
+        if (n > 1) return;
+      }
+      out.push({ title: list[0].title, module: list[0].module,
+                 day: list[0].day, start: list[0].start, rooms: ids, rows: list });
+    });
+    return out;
+  }
+
   // Two assignments over the rebuilt term's model: today, and the rebuild.
   function assignments(model) {
     var current = new Map(), solved = new Map();
@@ -235,6 +284,7 @@
   window.TTModel = {
     DAYS: DAYS, C: C, R: R, fmt: fmt, weekList: weekList, weekMask: weekMask,
     hydrate: hydrate, assignments: assignments, loadTimetable: loadTimetable,
+    wanderingSlots: wanderingSlots,
     buildModel: buildModel, loadModel: loadModel,
     currentOccupancy: currentOccupancy,
   };

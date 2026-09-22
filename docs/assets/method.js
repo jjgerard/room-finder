@@ -199,43 +199,28 @@
   function wanderers(H) {
     var t = H.terms && H.terms.springNow;
     if (!t) return [];
-    var slots = {};
-    t.rows.forEach(function (r) {
-      var k = r.title + '|' + r.day + '|' + r.start;
-      (slots[k] || (slots[k] = [])).push(r);
-    });
     var byTitle = {};
     H.model.classes.forEach(function (c) {
       if (!c.shadowOf || c.shadowOf < 0) (byTitle[c.title] || (byTitle[c.title] = [])).push(c);
     });
-    var out = [];
-    Object.keys(slots).forEach(function (k) {
-      var list = slots[k];
-      var rooms = {};
-      list.forEach(function (r) { rooms[r.room] = true; });
-      var ids = Object.keys(rooms).map(Number);
-      if (ids.length < 2) return;
-      // Never two rooms in the same week, or it is parallel teaching.
-      for (var w = 0; w < 16; w++) {
-        var n = 0;
-        ids.forEach(function (rm) {
-          if (list.some(function (r) { return r.room === rm && (r.weeks & (1 << w)); })) n++;
-        });
-        if (n > 1) return;
-      }
-      var first = list[0];
-      if (!first.module) return;
-      var cands = byTitle[first.title] || [];
+    // Every wandering class, including the ones the model cannot be matched
+    // back to. Looking each one up and dropping the misses counted 32 where
+    // the timetable page counted 35, and the three missing were not a
+    // category — two were title lookups that failed and one was pinned. A
+    // count that quietly depends on a lookup succeeding is not a count.
+    // The class is still looked up, but only to name the room the rebuild
+    // gives it, which is detail the list can do without.
+    return window.TTModel.wanderingSlots(t.rows).map(function (slot) {
+      var cands = byTitle[slot.title] || [];
       var cls = null;
       for (var i = 0; i < cands.length; i++) {
-        if (cands[i].origDay === first.day && cands[i].origStart === first.start) { cls = cands[i]; break; }
+        if (cands[i].origDay === slot.day && cands[i].origStart === slot.start) {
+          cls = cands[i]; break;
+        }
       }
-      if (!cls) cls = cands[0];
-      if (!cls || cls.isFixed) return;
-      out.push({ module: first.module, title: first.title, rooms: ids, cls: cls });
-    });
-    out.sort(function (a, b) { return b.rooms.length - a.rooms.length; });
-    return out;
+      return { module: slot.module, title: slot.title, rooms: slot.rooms,
+               cls: cls || cands[0] || null };
+    }).sort(function (a, b) { return b.rooms.length - a.rooms.length; });
   }
 
   /** "BC-03-102 (66)" without the parenthesised capacity. */
@@ -313,28 +298,7 @@
    * only a class taught in one room and then another.
    */
   function wanderingRows(rows) {
-    var slots = {};
-    rows.forEach(function (r) {
-      if (!r.module) return;
-      (slots[r.title + '|' + r.day + '|' + r.start] ||
-        (slots[r.title + '|' + r.day + '|' + r.start] = [])).push(r);
-    });
-    var n = 0;
-    Object.keys(slots).forEach(function (k) {
-      var list = slots[k], rooms = {};
-      list.forEach(function (r) { rooms[r.room] = true; });
-      var ids = Object.keys(rooms);
-      if (ids.length < 2) return;
-      for (var w = 0; w < 16; w++) {
-        var here = 0;
-        ids.forEach(function (rm) {
-          if (list.some(function (r) { return String(r.room) === rm && (r.weeks & (1 << w)); })) here++;
-        });
-        if (here > 1) return;                 // parallel teaching, not wandering
-      }
-      n++;
-    });
-    return n;
+    return window.TTModel.wanderingSlots(rows).length;
   }
 
   /** Autumn's rule counts, tile for tile with spring's. */
@@ -857,12 +821,17 @@
     // teaching and keeps them. These are the ones taught in one room and then
     // another, which the rebuild gives a single room for the whole term.
     var moved = wanderers(H);
+    // Counted in the rebuilt term rather than asserted to be zero. It is zero
+    // by construction — a class holds one room — but a tile that prints a
+    // constant proves nothing, and would go on printing it if that changed.
+    var movedAfter = wanderingRows((H.terms.springNew || {}).rows || []);
     if (moved.length) {
       ruleTiles += tile(fmtN(moved.length), 'One class using several rooms through the term',
-        'rebuilt: 0', 'warn',
+        'rebuilt: ' + fmtN(movedAfter), 'warn',
         few(moved.map(function (x) {
           return '<strong>' + esc(x.module) + '</strong> <span class="muted">' +
-            x.rooms.length + ' rooms \u2192 ' + esc(roomLabel(model, x.cls.room)) + '</span>';
+            x.rooms.length + ' rooms' +
+            (x.cls ? ' \u2192 ' + esc(roomLabel(model, x.cls.room)) : '') + '</span>';
         })));
     }
 
