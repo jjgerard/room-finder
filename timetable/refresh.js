@@ -151,32 +151,42 @@ terms.note = `Autumn 2026 and the current Spring 2026 timetable. Room indices ma
 fs.writeFileSync(TERMS, JSON.stringify(terms));
 console.log(`\nwrote ${path.relative(path.join(__dirname, '..'), TERMS)}`);
 
-// Run the export too. terms.json and docs/data are a pair — a refreshed first
-// one with a stale second publishes a timetable that no longer exists, and
-// leaving that as a second command somebody has to remember is how it would
-// happen. --no-export is for anybody assembling several changes first.
-if (process.argv.includes('--no-export')) {
-  console.log('next: node timetable/export.js');
-} else {
-  console.log('packing the site data\u2026\n');
-  const { spawnSync } = require('child_process');
-  const r = spawnSync(process.execPath, [path.join(__dirname, 'export.js')],
-                      { stdio: 'inherit' });
+// terms.json and docs/data are a pair, and the rebuilt term is a solution to
+// the timetable as it stood — so a refresh that changes anything leaves it
+// repairing something that has moved. Do all of it here.
+//
+// The repair comes BEFORE the export, not after. Exporting first publishes a
+// rebuilt term full of violations and relies on somebody running a second
+// command to clear them; the first time that was tried the second command
+// never ran, and docs/data was left with 155 of them.
+const { spawnSync } = require('child_process');
+const run = (args, what) => {
+  const r = spawnSync(process.execPath, args, { stdio: 'inherit' });
   if (r.status !== 0) {
-    console.error('\nthe export failed — terms.json is updated, docs/data is not.');
+    console.error(`\nthe ${what} failed \u2014 terms.json is updated, docs/data is not.`);
     process.exit(1);
   }
+};
+
+const TERM = snap.term === 'spring' || snap.term === 'springCurrent' ? 'spring' : snap.term;
+const SOL = path.join(__dirname, '..', 'docs', 'data',
+                      TERM === 'spring' ? 'solution.json' : `solution-${TERM}.json`);
+const changed = d.moved.length || d.fresh.length || d.gone.length;
+
+if (process.argv.includes('--no-export')) {
+  console.log('\nnext: node timetable/export.js');
+} else if (changed && !process.argv.includes('--no-repair') && fs.existsSync(SOL)) {
+  // Repair, not re-solve: the rebuilt term is still a valid arrangement of
+  // everything that did not move, so the solver only has to place what did.
+  // Seconds rather than an hour, and it keeps the timetable people may
+  // already have looked at. It packs the site data itself.
+  console.log('\nrepairing the rebuilt term for what moved\u2026\n');
+  run([path.join(__dirname, 'solve.js'), '--term', TERM, '--from', SOL,
+       '--seeds', '1', '--clashes', 'evidenced', '--out',
+       path.join(__dirname, '..', 'docs', 'data')], 'repair');
+} else {
+  console.log('\npacking the site data\u2026\n');
+  run([path.join(__dirname, 'export.js')], 'export');
 }
 
 console.log('\nDone. Commit the changes to publish them.');
-if (d.moved.length || d.fresh.length || d.gone.length) {
-  // Repair, not re-solve. The rebuilt term is still a valid arrangement of
-  // everything that did not move, so the cheap thing is to hand it back to the
-  // solver and let it place only what changed — seconds rather than an hour,
-  // and it keeps the timetable people may already have looked at.
-  const sol = TERM === 'spring' ? 'solution.json' : `solution-${TERM}.json`;
-  console.log('\nThe rebuilt term was solved against the timetable as it stood. Repair it');
-  console.log('for what has moved \u2014 this takes seconds and changes only what it must:');
-  console.log(`  node timetable/solve.js --term ${TERM} --from docs/data/${sol} \\`);
-  console.log('      --seeds 1 --clashes evidenced --out docs/data');
-}
