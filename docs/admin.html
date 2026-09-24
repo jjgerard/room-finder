@@ -168,6 +168,7 @@
 </main>
 
 <script src="assets/model.js"></script>
+<script src="assets/diff.js"></script>
 <script>
 (function () {
   'use strict';
@@ -309,98 +310,77 @@
 
   // ---------------------------------------------------------------- step 3
   //
-  // The same comparison timetable/refresh.js makes. It is repeated here rather
-  // than shared because that script runs in node against the CSV room table
-  // and this one runs in a browser against the packed file — but the two must
-  // agree, so the rules are stated the same way and the thresholds match.
-
-  var REFUSE_BELOW = 0.8;   // same as refresh.js
+  // The comparison is timetable/lib/diff.js, copied here by export.js — the
+  // same code refresh.js runs. This page used to carry its own version of it,
+  // and after refresh.js was fixed the two disagreed: the page went on
+  // reporting 377 changes and 232 dropped rooms where the script reported 197
+  // and 13. A preview that disagrees with the thing it previews is worse than
+  // no preview.
 
   function compare(snap) {
     var terms = { autumn: 'autumn', spring: 'springNow', springCurrent: 'springNow' };
     var key = terms[snap.term];
     if (!key) throw new Error('the snapshot says its term is "' + snap.term +
-                              '" — expected autumn or spring');
+                              '" \u2014 expected autumn or spring');
     if (!SHIPPED) throw new Error('the current data has not loaded yet');
-    var before = SHIPPED.terms[key].rows;
-
-    // Room names come back from the API with a campus prefix.
-    var id = {};
-    SHIPPED.rooms.forEach(function (r, i) { id[r[0]] = i; });
-    var strip = function (n) { return String(n).replace(/^[BCM]_/, '').trim(); };
-
-    var rows = [], unknown = {}, dropped = 0;
-    (snap.rows || []).forEach(function (r) {
-      var rid = id[strip(r[6])];
-      if (rid === undefined) {
-        unknown[strip(r[6])] = (unknown[strip(r[6])] || 0) + 1;
-        dropped++;
-        return;
-      }
-      rows.push([r[0], r[1], r[2], r[3], r[4], r[5], rid, r[7], r[8]]);
-    });
-
-    var sig = function (r) { return [r[2], r[3], r[4], r[5], r[6], r[8]].join('|'); };
-    var was = {}, now = {};
-    before.forEach(function (r) { was[sig(r)] = true; });
-    rows.forEach(function (r) { now[sig(r)] = true; });
-    return {
-      key: key,
-      before: before.length,
-      after: rows.length,
-      added: rows.filter(function (r) { return !was[sig(r)]; }),
-      gone: before.filter(function (r) { return !now[sig(r)]; }),
-      unknown: Object.keys(unknown).map(function (n) { return [n, unknown[n]]; })
-        .sort(function (a, b) { return b[1] - a[1]; }),
-      dropped: dropped,
-      refused: rows.length < before.length * REFUSE_BELOW,
-    };
-  }
-
-  var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  function line(r) {
-    return esc(r[2]) + ' <span class="muted">' + DAYS[r[3]] + ' ' +
-      window.TTModel.fmt(r[4]) + ' · weeks ' + esc(r[8]) + '</span>';
+    return window.TTDiff.compare(
+      snap.rows || [],
+      SHIPPED.terms[key].rows,
+      SHIPPED.rooms.map(function (r) { return r[0]; }));
   }
 
   function report(snap) {
     var c = compare(snap);
+    var D = window.TTDiff.DAYS, hhmm = window.TTDiff.hhmm;
     var out = [];
-    out.push('<div class="note ' + (c.refused ? 'warn' : c.added.length ? '' : 'good') +
-      '"><p style="margin:0"><strong>' + fmtN(c.before) + ' bookings on file → ' +
+    var quiet = !c.moved.length && !c.fresh.length && !c.gone.length;
+    out.push('<div class="note ' + (c.refused ? 'warn' : quiet ? 'good' : '') +
+      '"><p style="margin:0"><strong>' + fmtN(c.before) + ' bookings on file \u2192 ' +
       fmtN(c.after) + ' in the snapshot.</strong> ' +
-      fmtN(c.added.length) + ' new or moved, ' + fmtN(c.gone.length) + ' no longer there.' +
-      (c.dropped ? ' ' + fmtN(c.dropped) + ' dropped — the room is not in the inventory.' : '') +
-      '</p></div>');
+      fmtN(c.moved.length) + ' moved, ' + fmtN(c.fresh.length) + ' new, ' +
+      fmtN(c.gone.length) + ' no longer in the term.' +
+      (c.oneOff ? ' ' + fmtN(c.oneOff) + ' one-off BK bookings left out, as the data always ' +
+                  'has.' : '') +
+      (c.dropped ? ' ' + fmtN(c.dropped) + ' dropped \u2014 the room is not in the inventory.'
+                 : '') + '</p></div>');
 
     if (c.refused) {
       out.push('<div class="note warn"><p style="margin:0"><strong>refresh.js will refuse ' +
         'this.</strong> It has lost more than a fifth of the term, which is what a fetch that ' +
-        'died half way through looks like. Check the date range, and that the run finished — ' +
+        'died half way through looks like. Check the date range, and that the run finished \u2014 ' +
         'then take it again rather than forcing it through.</p></div>');
     }
-    if (c.unknown.length) {
-      out.push('<p class="small"><strong>' + c.unknown.length + ' room' +
-        (c.unknown.length === 1 ? '' : 's') + ' not in <code>belfast_rooms.csv</code>:</strong> ' +
-        c.unknown.slice(0, 8).map(function (u) {
+    if (c.unknownRooms.length) {
+      out.push('<p class="small"><strong>' + c.unknownRooms.length + ' room' +
+        (c.unknownRooms.length === 1 ? '' : 's') + ' not in <code>belfast_rooms.csv</code>:</strong> ' +
+        c.unknownRooms.slice(0, 8).map(function (u) {
           return esc(u[0]) + ' <span class="muted">(' + u[1] + ')</span>';
-        }).join(', ') + (c.unknown.length > 8 ? ' …' : '') +
+        }).join(', ') + (c.unknownRooms.length > 8 ? ' \u2026' : '') +
         '<br><span class="muted">Their bookings are left out. A new room has to be added to the ' +
         'inventory before it can hold anything.</span></p>');
     }
-    [['added', 'New or moved'], ['gone', 'No longer there']].forEach(function (p) {
-      var list = c[p[0]];
-      if (!list.length) return;
-      out.push('<details class="stat-list" open><summary>' + p[1] + ' (' + fmtN(list.length) +
+
+    var slot = function (r) {
+      return esc(r[2]) + ' <span class="muted">' + D[r[3]] + ' ' + hhmm(r[4]) + ' \u00b7 ' +
+        esc(c.roomName(r[6])) + ' \u00b7 weeks ' + esc(r[8]) + '</span>';
+    };
+    var list = function (rows, head, fmt) {
+      if (!rows.length) return;
+      out.push('<details class="stat-list" open><summary>' + head + ' (' + fmtN(rows.length) +
         ')</summary><ul>' +
-        list.slice(0, 40).map(function (r) { return '<li>' + line(r) + '</li>'; }).join('') +
-        '</ul>' + (list.length > 40
-          ? '<p class="small muted">and ' + fmtN(list.length - 40) + ' more</p>' : '') +
+        rows.slice(0, 40).map(function (r) { return '<li>' + fmt(r) + '</li>'; }).join('') +
+        '</ul>' + (rows.length > 40
+          ? '<p class="small muted">and ' + fmtN(rows.length - 40) + ' more</p>' : '') +
         '</details>');
+    };
+    list(c.moved, 'Moved', function (x) {
+      return '<strong>' + esc(x.title) + '</strong> <span class="muted">' + esc(x.what) +
+             '</span>';
     });
-    if (!c.added.length && !c.gone.length) {
-      out.push('<p class="small muted">Nothing has moved. There is no need to write anything.</p>');
-    }
+    list(c.fresh, 'New', slot);
+    list(c.gone, 'No longer in the term', slot);
+    if (quiet) out.push('<p class="small muted">Nothing has moved. There is no need to write ' +
+                        'anything.</p>');
     $('report').innerHTML = out.join('');
   }
 
@@ -441,11 +421,15 @@
   // ---------------------------------------------------------------- step 4
 
   function cmds() {
-    // One line, ending in a space, so the downloaded file can be dragged onto
-    // the terminal to supply its own path. refresh.js packs the site data
-    // itself — leaving that as a separate command somebody has to remember is
-    // how a refreshed terms.json ends up published with stale site data.
-    return 'node timetable/refresh.js ';
+    // The first line ends in a space, so the downloaded file can be dragged
+    // onto the terminal to supply its own path. refresh.js packs the site data
+    // itself; the second line repairs the rebuilt term for whatever moved,
+    // which takes about a second and changes only the classes it must.
+    var t = $('term').value;
+    var sol = t === 'spring' ? 'solution.json' : 'solution-' + t + '.json';
+    return 'node timetable/refresh.js \n\n' +
+           'node timetable/solve.js --term ' + t + ' --from docs/data/' + sol +
+           ' --seeds 1 --clashes evidenced --out docs/data';
   }
   function showCmds() { $('cmds').textContent = cmds(); }
   $('term').addEventListener('change', showCmds);

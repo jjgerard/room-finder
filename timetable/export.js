@@ -476,7 +476,7 @@ console.log(`  autumn ${autumnRows.length} rows · spring now ${springNowRows.le
 // global. The wrapper gives each the private scope it had in node.
 const banner = '// GENERATED — copied from timetable/lib by `node timetable/export.js`.\n' +
                '// Edit the original, not this copy.\n';
-for (const f of ['constraints.js', 'suggest.js']) {
+for (const f of ['constraints.js', 'suggest.js', 'diff.js']) {
   const src = fs.readFileSync(path.join(__dirname, 'lib', f), 'utf8');
   fs.writeFileSync(path.join(ASSETS, f), banner + ';(function () {\n' + src + '\n})();\n');
   console.log(`copied lib/${f} -> docs/assets/${f}`);
