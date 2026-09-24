@@ -65,22 +65,78 @@ if (!KEY) {
 // with a campus prefix (B_BA-00-008 (35)); the csv has them without.
 const roomCsv = fs.readFileSync(path.join(DATA, 'belfast_rooms.csv'), 'utf8')
   .trim().split(/\r?\n/).slice(1);
+// Two room names contain commas and are quoted for it, so splitting on commas
+// truncated them — and left the quote on the front, which is enough to stop
+// the code below recognising the room code too.
+function csvCells(line) {
+  const out = [];
+  let cell = '', quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"' && line[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') quoted = false;
+      else cell += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') { out.push(cell); cell = ''; }
+    else cell += c;
+  }
+  out.push(cell);
+  return out;
+}
+
 const roomId = new Map();
 for (const line of roomCsv) {
-  const [id, name] = line.split(',');
+  const [id, name] = csvCells(line);
   roomId.set(name.trim(), Number(id));
 }
 const strip = n => String(n).replace(/^[BCM]_/, '').trim();
+
+// Resource Booker and the handoff CSV render the same room differently, and
+// not only in punctuation:
+//
+//   API  BC-08-104_104A (150)              csv  BC-08-104 / 104A (150)
+//   API  BC-07-210_211 Comms Lab 1         csv  BC-07-210/211 Comms Lab 1
+//   API  BA-03-024 - Central computing Lab csv  BA-03-024 - MAC Central computing Lab
+//
+// so matching on the whole name dropped 232 bookings as "rooms not in the
+// inventory" when every one of them was there. The leading code is the stable
+// part: 215 of the 228 rooms have one and only BC-02-404 is shared, so a code
+// naming two rooms is left unmatched rather than guessed at.
+const codeOf = n => {
+  const m = strip(n).match(/^([A-Z]{2}-\d{2}-\d{3}[A-Z]?)(\s*[/_]\s*(\d{3}[A-Z]?))?/i);
+  return m ? (m[1] + (m[3] ? '/' + m[3] : '')).toUpperCase() : null;
+};
+const byCode = new Map();
+for (const [name, id] of roomId) {
+  const c = codeOf(name);
+  if (!c) continue;
+  if (byCode.has(c)) byCode.set(c, null);      // shared: never guess
+  else byCode.set(c, id);
+}
+/** The inventory id for a room as the API names it, or undefined. */
+function roomIdOf(name) {
+  const exact = roomId.get(strip(name));
+  if (exact !== undefined) return exact;
+  const c = codeOf(name);
+  const byc = c && byCode.get(c);
+  return byc == null ? undefined : byc;
+}
 
 const terms = JSON.parse(fs.readFileSync(TERMS, 'utf8'));
 const before = terms[KEY].rows;
 
 const unknownRooms = new Map();
 const rows = [];
-let dropped = 0;
+let dropped = 0, oneOff = 0;
 for (const r of snap.rows) {
   const [module, activity, title, day, start, dur, room, nWeeks, weeksText] = r;
-  const id = roomId.get(strip(room));
+  // One-off room bookings: a named person booked a room on a date. They carry
+  // no module, no cohort and no place in the clash graph, and terms.json has
+  // never held them — so a snapshot that includes them reads as hundreds of
+  // new bookings every time.
+  if (/\/BK\//i.test(title)) { oneOff++; continue; }
+  const id = roomIdOf(room);
   if (id === undefined) {
     unknownRooms.set(strip(room), (unknownRooms.get(strip(room)) || 0) + 1);
     dropped++;
@@ -106,6 +162,7 @@ console.log(`snapshot: ${snap.term}, taken ${String(snap.takenAt).slice(0, 10)},
             `${snap.from} to ${snap.to}`);
 console.log(`bookings: ${before.length} on file → ${rows.length} in the snapshot`);
 console.log(`          ${added.length} new or moved, ${gone.length} no longer there`);
+if (oneOff) console.log(`          ${oneOff} one-off BK bookings left out, as the data always has`);
 if (dropped) console.log(`          ${dropped} rows dropped — the room is not in the inventory`);
 if (unknownRooms.size) {
   console.log(`rooms not in belfast_rooms.csv (${unknownRooms.size}):`);
