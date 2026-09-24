@@ -279,9 +279,14 @@ if (process.argv.includes('--no-export')) {
 }
 
 console.log('\nDone. Commit the changes to publish them.');
-if (added.length || gone.length) {
-  console.log('The rebuilt terms are still solutions to the timetable as it was; if much');
-  console.log('has moved, re-solve them:');
-  console.log('  node timetable/solve.js --term autumn --seeds 30 --clashes evidenced ' +
-              '--out docs/data');
+if (moved.length || fresh.length || dropped2.length) {
+  // Repair, not re-solve. The rebuilt term is still a valid arrangement of
+  // everything that did not move, so the cheap thing is to hand it back to the
+  // solver and let it place only what changed — seconds rather than an hour,
+  // and it keeps the timetable people may already have looked at.
+  const sol = TERM === 'spring' ? 'solution.json' : `solution-${TERM}.json`;
+  console.log('\nThe rebuilt term was solved against the timetable as it stood. Repair it');
+  console.log('for what has moved \u2014 this takes seconds and changes only what it must:');
+  console.log(`  node timetable/solve.js --term ${TERM} --from docs/data/${sol} \\`);
+  console.log('      --seeds 1 --clashes evidenced --out docs/data');
 }

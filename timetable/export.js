@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const { load } = require('./lib/model');
 const { build } = require('./lib/components');
+const { join } = require('./lib/join');
 
 const ROOT = path.join(__dirname, '..');
 const DOCS = path.join(ROOT, 'docs');
@@ -32,13 +33,13 @@ if (!fs.existsSync(solPath)) {
   process.exit(1);
 }
 const solution = JSON.parse(fs.readFileSync(solPath, 'utf8'));
-const solved = new Map(solution.rows.map(r => [r.id, r]));
+let solved = null;   // filled once the model is loaded, by a stable join
 
 // Load the model exactly as the solve did. If the solution was produced
 // against a pruned clash graph and the site shipped the full one, the page
 // would report violations of rules the solver was never given.
 const model = load(null, { clashes: solution.meta.clashMode || 'all' });
-checkJoin(model, solution.rows, 'the rebuilt spring solution');
+solved = attach(model, solution.rows, 'the rebuilt spring', 'spring');
 const { components } = build(model);
 const terms = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'terms.json'), 'utf8'));
 
@@ -102,35 +103,37 @@ function correctionCounts() {
 }
 
 /**
- * A solution is joined to a model by class id, and autumn's ids are a running
- * counter over the rows in terms.json — so a refresh that adds, removes or
- * reorders a booking shifts every id after it, and the solution's placements
- * land on different classes entirely. In a test, moving 40 bookings took the
- * rebuilt term from 0 hard violations to 7,263 while every file still looked
- * perfectly well-formed.
+ * Attach a saved solution to a model, and say what did not line up.
  *
- * The solution records each class's title, so the join can be checked rather
- * than assumed. Publishing a rebuild whose placements belong to other classes
- * would be worse than publishing none.
+ * See lib/join.js for why this cannot be done by class id. The short version:
+ * a rebuilt timetable breaks no rule as a fact about itself, so refreshing
+ * what the timetabling team has booked must not be able to change that. Joining
+ * by position made it look as though it had — 7,263 violations where there were
+ * none — because every placement was being read against the wrong class.
+ *
+ * What a refresh legitimately changes is which classes exist. Afterwards a few
+ * have no placement and a few placements have no class, and those few are worth
+ * reporting; anything more means the two files are not describing the same term
+ * at all, and publishing that would be worse than publishing nothing.
  */
-function checkJoin(model, rows, what) {
-  let wrong = 0, missing = 0;
-  for (const r of rows) {
-    const c = model.byId.get(r.id);
-    if (!c) { missing++; continue; }
-    if (c.title !== r.title) wrong++;
+function attach(model, rows, what, term) {
+  const { placed, missing, orphans } = join(model, rows);
+  if (placed.size < model.classes.length * 0.8) {
+    console.error(`\nREFUSED: ${what} does not describe this term.`);
+    console.error(`  Only ${placed.size} of ${model.classes.length} classes could be matched ` +
+                  `to a placement.`);
+    console.error('  Re-solve against the data it will be published with:\n');
+    console.error(`     node timetable/solve.js --term ${term} --seeds 30 ` +
+                  '--clashes evidenced --out docs/data\n');
+    console.error('  Nothing has been written.');
+    process.exit(1);
   }
-  if (!wrong && !missing) return;
-  console.error(`\nREFUSED: ${what} no longer lines up with the data.`);
-  console.error(`  ${wrong} of ${rows.length} placements are against a different class` +
-                (missing ? `, and ${missing} name a class that is gone` : '') + '.');
-  console.error('  A class id is a position in the current timetable, so refreshing it moves');
-  console.error('  every id after the first change. The solution has to be rebuilt against');
-  console.error('  the data it will be published with:\n');
-  console.error(`     node timetable/solve.js --term ${what.includes('autumn') ? 'autumn' : 'spring'} ` +
-                '--seeds 30 --clashes evidenced --out docs/data\n');
-  console.error('  Nothing has been written.');
-  process.exit(1);
+  if (missing.length || orphans.length) {
+    console.log(`  ${what}: ${missing.length} class${missing.length === 1 ? '' : 'es'} ` +
+                `with no placement, ${orphans.length} placement${orphans.length === 1 ? '' : 's'} ` +
+                `with no class \u2014 the term has changed since it was solved`);
+  }
+  return placed;
 }
 
 /** When a term as it stands was last pulled from Resource Booker, if ever. */
@@ -244,8 +247,7 @@ const autumnSolPath = path.join(DATA, 'solution-autumn.json');
 if (fs.existsSync(autumnSolPath)) {
   const autumnSol = JSON.parse(fs.readFileSync(autumnSolPath, 'utf8'));
   const autumnModel = load(null, { clashes: autumnSol.meta.clashMode || 'all', term: 'autumn' });
-  checkJoin(autumnModel, autumnSol.rows, 'the rebuilt autumn solution');
-  const placed = new Map(autumnSol.rows.map(r => [r.id, r]));
+  const placed = attach(autumnModel, autumnSol.rows, 'the rebuilt autumn', 'autumn');
   autumnNewRows = autumnModel.classes.map(c => {
     const a = placed.get(c.id);
     const progs = c.programmes.length

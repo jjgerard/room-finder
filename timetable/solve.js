@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { load, DAYS, fmtMin } = require('./lib/model');
 const C = require('./lib/constraints');
+const { join } = require('./lib/join');
 const { Solver } = require('./lib/solver');
 
 function arg(name, dflt) {
@@ -74,15 +75,23 @@ for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
   });
   if (FROM) {
     const prior = JSON.parse(fs.readFileSync(path.resolve(FROM), 'utf8'));
-    const had = new Map(prior.rows.map(r => [r.id, r]));
-    priorRows = had;
+    // By the stable key, not by id — see lib/join.js. Warm-starting by
+    // position after a refresh adopts other classes' placements, which is the
+    // one thing a warm start must not do: it would begin from a scrambled
+    // timetable and repair its way back out, losing the whole point.
+    const { placed, missing, orphans } = join(model, prior.rows);
+    priorRows = placed;
     s.adopt(new Map(model.classes.map(c => {
-      const r = had.get(c.id);
+      const r = placed.get(c.id);
       return [c.id, r ? { day: r.day, start: r.start, room: r.room }
                       : { day: c.origDay, start: c.origStart, room: c.origRoom }];
     })));
-    console.log(`adopted ${prior.rows.length} placements from ${FROM}: ` +
-                `${s.totalHard()} violations to repair`);
+    console.log(`adopted ${placed.size} of ${prior.rows.length} placements from ${FROM}: ` +
+                `${s.totalHard()} violations to repair` +
+                (missing.length || orphans.length
+                  ? ` (${missing.length} class${missing.length === 1 ? '' : 'es'} new to it, ` +
+                    `${orphans.length} placement${orphans.length === 1 ? '' : 's'} with no class)`
+                  : ''));
   }
   if (FROM) {
     // A repair, not a search. Only the moves that fix a broken placement run:
