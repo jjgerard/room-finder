@@ -714,7 +714,8 @@
               'evening, so no arrangement of the term can move it. Nothing else breaks a rule.'
             : ' still breaks a hard rule.') + seedTxt + '</p></div>'
         : '<div class="note good"><p style="margin:0"><strong>Autumn 2026, rebuilt.</strong> ' +
-          'Built the same way as the spring rebuild.' + seedTxt + '</p></div>';
+          'Built the same way as the spring rebuild.' + seedTxt + '</p></div>' +
+          staleNote('autumnNew');
     } else if (tab === 'springNow') {
       el.innerHTML = '<div class="note warn"><p style="margin:0"><strong>Spring 2026, as it stands.</strong> ' +
         'Bookings marked <em>moves between rooms</em> are the problem being fixed: a class ' +
@@ -727,6 +728,24 @@
     } else {
       el.innerHTML = '';
     }
+  }
+
+  /**
+   * A rebuilt term repairs the timetable as it stood when it was solved. Once
+   * the current one has been refreshed past that date, "moved from today" and
+   * "keeps its slot" are counted against a timetable nobody is looking at any
+   * more — so the tab says so rather than printing a number that reads as
+   * current.
+   */
+  function staleNote(key) {
+    var st = H.terms[key] && H.terms[key].staleAgainst;
+    if (!st) return '';
+    return '<div class="note warn" style="margin-top:10px"><p style="margin:0">' +
+      '<strong>Rebuilt against an older version of this term.</strong> It was solved from ' +
+      'the timetable as it stood on ' + esc(st.solvedOn) + ', and the current one has since ' +
+      'been refreshed from Resource Booker (' + esc(st.refreshedOn) + '). The rules still ' +
+      'hold \u2014 what it repairs is simply no longer quite what the other tab shows, so ' +
+      'the movement counts below compare with the older timetable.</p></div>';
   }
 
   function checkRebuild() {
@@ -760,7 +779,7 @@
         mv.total.toLocaleString() + ' classes are exactly where they are today' +
         (H.terms.springNew.seed != null
           ? ', in starting point ' + H.terms.springNew.seed : '') + '. ' +
-        '<a href="#" id="to-method">How it was built</a>.</p>';
+        '<a href="#" id="to-method">How it was built</a>.</p>' + staleNote('springNew');
     } else {
       // A handful of named exceptions is a different thing from a broken
       // timetable, so say which ones and let the reader judge.

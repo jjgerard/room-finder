@@ -148,6 +148,11 @@
         // And, for a term as it stands, the figures the About page compares
         // against — counted in export.js so an S+ refresh moves them.
         today: t.today || null,
+        refreshed: t.refreshed || null,
+        // Set on a rebuilt term when the timetable it repairs has been pulled
+        // from Resource Booker since it was solved: its movement figures then
+        // compare against a timetable that is no longer the current one.
+        staleAgainst: t.staleAgainst || null,
         rows: t.rows.map(function (r) {
           return {
             module: r[R.module], activity: r[R.activity], title: r[R.title],

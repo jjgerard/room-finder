@@ -247,6 +247,13 @@ if (rows.length < before.length * 0.8) {
 if (DRY) { console.log('\n--dry-run: nothing written'); process.exit(0); }
 
 terms[KEY].rows = rows;
+// When each term as it stands was last refreshed. The rebuilt terms are
+// solutions to the timetable as it was, and their "moved from today" figures
+// compare against it — so once a refresh is newer than a solution, those
+// figures are measuring against a timetable that no longer exists. Recording
+// the date is what lets the site say so instead of quietly being wrong.
+terms.refreshed = terms.refreshed || {};
+terms.refreshed[KEY] = String(snap.takenAt).slice(0, 10);
 terms.note = `Autumn 2026 and the current Spring 2026 timetable. Room indices match ` +
   `belfast_rooms.csv. One row per class-room booking, so a class split across rooms ` +
   `appears once per room. ${KEY} refreshed from Resource Booker on ` +

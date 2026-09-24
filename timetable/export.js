@@ -38,6 +38,7 @@ const solved = new Map(solution.rows.map(r => [r.id, r]));
 // against a pruned clash graph and the site shipped the full one, the page
 // would report violations of rules the solver was never given.
 const model = load(null, { clashes: solution.meta.clashMode || 'all' });
+checkJoin(model, solution.rows, 'the rebuilt spring solution');
 const { components } = build(model);
 const terms = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'terms.json'), 'utf8'));
 
@@ -98,6 +99,56 @@ function correctionCounts() {
     roomReqs: rows('room_requirements.csv'),
     notShared: rows('not_shared.csv'),
   };
+}
+
+/**
+ * A solution is joined to a model by class id, and autumn's ids are a running
+ * counter over the rows in terms.json — so a refresh that adds, removes or
+ * reorders a booking shifts every id after it, and the solution's placements
+ * land on different classes entirely. In a test, moving 40 bookings took the
+ * rebuilt term from 0 hard violations to 7,263 while every file still looked
+ * perfectly well-formed.
+ *
+ * The solution records each class's title, so the join can be checked rather
+ * than assumed. Publishing a rebuild whose placements belong to other classes
+ * would be worse than publishing none.
+ */
+function checkJoin(model, rows, what) {
+  let wrong = 0, missing = 0;
+  for (const r of rows) {
+    const c = model.byId.get(r.id);
+    if (!c) { missing++; continue; }
+    if (c.title !== r.title) wrong++;
+  }
+  if (!wrong && !missing) return;
+  console.error(`\nREFUSED: ${what} no longer lines up with the data.`);
+  console.error(`  ${wrong} of ${rows.length} placements are against a different class` +
+                (missing ? `, and ${missing} name a class that is gone` : '') + '.');
+  console.error('  A class id is a position in the current timetable, so refreshing it moves');
+  console.error('  every id after the first change. The solution has to be rebuilt against');
+  console.error('  the data it will be published with:\n');
+  console.error(`     node timetable/solve.js --term ${what.includes('autumn') ? 'autumn' : 'spring'} ` +
+                '--seeds 30 --clashes evidenced --out docs/data\n');
+  console.error('  Nothing has been written.');
+  process.exit(1);
+}
+
+/** When a term as it stands was last pulled from Resource Booker, if ever. */
+function refreshedOn(key) {
+  return (terms.refreshed && terms.refreshed[key]) || null;
+}
+
+/**
+ * A rebuilt term is a repair of the timetable as it stood when it was solved.
+ * Once the current timetable is refreshed past that date, its movement figures
+ * — how many classes moved, how many keep their slot — are measured against
+ * something that no longer exists. This says so rather than letting the
+ * numbers go quietly wrong.
+ */
+function staleAgainst(currentKey, solvedOn) {
+  const refreshed = refreshedOn(currentKey);
+  if (!refreshed || !solvedOn || refreshed <= solvedOn) return null;
+  return { solvedOn, refreshedOn: refreshed };
 }
 
 function todayStats(rows) {
@@ -188,10 +239,12 @@ const springNowRows = terms.springCurrent.rows.map(r =>
 let autumnNewRows = null, autumnNewUnresolved = 0;
 let autumnPack = null;   // the autumn model, written beside the main file
 let autumnScore = null;  // its rule counts, for the About page
+let autumnSolvedOn = null;   // the day it was solved, to spot a later refresh
 const autumnSolPath = path.join(DATA, 'solution-autumn.json');
 if (fs.existsSync(autumnSolPath)) {
   const autumnSol = JSON.parse(fs.readFileSync(autumnSolPath, 'utf8'));
   const autumnModel = load(null, { clashes: autumnSol.meta.clashMode || 'all', term: 'autumn' });
+  checkJoin(autumnModel, autumnSol.rows, 'the rebuilt autumn solution');
   const placed = new Map(autumnSol.rows.map(r => [r.id, r]));
   autumnNewRows = autumnModel.classes.map(c => {
     const a = placed.get(c.id);
@@ -207,6 +260,7 @@ if (fs.existsSync(autumnSolPath)) {
   // Set below, from the score computed against the site's teaching day —
   // never from the solution file's own count.
   autumnNewUnresolved = 0;
+  autumnSolvedOn = autumnSol.meta.generated || null;
   // The same shape the spring model is packed in, so the browser can hydrate
   // it with the same code. It goes in its own file: Fix a clash needs it and
   // nothing else does, so the pages that only show a timetable should not pay
@@ -306,10 +360,14 @@ const packed = {
   modTitles: Object.fromEntries(modTitle),
   terms: {
     autumn: { label: 'Autumn 2026', sub: 'as it stands', rows: autumnRows, checkable: 0,
-              today: todayStats(autumnRows) },
+              today: todayStats(autumnRows), refreshed: refreshedOn('autumn') },
     springNow: { label: 'Spring 2026', sub: 'as it stands', rows: springNowRows, checkable: 0,
-                 today: todayStats(springNowRows) },
-    springNew: { label: 'Spring 2026', sub: 'rebuilt', rows: springNewRows, checkable: 1 },
+                 today: todayStats(springNowRows), refreshed: refreshedOn('springCurrent') },
+    springNew: { label: 'Spring 2026', sub: 'rebuilt', rows: springNewRows, checkable: 1,
+                 // Null unless the term it repairs has been refreshed since it
+                 // was solved, in which case its movement figures compare with
+                 // a timetable that is no longer the current one.
+                 staleAgainst: staleAgainst('springCurrent', solution.meta.generated) },
   },
   // What timetabling has corrected, for the About page's account of how a term
   // got clean.
@@ -357,6 +415,7 @@ if (autumnNewRows) {
     label: 'Autumn 2026', checkable: 0, rows: autumnNewRows,
     sub: left ? 'rebuilt \u2014 ' + left + ' unresolved' : 'rebuilt',
     score: autumnScore,
+    staleAgainst: staleAgainst('autumn', autumnSolvedOn),
   };
 }
 
