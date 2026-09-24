@@ -150,29 +150,89 @@ for (const r of snap.rows) {
 }
 
 // ---- what changed ----------------------------------------------------------
+//
 // A refresh that silently replaces 3,000 rows is not a refresh, it is a
-// migration. Print the difference so a person can decide whether to keep it.
-const sig = row => [row[2], row[3], row[4], row[5], row[6], row[8]].join('|');
-const was = new Set(before.map(sig));
-const now = new Set(rows.map(sig));
-const added = rows.filter(r => !was.has(sig(r)));
-const gone = before.filter(r => !now.has(sig(r)));
+// migration. And "197 new or moved" is not much better: a booking that has
+// moved an hour and a booking that never existed before need different
+// judgements, so they are counted and shown separately.
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' +
+                  String(m % 60).padStart(2, '0');
+const sig = r => [r[2], r[3], r[4], r[5], r[6], r[8]].join('|');
+const roomName = id => {
+  for (const [n, i] of roomId) if (i === id) return n;
+  return '#' + id;
+};
+
+function byTitle(list) {
+  const m = new Map();
+  for (const r of list) {
+    if (!m.has(r[2])) m.set(r[2], []);
+    m.get(r[2]).push(r);
+  }
+  return m;
+}
+const mineBefore = byTitle(before), mineNow = byTitle(rows);
+
+const fresh = [];     // a booking with a title the file has never held
+const dropped2 = [];  // a title the snapshot no longer has at all
+const moved = [];     // same booking, different slot, room or weeks
+
+for (const [title, list] of mineNow) {
+  if (!mineBefore.has(title)) { fresh.push(...list); continue; }
+  const old = mineBefore.get(title);
+  const oldSigs = new Set(old.map(sig)), newSigs = new Set(list.map(sig));
+  const addedHere = list.filter(r => !oldSigs.has(sig(r)));
+  const goneHere = old.filter(r => !newSigs.has(sig(r)));
+  if (!addedHere.length && !goneHere.length) continue;
+  // One row either side is the readable case: say which fields differ.
+  if (addedHere.length === 1 && goneHere.length === 1) {
+    const a = goneHere[0], b = addedHere[0], parts = [];
+    if (a[3] !== b[3]) parts.push(DAYS[a[3]] + ' \u2192 ' + DAYS[b[3]]);
+    if (a[4] !== b[4]) parts.push(hhmm(a[4]) + ' \u2192 ' + hhmm(b[4]));
+    if (a[5] !== b[5]) parts.push(a[5] + 'min \u2192 ' + b[5] + 'min');
+    if (a[6] !== b[6]) parts.push(roomName(a[6]) + ' \u2192 ' + roomName(b[6]));
+    if (a[8] !== b[8]) parts.push('weeks ' + a[8] + ' \u2192 ' + b[8]);
+    moved.push({ title, what: parts.join(', ') });
+  } else {
+    moved.push({ title, what: old.length + ' room-booking' + (old.length === 1 ? '' : 's') +
+                             ' \u2192 ' + list.length });
+  }
+}
+for (const [title, list] of mineBefore) {
+  if (!mineNow.has(title)) dropped2.push(...list);
+}
+
+const added = rows.filter(r => !new Set(before.map(sig)).has(sig(r)));
+const gone = before.filter(r => !new Set(rows.map(sig)).has(sig(r)));
 
 console.log(`snapshot: ${snap.term}, taken ${String(snap.takenAt).slice(0, 10)}, ` +
             `${snap.from} to ${snap.to}`);
-console.log(`bookings: ${before.length} on file → ${rows.length} in the snapshot`);
-console.log(`          ${added.length} new or moved, ${gone.length} no longer there`);
+console.log(`bookings: ${before.length} on file \u2192 ${rows.length} in the snapshot`);
 if (oneOff) console.log(`          ${oneOff} one-off BK bookings left out, as the data always has`);
-if (dropped) console.log(`          ${dropped} rows dropped — the room is not in the inventory`);
+if (dropped) console.log(`          ${dropped} rows dropped \u2014 the room is not in the inventory`);
 if (unknownRooms.size) {
   console.log(`rooms not in belfast_rooms.csv (${unknownRooms.size}):`);
   [...unknownRooms.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
     .forEach(([n, c]) => console.log(`   ${n} (${c} bookings)`));
 }
-for (const r of added.slice(0, 10)) {
-  console.log(`   + ${r[2]} day ${r[3]} ${String(r[4])} weeks ${r[8]}`);
+
+const show = (list, mark, fmt, head) => {
+  if (!list.length) return;
+  console.log(`\n${head}`);
+  list.slice(0, 12).forEach(x => console.log('   ' + mark + ' ' + fmt(x)));
+  if (list.length > 12) console.log(`   \u2026 and ${list.length - 12} more`);
+};
+const slot = r => `${r[2]}  ${DAYS[r[3]]} ${hhmm(r[4])} \u00b7 ${roomName(r[6])} \u00b7 weeks ${r[8]}`;
+
+show(moved, '~', x => `${x.title}  ${x.what}`,
+     `${moved.length} booking${moved.length === 1 ? '' : 's'} moved:`);
+show(fresh, '+', slot, `${fresh.length} new booking${fresh.length === 1 ? '' : 's'}:`);
+show(dropped2, '-', slot,
+     `${dropped2.length} booking${dropped2.length === 1 ? '' : 's'} no longer in the term:`);
+if (!moved.length && !fresh.length && !dropped2.length) {
+  console.log('\nNothing has changed.');
 }
-if (added.length > 10) console.log(`   … and ${added.length - 10} more`);
 
 // A snapshot that lost most of the term is a failed fetch, not a quiet week.
 // Refusing is the only safe default: the file it would overwrite is the only
