@@ -183,11 +183,49 @@ const run = (args, what) => {
 const TERM = snap.term === 'spring' || snap.term === 'springCurrent' ? 'spring' : snap.term;
 const SOL = path.join(__dirname, '..', 'docs', 'data',
                       TERM === 'spring' ? 'solution.json' : `solution-${TERM}.json`);
-const changed = d.moved.length || d.fresh.length || d.gone.length;
+
+// Whether to repair is a question about the SOLUTION, not about the snapshot.
+//
+// It used to ask "did this snapshot change anything", which is a different
+// question and gets the recovery case backwards: if a previous run wrote
+// terms.json and then died before repairing, terms.json already holds the
+// snapshot, so running the refresh again finds nothing changed, skips the
+// repair, and re-publishes the same broken rebuild. That is precisely the
+// state a person re-runs it to get out of.
+//
+// So ask the solution instead: does every class in terms.json still have a
+// placement, and does every placement still have a class? join() answers that
+// — it is what export.js reports as "N classes with no placement" — and the
+// answer does not depend on how the term came to be that way. A run after a
+// crash repairs; a run that genuinely changed nothing does not.
+function needsRepair() {
+  if (!fs.existsSync(SOL)) return false;
+  try {
+    const sol = JSON.parse(fs.readFileSync(SOL, 'utf8'));
+    const { load } = require('./lib/model');
+    const { join } = require('./lib/join');
+    const model = load(null, {
+      clashes: (sol.meta && sol.meta.clashMode) || 'all',
+      term: TERM === 'spring' ? undefined : TERM,
+    });
+    const { missing, orphans } = join(model, sol.rows);
+    if (!missing.length && !orphans.length) return false;
+    console.log(`\nthe rebuilt ${TERM}: ${missing.length} class` +
+                `${missing.length === 1 ? '' : 'es'} with no placement, ` +
+                `${orphans.length} placement${orphans.length === 1 ? '' : 's'} with no class`);
+    return true;
+  } catch (e) {
+    // Never let this check be the thing that stops a refresh: if it cannot
+    // read the solution, repairing is still the safer guess than exporting a
+    // rebuild that may not match.
+    console.log(`\ncould not check the rebuilt ${TERM} against the refresh (${e.message})`);
+    return true;
+  }
+}
 
 if (process.argv.includes('--no-export')) {
   console.log('\nnext: node timetable/export.js');
-} else if (changed && !process.argv.includes('--no-repair') && fs.existsSync(SOL)) {
+} else if (!process.argv.includes('--no-repair') && needsRepair()) {
   // Repair, not re-solve: the rebuilt term is still a valid arrangement of
   // everything that did not move, so the solver only has to place what did.
   // Seconds rather than an hour, and it keeps the timetable people may

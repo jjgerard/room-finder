@@ -1294,6 +1294,22 @@ test('refresh: a codeless inventory room is still treated as a real gap', () => 
   assert.strictEqual(d.dropped, 1);
 });
 
+test('refresh: repairs on the solution, not on whether the snapshot changed', () => {
+  // The recovery case, which the snapshot test got backwards. If a run writes
+  // terms.json and then dies before repairing, terms.json already holds the
+  // snapshot — so re-running it finds nothing changed. Keyed on that, it would
+  // skip the repair and re-publish the same broken rebuild, which is the exact
+  // state somebody re-runs it to escape.
+  const src = require('fs').readFileSync(
+    require('path').join(__dirname, 'refresh.js'), 'utf8');
+  const branch = (src.match(/^\s*\} else if \(.*needsRepair\(\).*$/m) || [])[0];
+  assert.ok(branch, 'the repair branch no longer asks needsRepair()');
+  assert.ok(!/\bchanged\b/.test(branch),
+    'the repair branch is keyed on the snapshot again: ' + branch);
+  assert.ok(/join\(model, sol\.rows\)/.test(src),
+    'needsRepair no longer joins the solution to the model');
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)
