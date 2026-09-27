@@ -626,7 +626,7 @@
    * section — the measurement is still a true measurement, it is just no
    * longer a description of the file you are reading.
    */
-  function sweepDrift() {
+  function sweepDrift(H) {
     var TAB = { spring: 'springNew', autumn: 'autumnNew' };
     var out = [];
     ['spring', 'autumn'].forEach(function (key) {
@@ -648,7 +648,7 @@
     return out.join('');
   }
 
-  function sweepSection() {
+  function sweepSection(H) {
     // Every clean one is shipped, so each seed is a link to the timetable
     // itself rather than a number to take on trust.
     var TAB = { spring: 'springNew', autumn: 'autumnNew' };
@@ -693,7 +693,7 @@
       'left — so splitting never bought a clean term.</li>',
       '</ul>',
       sweepChart(),
-      sweepDrift(),
+      sweepDrift(H),
       '<p class="small muted">All ' + (SWEEP.spring.zero + SWEEP.autumn.zero) + ' of them are ',
       'published, not just the two the rest of the site is built from. The picker at the top of ',
       'either rebuilt timetable switches between them, and the Rooms calendar takes the same ',
@@ -967,7 +967,7 @@
       'a time. It recurs every year because the method produces it, not the term.</li>',
       '</ul>',
 
-      sweepSection(),
+      sweepSection(H),
 
       stripeGraphic(),
 

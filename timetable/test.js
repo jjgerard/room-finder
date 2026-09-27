@@ -1328,6 +1328,33 @@ test('export: says when the seed sweep no longer describes what ships', () => {
   }
 });
 
+test('about: the page renders against the data it ships with', () => {
+  // A scope slip shipped a page reading only "H is not defined". Nothing
+  // caught it: the file parsed, the export ran, the tests passed, and the
+  // About page was blank in the browser. Parsing is not running, so this runs
+  // it — the whole builder, against the packed data, the way the page does.
+  const fs = require('fs');
+  const path = require('path');
+  const docs = path.join(__dirname, '..', 'docs');
+  const packedFile = path.join(docs, 'data', 'timetable.json');
+  if (!fs.existsSync(packedFile)) return;          // not exported yet
+
+  const sandbox = { window: {} };
+  for (const f of ['model.js', 'constraints.js', 'method.js']) {
+    new Function('window', fs.readFileSync(path.join(docs, 'assets', f), 'utf8'))
+      .call(sandbox, sandbox.window);
+  }
+  const M = sandbox.window.TTModel;
+  const H = M.hydrate(JSON.parse(fs.readFileSync(packedFile, 'utf8')));
+  H.assign = M.assignments(H.model);
+
+  const html = sandbox.window.TTMethod.html(H);
+  assert.ok(html && html.length > 5000,
+    'the About page rendered ' + (html ? html.length : 0) + ' characters');
+  assert.ok(!/undefined|\[object Object\]|NaN/.test(html.replace(/<[^>]+>/g, '')),
+    'the About page renders a placeholder where a number should be');
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)
