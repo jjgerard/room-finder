@@ -1355,6 +1355,30 @@ test('about: the page renders against the data it ships with', () => {
     'the About page renders a placeholder where a number should be');
 });
 
+test('pages: every element id the scripts reach for exists in the markup', () => {
+  // The About page shipped blank on a scope slip nothing caught. This is the
+  // neighbouring failure and just as quiet: $('f-weeks') against markup that
+  // calls it something else throws on load, and the page is an error box. A
+  // renamed id is the easiest way to cause it and the hardest to notice.
+  const fs = require('fs');
+  const path = require('path');
+  const docs = path.join(__dirname, '..', 'docs');
+  for (const page of ['explore.html', 'admin.html']) {
+    const html = fs.readFileSync(path.join(docs, page), 'utf8');
+    const ids = new Set();
+    for (const m of html.matchAll(/\sid="([^"]+)"/g)) ids.add(m[1]);
+    const wanted = new Set();
+    for (const block of html.matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g)) {
+      for (const m of block[1].matchAll(/\$\('([^']+)'\)/g)) wanted.add(m[1]);
+      for (const m of block[1].matchAll(/getElementById\('([^']+)'\)/g)) wanted.add(m[1]);
+    }
+    const missing = [...wanted].filter(id => !ids.has(id));
+    assert.deepStrictEqual(missing, [],
+      page + ' reaches for ids that are not in its markup: ' + missing.join(', '));
+    assert.ok(wanted.size > 3, page + ' — the id scan found almost nothing, so it proves nothing');
+  }
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)

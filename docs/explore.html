@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Explore moves · Belfast Spring</title>
-<meta name="description" content="Pick a class and see where else it could go, and exactly what is blocking every slot that it cannot.">
+<title>Find a free room · Belfast Timetable</title>
+<meta name="description" content="Search the timetable for rooms free in a slot: pick the days, the time, the weeks and the seats you need.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -32,421 +32,337 @@
 
 <main class="wrap">
 
-  <h2 style="margin-bottom:6px">Where else could this class go?</h2>
+  <h2 style="margin-bottom:6px">Find a free room</h2>
   <p class="lead">
-    Pick a class and this works out every slot it could legally move to — and for the
-    slots it can't, names exactly what is in the way. Nothing is saved; it is a
-    what-if against the timetable you choose below.
+    Give the slot you need and this searches the timetable for rooms that are free in it.
+    It answers the question the Resource Booker cannot: not "is this one room free", but
+    "which rooms are free, in every week I need, big enough for my class".
   </p>
 
   <div class="card pad" style="margin-bottom:18px">
     <div class="grid2">
       <div>
-        <label class="fld" for="q">Find a class</label>
-        <input type="search" id="q" placeholder="Module code, title, or room — e.g. CMM111" autocomplete="off">
-      </div>
-      <div>
-        <label class="fld" for="which">Starting from</label>
-        <select id="which">
+        <label class="fld" for="f-term">Search which timetable</label>
+        <div class="box"><select id="f-term">
           <option value="autumn" selected>Autumn 2026, as it stands</option>
           <option value="springNow">Spring 2026, as it stands</option>
           <option value="autumnNew">Autumn 2026, rebuilt</option>
           <option value="springNew">Spring 2026, rebuilt</option>
-        </select>
-      </div>
-    </div>
-    <div id="results" class="chips" style="margin-top:14px"></div>
-  </div>
-
-  <div id="modpanel" hidden></div>
-
-  <div id="panel" hidden>
-    <div class="card pad" style="margin-bottom:18px">
-      <h3 style="margin-top:0" id="ptitle"></h3>
-      <p class="small muted" id="pmeta"></p>
-      <div id="pstatus"></div>
-      <div id="pcomp"></div>
-    </div>
-
-    <div class="grid2">
-      <div>
-        <h3>Proposed fixes</h3>
-        <p class="small muted">Least disruptive first: keeping the hour beats moving it, which
-        beats moving the day. Where nothing single is free, a fix may put a class in two rooms
-        and says so.</p>
-        <div id="roomonly"></div>
-        <div id="clear"></div>
+        </select></div>
       </div>
       <div>
-        <h3>Slots that are blocked, and why</h3>
-        <p class="small muted">The nearest misses, with the first thing standing in the way of each.</p>
-        <div id="near"></div>
+        <label class="fld" for="f-seats">Class size <span class="muted">seats needed</span></label>
+        <input type="number" id="f-seats" min="0" step="1" placeholder="e.g. 45">
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:14px">
+      <div>
+        <label class="fld">Day</label>
+        <div class="chips" id="f-days" role="group" aria-label="Weekday"></div>
+      </div>
+      <div>
+        <label class="fld" for="f-start">Time</label>
+        <div class="row">
+          <input type="time" id="f-start" value="12:15" step="300" style="width:auto">
+          <span class="small muted">to</span>
+          <input type="time" id="f-end" value="13:15" step="300" style="width:auto">
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px">
+      <label class="fld">Weeks <span class="muted">the room has to be free in every one you tick</span></label>
+      <div class="chips" id="f-weeks" role="group" aria-label="Week"></div>
+      <div class="row" style="margin-top:6px">
+        <button class="chip" type="button" id="wk-all">All</button>
+        <button class="chip" type="button" id="wk-none">None</button>
+        <span class="small muted" id="wk-note"></span>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:14px">
+      <div>
+        <label class="fld" for="f-bldg">Buildings <span class="muted">blank for all</span></label>
+        <input type="text" id="f-bldg" placeholder="e.g. BC, BD" autocomplete="off">
+      </div>
+      <div>
+        <label class="fld" for="f-type">Room type</label>
+        <div class="box"><select id="f-type">
+          <option value="">Any room</option>
+          <option value="general">Ordinary teaching rooms only</option>
+          <option value="computer">Computer labs</option>
+          <option value="theatre">Lecture theatres</option>
+          <option value="specialist">Specialist rooms and studios</option>
+        </select></div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:14px">
+      <div>
+        <label class="fld" for="f-miss">Weeks it may be busy <span class="muted">0 for a clean slot</span></label>
+        <input type="number" id="f-miss" min="0" step="1" value="0">
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <button class="primary" type="button" id="go" style="width:100%">Search</button>
       </div>
     </div>
   </div>
 
-  <div id="hint" class="note">
-    <p style="margin:0">Type a module code above to begin — try <strong>CMM111</strong>,
-    <strong>CMM350</strong>, or a room like <strong>BC-03-123</strong>.</p>
-  </div>
+  <div id="report"></div>
 
-</main>
-
-<footer>
-  <div class="wrap">
-    Suggestions are computed in your browser with the same constraint code that built the
-    timetable. Moving a class moves everything locked to it — a seminar that must follow
-    its lecture, or an exam pinned to its module's slot.
-  </div>
-</footer>
-
-<script>
-// The timetable picker, same behaviour as on the timetable page: hover opens
-// it where there is a pointer, click everywhere, Escape closes. Its items are
-// ordinary links, so this page needs none of the term machinery.
-(function () {
-  var wrap = document.getElementById('nav-terms');
-  var trigger = document.getElementById('nav-terms-btn');
-  if (!wrap || !trigger) return;
-  function open() { wrap.classList.add('open'); trigger.setAttribute('aria-expanded', 'true'); }
-  function close() { wrap.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); }
-  var hoverable = function () { return matchMedia('(hover: hover)').matches; };
-  wrap.onmouseenter = function () { if (hoverable()) open(); };
-  wrap.onmouseleave = function () { if (hoverable()) close(); };
-  trigger.onclick = function (e) {
-    e.stopPropagation();
-    if (!wrap.classList.contains('open')) open();
-    else if (!hoverable()) close();
-  };
-  document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) close(); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
-})();
-</script>
 <script src="assets/model.js"></script>
-<script src="assets/constraints.js"></script>
-<script src="assets/suggest.js"></script>
 <script>
 (function () {
   'use strict';
-  var M = window.TTModel, S = window.TTSuggest, DAYS = M.DAYS, fmt = M.fmt;
-  // Which timetable the what-if runs against. Autumn's model lives in its own
-  // file and is fetched the first time it is asked for.
-  var TERMS = {
-    autumn:    { file: 'data/autumn.json', solved: false, label: 'Autumn 2026, as it stands',
-                 eg: ['CMM111', 'CMM350'] },
-    autumnNew: { file: 'data/autumn.json', solved: true,  label: 'Autumn 2026, rebuilt',
-                 eg: ['CMM111', 'CMM350'] },
-    springNow: { file: null,               solved: false, label: 'Spring 2026, as it stands',
-                 eg: ['CMM151', 'LAW140'] },
-    springNew: { file: null,               solved: true,  label: 'Spring 2026, rebuilt',
-                 eg: ['CMM151', 'LAW140'] },
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (t) {
+    return String(t).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
   };
-  var H = null, which = 'autumn', term = null, selected = null;
+  var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  var H = null, MAXWEEK = 12;
 
-  function esc(s) {
-    return String(s).replace(/[&<>"]/g, function (ch) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
-    });
+  var days = [0];            // Monday, like the extension opens
+  var weeks = {};            // week number -> ticked
+
+  function hhmm(m) {
+    return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
   }
-  /** The model, components and placement the page is working against. */
-  function MODEL() { return term ? term.model : H.model; }
-  function COMPS() { return term ? term.components : H.components; }
-  function assign() {
-    var a = term ? term.assign : H.assign;
-    return TERMS[which].solved ? a.solved : a.current;
+  function parseTime(v) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(v).trim());
+    return m ? +m[1] * 60 + +m[2] : null;
   }
-  // The module's name, not its code — "Drawing in Practice", not "AAD009".
-  function modName(code) { return (MODEL().modTitles || {})[code] || ''; }
-  function label(c) { return (c.module || c.activity) + '/' + c.activity; }
-  function roomName(r) { return MODEL().rooms[r] ? MODEL().rooms[r].name : 'room ' + r; }
-
-  function search(q) {
-    q = q.trim().toLowerCase();
-    var out = document.getElementById('results');
-    if (q.length < 2) { out.innerHTML = ''; return; }
-    var a = assign();
-    var hits = MODEL().classes.filter(function (c) {
-      if ((c.module || '').toLowerCase().indexOf(q) >= 0) return true;
-      if ((c.title || '').toLowerCase().indexOf(q) >= 0) return true;
-      if (modName(c.module).toLowerCase().indexOf(q) >= 0) return true;
-      return roomName(a.get(c.id).room).toLowerCase().indexOf(q) >= 0;
-    }).sort(function (x, y) {
-      // Monday first, then by the hour: a room's classes read as the week
-      // runs, not in whatever order the data happens to hold them.
-      var px = a.get(x.id), py = a.get(y.id);
-      return px.day - py.day || px.start - py.start ||
-             String(x.module || '').localeCompare(String(y.module || ''));
-    }).slice(0, 40);
-
-    if (!hits.length) { out.innerHTML = '<span class="small muted">No class matches that.</span>'; return; }
-    // A module first, where the query names one: a fix is often module-wide,
-    // and picking through its classes one at a time hides that.
-    var mods = [];
-    hits.forEach(function (c) {
-      if (!c.module) return;
-      if (c.module.toLowerCase().indexOf(q) < 0 && modName(c.module).toLowerCase().indexOf(q) < 0) return;
-      if (mods.indexOf(c.module) < 0) mods.push(c.module);
-    });
-    var modChips = mods.slice(0, 6).map(function (code) {
-      var n = MODEL().classes.filter(function (c) { return c.module === code; }).length;
-      var nm = modName(code);
-      return '<button class="chip mod" data-mod="' + esc(code) + '">' +
-        '<strong>' + esc(code) + '</strong>' + (nm ? ' <span class="muted">' + esc(nm) + '</span>' : '') +
-        ' · all ' + n + ' classes</button>';
-    }).join('');
-    out.innerHTML = modChips + hits.map(function (c) {
-      var p = a.get(c.id);
-      var nm = modName(c.module);
-      return '<button class="chip" data-id="' + c.id + '" title="' + esc(c.title) + '">' +
-        esc(c.module || c.activity) + (nm ? ' <span class="muted">' + esc(nm) + '</span>' : '') +
-        ' · ' + esc(c.activity) + ' · ' + DAYS[p.day] + ' ' + fmt(p.start) + '</button>';
-    }).join('');
-    out.querySelectorAll('.chip').forEach(function (b) {
-      b.onclick = b.dataset.mod
-        ? function () { selectModule(b.dataset.mod); }
-        : function () { select(Number(b.dataset.id)); };
-    });
+  // Half-open, the same rule the checker uses: a class ending at 11:15 and one
+  // starting at 11:15 are back to back, not overlapping.
+  function overlaps(aStart, aDur, bStart, bEnd) {
+    return aStart < bEnd && bStart < aStart + aDur;
+  }
+  function bits(mask) { var n = 0; while (mask) { n += mask & 1; mask >>>= 1; } return n; }
+  function weekList(mask) {
+    var out = [], run = null;
+    for (var w = 1; w <= MAXWEEK + 1; w++) {
+      var on = w <= MAXWEEK && (mask & (1 << (w - 1)));
+      if (on && run === null) run = w;
+      else if (!on && run !== null) {
+        out.push(run === w - 1 ? String(run) : run + '\u2013' + (w - 1));
+        run = null;
+      }
+    }
+    return out.join(', ');
   }
 
-  function slotLabel(day, start) { return DAYS[day] + ' ' + fmt(start); }
-
-  function renderOption(o, cls, how) {
-    var moves = o.members.map(function (m) {
-      var c = MODEL().byId.get(m.id);
-      var nm = modName(c.module);
-      // Two rooms when no single one is free at that hour — said plainly,
-      // because a cohort divided between rooms is a real cost.
-      var where = m.extra && m.extra.length
-        ? [m.room].concat(m.extra).map(roomName).map(esc).join(' <em>+</em> ') +
-          ' <span class="muted">(split, nothing single was free)</span>'
-        : esc(roomName(m.room));
-      return '<strong>' + esc(label(c)) + '</strong>' + (nm ? ' ' + esc(nm) : '') +
-             ' → ' + where;
-    }).join('<br>');
-    return '<div class="card pad" style="margin-bottom:10px">' +
-      '<div class="row" style="justify-content:space-between">' +
-        '<strong>' + slotLabel(o.day, o.start) + '</strong>' +
-        (how ? ' <span class="small muted">' + esc(how) + '</span>' : '') +
-        (cls === 'clear'
-          ? '<span class="pill ok">clear</span>'
-          : '<span class="pill no">' + o.blockers.length + ' blocker' + (o.blockers.length > 1 ? 's' : '') + '</span>') +
-      '</div>' +
-      '<div class="small muted" style="margin-top:6px">' + moves + '</div>' +
-      (cls === 'clear'
-        ? ''
-        : '<ul class="small" style="margin:8px 0 0">' +
-            o.blockers.slice(0, 3).map(function (b) { return '<li>' + esc(b.text) + '</li>'; }).join('') +
-          '</ul>') +
-      '</div>';
-  }
-
-  /**
-   * The whole module at once.
-   *
-   * A module's classes are not independent: a lecture and its seminars move
-   * as one, and where they can go is decided together. Picking them off one
-   * at a time hides which of them actually has to change, so this walks every
-   * group the module has and names the cheapest fix for each.
-   */
-  function selectModule(code) {
-    selected = null;
-    document.getElementById('hint').hidden = true;
-    document.getElementById('panel').hidden = true;
-    var wrap = document.getElementById('modpanel');
-    wrap.hidden = false;
-
-    var a = assign();
-    var mine = MODEL().classes.filter(function (c) { return c.module === code; });
-    // One entry per group that moves together, not per class.
-    var seen = {}, groups = [];
-    mine.forEach(function (c) {
-      var r = S.alternatives(MODEL(), COMPS(), a, c.id, { limit: 4 });
-      var key = r.component.ids.slice().sort().join(',');
-      if (seen[key]) return;
-      seen[key] = true;
-      groups.push(r);
+  // ---- the form ----
+  function buildChips() {
+    var d = $('f-days');
+    DAYS.forEach(function (label, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.textContent = label;
+      b.setAttribute('aria-pressed', String(days.indexOf(i) !== -1));
+      b.onclick = function () {
+        var at = days.indexOf(i);
+        if (at === -1) days.push(i); else days.splice(at, 1);
+        b.setAttribute('aria-pressed', String(at === -1));
+      };
+      d.appendChild(b);
     });
 
-    var nm = modName(code);
-    var broken = groups.filter(function (r) { return r.current.blockers.length; });
-    var out = ['<div class="card pad" style="margin-bottom:18px">',
-      '<h3 style="margin-top:0">' + esc(code) + (nm ? ' — ' + esc(nm) : '') + '</h3>',
-      '<p class="small muted">' + mine.length + ' classes in ' + groups.length + ' group' +
-      (groups.length === 1 ? '' : 's') + ' that move together. ' +
-      (broken.length
-        ? broken.length + ' of them ' + (broken.length === 1 ? 'breaks' : 'break') +
-          ' a rule where ' + (broken.length === 1 ? 'it sits' : 'they sit') + '.'
-        : 'None of them breaks a rule where it sits.') + '</p></div>'];
-
-    groups.forEach(function (r) {
-      var members = r.component.ids.map(function (i) {
-        var x = MODEL().byId.get(i), p = a.get(i);
-        return '<li><strong>' + esc(label(x)) + '</strong> ' + DAYS[p.day] + ' ' + fmt(p.start) +
-          ' · ' + esc(roomName(p.room)) + '</li>';
-      }).join('');
-      var fix = r.sameSlot
-        ? { o: r.sameSlot, why: 'Keeps the hour, changes only rooms.' }
-        : (r.clear.length ? { o: r.clear[0], why: 'The least disruptive clear slot.' } : null);
-      out.push('<div class="card pad" style="margin-bottom:14px">' +
-        '<div class="row" style="justify-content:space-between">' +
-        '<strong>' + (r.component.ids.length === 1 ? 'On its own' : 'Moves together') + '</strong>' +
-        (r.current.blockers.length
-          ? '<span class="pill no">' + r.current.blockers.length + ' broken</span>'
-          : '<span class="pill ok">holds</span>') + '</div>' +
-        '<ul class="small">' + members + '</ul>' +
-        (r.current.blockers.length
-          ? (fix
-              ? '<p class="small muted">' + fix.why + '</p>' + renderOption(fix.o, 'clear')
-              : '<p class="small muted">No clear alternative for this group \u2014 open a class ' +
-                'in it to see what is in the way.</p>')
-          : '') +
-        '</div>');
-    });
-    wrap.innerHTML = out.join('');
+    var w = $('f-weeks');
+    w.innerHTML = '';
+    for (var n = 1; n <= MAXWEEK; n++) (function (n) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.textContent = String(n);
+      b.setAttribute('aria-pressed', 'true');
+      weeks[n] = true;
+      b.onclick = function () {
+        weeks[n] = !weeks[n];
+        b.setAttribute('aria-pressed', String(weeks[n]));
+        noteWeeks();
+      };
+      w.appendChild(b);
+    })(n);
+    $('wk-all').onclick = function () { setWeeks(true); };
+    $('wk-none').onclick = function () { setWeeks(false); };
+    noteWeeks();
+  }
+  function setWeeks(on) {
+    var kids = $('f-weeks').children;
+    for (var i = 0; i < kids.length; i++) {
+      weeks[i + 1] = on;
+      kids[i].setAttribute('aria-pressed', String(on));
+    }
+    noteWeeks();
+  }
+  function noteWeeks() {
+    var n = 0;
+    for (var k in weeks) if (weeks[k]) n++;
+    $('wk-note').textContent = n === MAXWEEK ? 'every week' : n + ' of ' + MAXWEEK + ' ticked';
+  }
+  function wantedMask() {
+    var m = 0;
+    for (var k in weeks) if (weeks[k]) m |= 1 << (k - 1);
+    return m;
   }
 
-  function select(id) {
-    selected = id;
-    document.getElementById('hint').hidden = true;
-    document.getElementById('modpanel').hidden = true;
-    document.getElementById('panel').hidden = false;
+  // ---- the search ----
+  //
+  // Everything here is a question about the timetable the site already holds,
+  // so it runs in the browser against data that is already loaded. No booking
+  // is made and nothing is saved: it answers "which rooms are free", which is
+  // the question the Resource Booker cannot be asked one room at a time.
+  function search() {
+    var termKey = $('f-term').value;
+    var term = H.terms[termKey];
+    var from = parseTime($('f-start').value), to = parseTime($('f-end').value);
+    var seats = Math.max(0, +$('f-seats').value || 0);
+    var maxMiss = Math.max(0, +$('f-miss').value || 0);
+    var type = $('f-type').value;
+    var want = wantedMask();
+    var blds = $('f-bldg').value.toUpperCase().split(/[,\s]+/).filter(Boolean);
 
-    var c = MODEL().byId.get(id);
-    var a = assign();
-    var p = a.get(id);
-    var room = MODEL().rooms[p.room];
+    if (from === null || to === null || to <= from) {
+      return fail('Give a start and an end time, with the end after the start.');
+    }
+    if (!days.length) return fail('Pick at least one day.');
+    if (!want) return fail('Tick at least one week.');
 
-    var nm = modName(c.module);
-    document.getElementById('ptitle').innerHTML =
-      '<span class="mono">' + esc(c.module || c.activity) + '</span>' +
-      (nm ? ' — ' + esc(nm) : '') +
-      ' <span class="muted" style="font-weight:400">· ' + esc(c.activity) +
-      ' · ' + esc(c.title) + '</span>';
-    document.getElementById('pmeta').innerHTML =
-      DAYS[p.day] + ' ' + fmt(p.start) + '–' + fmt(p.start + c.dur) +
-      ' · ' + esc(room.name) +
-      (room.capacityKnown ? ' (' + room.capacity + ' seats)' : ' (capacity not recorded)') +
-      ' · weeks ' + esc(c.weeksText) +
-      ' · about ' + c.size + ' students' +
-      ' · ' + c.cand.length + ' rooms it could use';
+    // What each room is doing in that slot, on those days, as a week mask.
+    var busy = {};      // roomId -> mask
+    var who = {};       // roomId -> [{title, weeks}]
+    term.rows.forEach(function (r) {
+      if (days.indexOf(r.day) === -1) return;
+      if (!overlaps(r.start, r.dur, from, to)) return;
+      var hit = r.weeks & want;
+      if (!hit) return;
+      busy[r.room] = (busy[r.room] || 0) | hit;
+      (who[r.room] = who[r.room] || []).push({ title: r.title, weeks: hit });
+    });
 
-    var t0 = performance.now();
-    var r = S.alternatives(MODEL(), COMPS(), a, id, { limit: 8 });
-    var ms = Math.round(performance.now() - t0);
+    var free = [], near = [], tooSmall = 0, wrongType = 0;
+    H.rooms.forEach(function (room) {
+      if (type && room.type !== type) { wrongType++; return; }
+      if (blds.length) {
+        var b = (room.name.match(/^([A-Z]{2})/) || [])[1];
+        if (!b || blds.indexOf(b) === -1) return;
+      }
+      // Capacity 0 means "not recorded", not "no seats" — 138 of 228 rooms.
+      // Excluding those on a seats filter would hide most of the campus, so
+      // they are kept and flagged instead.
+      if (seats && room.capacityKnown && room.capacity < seats) { tooSmall++; return; }
+      var clash = busy[room.id] || 0;
+      var n = bits(clash);
+      var entry = { room: room, clash: clash, n: n, who: who[room.id] || [] };
+      if (n === 0) free.push(entry);
+      else if (n <= maxMiss) near.push(entry);
+    });
 
-    var st = document.getElementById('pstatus');
-    if (!r.current.blockers.length) {
-      st.innerHTML = '<div class="note good"><p style="margin:0"><strong>Where it sits now is legal.</strong> ' +
-        'Nothing below needs doing — the alternatives are just what else would work.</p></div>';
-    } else {
-      st.innerHTML = '<div class="note warn"><p style="margin:0 0 6px"><strong>Where it sits now breaks ' +
-        r.current.blockers.length + ' rule' + (r.current.blockers.length > 1 ? 's' : '') + ':</strong></p>' +
-        '<ul class="small" style="margin:0">' +
-        r.current.blockers.slice(0, 4).map(function (b) { return '<li>' + esc(b.text) + '</li>'; }).join('') +
-        '</ul></div>';
+    var byName = function (a, b) { return a.room.name.localeCompare(b.room.name); };
+    var bySize = function (a, b) {
+      if (!a.room.capacityKnown && b.room.capacityKnown) return 1;
+      if (a.room.capacityKnown && !b.room.capacityKnown) return -1;
+      return a.room.capacity - b.room.capacity || byName(a, b);
+    };
+    // Smallest first among the ones that fit: a 215-seat theatre for a class of
+    // 20 is a free room and a bad answer.
+    free.sort(bySize);
+    near.sort(function (a, b) { return a.n - b.n || bySize(a, b); });
+
+    show({
+      free: free, near: near, want: want, from: from, to: to,
+      seats: seats, tooSmall: tooSmall, maxMiss: maxMiss,
+      label: $('f-term').selectedOptions[0].textContent,
+    });
+  }
+
+  function fail(msg) {
+    $('report').innerHTML = '<div class="note warn"><p style="margin:0">' + esc(msg) + '</p></div>';
+  }
+
+  function roomLine(e, showClash) {
+    var r = e.room;
+    var size = r.capacityKnown ? r.capacity + ' seats' : 'size not recorded';
+    var s = '<strong>' + esc(r.name) + '</strong> <span class="muted">' + size +
+            ' \u00b7 ' + esc(r.type) + '</span>';
+    if (showClash) {
+      var what = e.who.map(function (w) {
+        return esc(w.title) + ' <span class="muted">(week' + (bits(w.weeks) === 1 ? '' : 's') +
+               ' ' + weekList(w.weeks) + ')</span>';
+      }).join(', ');
+      s += '<br><span class="small muted">busy in week' + (e.n === 1 ? '' : 's') + ' ' +
+           weekList(e.clash) + ' \u2014 ' + what + '</span>';
+    }
+    return s;
+  }
+
+  function show(res) {
+    var out = [];
+    var slot = DAYS.filter(function (_, i) { return days.indexOf(i) !== -1; }).join(', ') +
+               ' ' + hhmm(res.from) + '\u2013' + hhmm(res.to);
+    var nWeeks = bits(res.want);
+
+    out.push('<div class="note ' + (res.free.length ? 'good' : 'warn') + '">' +
+      '<p style="margin:0"><strong>' + (res.free.length
+        ? res.free.length + ' room' + (res.free.length === 1 ? ' is' : 's are') + ' free'
+        : 'Nothing is free') + '</strong> on ' + esc(slot) + ', in ' +
+      (nWeeks === 1 ? 'week ' + weekList(res.want) : 'all ' + nWeeks + ' ticked weeks') +
+      (res.seats ? ', seating ' + res.seats + ' or more' : '') +
+      '. <span class="muted">Searched ' + esc(res.label) + '.</span></p></div>');
+
+    if (res.free.length) {
+      out.push('<details class="stat-list" open><summary>Free every week (' +
+        res.free.length + ')</summary><ul' +
+        (res.free.length > 25 ? ' style="max-height:24em;overflow:auto"' : '') + '>' +
+        res.free.map(function (e) { return '<li>' + roomLine(e, false) + '</li>'; }).join('') +
+        '</ul><p class="small muted">Smallest first \u2014 a 215-seat theatre is a free room ' +
+        'and usually the wrong answer.</p></details>');
     }
 
-    var comp = document.getElementById('pcomp');
-    if (r.component.size > 1) {
-      // The others, not this one: the list read as one longer than the count.
-      var names = r.component.ids.filter(function (i) { return i !== selected; })
-        .map(function (i) {
-          var x = MODEL().byId.get(i);
-          var xn = modName(x.module);
-          return esc(label(x)) + (xn ? ' (' + esc(xn) + ')' : '');
-        }).join(', ');
-      comp.innerHTML = '<div class="note"><p style="margin:0"><strong>This class cannot move on its own.</strong> ' +
-        'It is locked to ' + (r.component.size - 1) + ' other' + (r.component.size > 2 ? 's' : '') +
-        ' (' + names + ') which must stay back-to-back with it, so every option below moves all of them together.</p></div>';
-    } else {
-      comp.innerHTML = '';
+    if (res.near.length) {
+      out.push('<details class="stat-list" open><summary>Free in all but a few weeks (' +
+        res.near.length + ')</summary><ul' +
+        (res.near.length > 25 ? ' style="max-height:24em;overflow:auto"' : '') + '>' +
+        res.near.map(function (e) { return '<li>' + roomLine(e, true) + '</li>'; }).join('') +
+        '</ul><p class="small muted">Often more use than a clean but unsuitable room: ' +
+        '"free ten weeks of twelve, taken in 3 and 9" is a conversation, not a dead end.' +
+        '</p></details>');
+    } else if (!res.free.length && !res.maxMiss) {
+      out.push('<p class="small muted">Nothing came back at all. Raise <em>weeks it may be ' +
+        'busy</em> above 0 to see the near misses, or untick the weeks you could move.</p>');
     }
 
-    var ro = document.getElementById('roomonly');
-    // A group is not fixed one class at a time: if the whole component can
-    // keep this hour by changing rooms, that is the cheapest fix there is and
-    // it goes first.
-    var groupFix = r.sameSlot ? renderOption(r.sameSlot, 'clear', 'Keeps the hour') : '';
-    ro.innerHTML = groupFix + (!groupFix && r.roomOnly.length
-      ? r.roomOnly.map(function (o) {
-          var oc = MODEL().byId.get(o.classId);
-          return '<div class="card pad" style="margin-bottom:8px">' +
-            '<div class="row" style="justify-content:space-between">' +
-            '<span><strong>' + esc(oc.module || oc.activity) + '/' + esc(oc.activity) + '</strong> ' +
-            'stays at ' + slotLabel(o.day, o.start) + ', moves to <strong>' +
-            esc(o.roomName) + '</strong></span><span class="pill ok">clear</span></div></div>';
-        }).join('')
-      : (groupFix ? '' :
-         '<p class="small muted">No other room is free in this slot. Any fix means moving ' +
-         'the time or day.</p>'));
-
-    // Several to choose from, each labelled by what it costs, and marked when
-    // it splits a class across rooms — the option of last resort, but a real
-    // one when the hour cannot move.
-    document.getElementById('clear').innerHTML = r.clear.length
-      ? r.clear.slice(0, 6).map(function (o) {
-          var split = o.members.some(function (m) { return m.extra && m.extra.length; });
-          var how = o.day === r.current.day
-            ? 'Same day, ' + (o.start > r.current.start ? 'later' : 'earlier')
-            : 'Moves to ' + DAYS[o.day];
-          return renderOption(o, 'clear', how + (split ? ' · two rooms' : ''));
-        }).join('')
-      : (groupFix ? '' : '<p class="small muted">No completely clear alternative slot exists.</p>');
-
-    document.getElementById('near').innerHTML = r.near.length
-      ? r.near.map(function (o) { return renderOption(o, 'near'); }).join('')
-      : '<p class="small muted">Nothing to report.</p>';
-
-    document.getElementById('pmeta').innerHTML +=
-      ' · <span class="muted">' + r.counts.clear + ' clear slots, ' +
-      r.counts.blocked + ' blocked, computed in ' + ms + ' ms</span>';
-  }
-
-  /** Move to another timetable, fetching its model if it is not the spring one. */
-  function switchTerm(key) {
-    var hint = document.getElementById('hint');
-    which = key;
-    selected = null;
-    document.getElementById('panel').hidden = true;
-    var q = document.getElementById('q');
-    var spec = TERMS[key];
-    // The examples have to exist in the timetable being explored, or the
-    // first thing the page suggests returns nothing.
-    var examples = '<p style="margin:0">Type a module code above to begin \u2014 try <strong>' +
-      spec.eg[0] + '</strong>, <strong>' + spec.eg[1] +
-      '</strong>, or a room like <strong>BC-03-123</strong>.</p>';
-    if (!spec.file) {
-      term = null;
-      hint.className = 'note';
-      hint.innerHTML = examples;
-      search(q.value);
-      return;
+    if (res.tooSmall) {
+      out.push('<p class="small muted">' + res.tooSmall + ' room' +
+        (res.tooSmall === 1 ? ' was' : 's were') + ' left out as too small. Rooms whose size ' +
+        'is not recorded are kept and marked, because a blank is not a zero.</p>');
     }
-    hint.textContent = 'Loading ' + spec.label + '\u2026';
-    M.loadModel(spec.file, H).then(function (built) {
-      if (which !== key) return;        // the reader moved on while it loaded
-      term = built;
-      hint.className = 'note';
-      hint.innerHTML = examples;
-      search(q.value);
-    }).catch(function (e) {
-      hint.className = 'note warn';
-      hint.textContent = e.message;
-    });
+
+    out.push('<div class="note" style="margin-top:14px"><p style="margin:0"><strong>This is ' +
+      'the timetable, not the booking system.</strong> It knows what this site holds, which is ' +
+      'teaching as at the last refresh \u2014 not one-off bookings, room closures, or anything ' +
+      'booked since. Check a shortlist in Resource Booker before promising it to anyone.' +
+      '</p></div>');
+
+    $('report').innerHTML = out.join('');
   }
 
-  M.loadTimetable().then(function (h) {
+  window.TTModel.loadTimetable().then(function (h) {
     H = h;
-    var q = document.getElementById('q');
-    q.oninput = function () { search(q.value); };
-    var sel = document.getElementById('which');
-    sel.onchange = function () { switchTerm(sel.value); };
-    switchTerm(sel.value);
+    var max = 0;
+    Object.keys(H.terms).forEach(function (k) {
+      H.terms[k].rows.forEach(function (r) {
+        for (var w = 16; w >= max; w--) if (r.weeks & (1 << (w - 1))) { max = Math.max(max, w); break; }
+      });
+    });
+    MAXWEEK = max || 12;
+    buildChips();
+    $('go').onclick = search;
+    $('report').innerHTML = '<p class="small muted">Set the slot you need and press Search.</p>';
   }).catch(function (e) {
-    document.getElementById('hint').className = 'note warn';
-    document.getElementById('hint').textContent = e.message;
+    fail('Could not load the timetable: ' + e.message);
   });
 })();
 </script>
+
 </body>
 </html>
