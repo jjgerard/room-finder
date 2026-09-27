@@ -204,7 +204,7 @@ goes wrong quietly.
 A second, self-contained piece of work in this repository: a solver that rebuilds
 Ulster Belfast's **Autumn 2026 and Spring 2026** timetables so that every class has one
 room and no hard rule is broken, plus a companion site that shows the result and lets
-you try moves of your own.
+you search it for a free room.
 
 The extension answers *"is this room free?"* against live booking data. This answers
 *"could the whole term be arranged better?"* against a snapshot — which
@@ -218,21 +218,22 @@ enforced them — spring re-checked in your browser every time the page loads.
 
 | | Autumn, today | Autumn, rebuilt | Spring, today | Spring, rebuilt |
 |---|---|---|---|---|
-| Lecture+seminar pulled apart | 0 of 224 | **0** | 75 of 146 | **0** |
-| A session outside 09:15–17:15 | 40 | **0**\* | 48 | **0**\* |
-| A class moving between rooms mid-term | 13 | **0** | 35 | **0** |
+| Lecture+seminar pulled apart | 0 of 218 | **0** | 75 of 146 | **0** |
+| A session outside 09:15–17:15 | 41 | **0**\* | 48 | **0**\* |
+| A class moving between rooms mid-term | 15 | **0** | 35 | **0** |
 | Two classes in one room at once | 0 | **0** | 0 | **0** |
 | A cohort or lecturer in two places | 0 | **0** | 0 | **0** |
-| Classes in the 9–10 or 4–5 edge slots | 794 | **507** | 668 | **394** |
-| Cohort gap-days | 436 | **319** | 399 | **307** |
-| Classes left exactly where they are | — | 656 of 2,261 | — | 587 of 1,870 |
+| Classes in the 9–10 or 4–5 edge slots | 801 | **476** | 668 | **394** |
+| Cohort gap-days | 425 | **311** | 399 | **307** |
+| Classes left exactly where they are | — | 649 of 2,294 | — | 587 of 1,870 |
 
-\* Eighteen sessions still finish after 17:15 — eleven in spring and seven in autumn.
+\* Nineteen sessions still finish after 17:15 — eleven in spring and eight in autumn.
 Seventeen of them belong to a chain of classes longer than a teaching day, which cannot
-fit inside one whatever else moves. The eighteenth is autumn's COM772 lecture, chained
-back-to-back in front of a session starting at 18:15 that the model pins because evening
-teaching stays where it is. The rule excuses both cases from the *end* of the day and
-neither from its start; the site names them rather than pretending they are inside it.
+fit inside one whatever else moves. The other two are autumn classes chained
+back-to-back in front of a session starting after 17:15 that the model pins, because
+evening teaching stays where it is. The rule excuses both cases from the *end* of the
+day and neither from its start; the site names them rather than pretending they are
+inside it.
 
 **Neither result is one lucky shuffle.** The search starts from a random arrangement, so
 both terms were run from 30 different starting points against the same rules:
@@ -240,18 +241,35 @@ both terms were run from 30 different starting points against the same rules:
 | | Reached zero | Ended on 1 | on 2 | on 3+ |
 |---|---|---|---|---|
 | Spring 2026 | **6 of 30** | 9 | 6 | 9 |
-| Autumn 2026 | **10 of 30** | 16 | 4 | 0 |
+| Autumn 2026 | **9 of 30** | 10 | 8 | 3 |
 
-Every one of those 16 clean timetables is published, not just the two the site is built
+Every one of those 15 clean timetables is published, not just the two the site is built
 from — the picker at the top of either rebuilt term switches between them. No clean run
 had to split a class across two rooms.
+
+A seed names a search, not a timetable, and only for one version of the rules **and one
+version of the data**. Autumn's row was re-measured on 27 September, after a refresh took
+it from 2,261 classes to 2,294 and after the one-room rule below. Two things moved at
+once, so 9 against the previous 10 says nothing about the cost of either. `export.js`
+compares the published sweep against the file actually shipped and the site says so
+itself when they part company, rather than leaving a stale claim that reads as
+reproducible.
 
 **Two rooms at once is not the fault being fixed.** A booking holding several rooms in
 the same hour is parallel teaching, and the rebuild books every one of them: MEC114's
 tutorial teaches 350 students in seven rooms, the fine art studios keep fourteen. What
 is wrong is a class meeting in one room for six weeks and another for the rest, because
-nobody could hold one room for the term — 35 classes in spring, 13 in autumn, none in
+nobody could hold one room for the term — 35 classes in spring, 15 in autumn, none in
 either rebuild.
+
+That fault has a second form the obvious fix cannot see. Four autumn slots are booked at
+two different **durations** in different weeks — MKT703's lecture runs two hours in weeks
+5 and 7 and three hours in the other ten — so the model holds them as two classes, each
+correctly given one room, and nothing said the pair had to agree. The rule that they must
+is deliberately narrow: 130 autumn slots also share a title, a day and a start, and every
+one of those is genuine parallel teaching whose weeks overlap. What marks the four out is
+that their weeks never overlap, so they are never taught at once and a student sees one
+slot. Spring has none.
 
 **Getting autumn there took corrections, not a better search.** Under the sizes first
 read off the booking data it could not get close. What changed was the data: 62
@@ -284,12 +302,24 @@ node timetable/solve.js --term spring --seeds 30 --clashes evidenced --out docs/
 node timetable/solve.js --term autumn --seeds 30 --clashes evidenced --out docs/data
 ```
 
-109 checks. They cover the rules themselves, the solver never making a timetable worse,
+115 checks. They cover the rules themselves, the solver never making a timetable worse,
 the model's own cost agreeing with the independent checker, and the things that went
-wrong once and would go wrong quietly again: that the teaching day the solver grades
-itself against is the one the site enforces, that a class dragged past 17:15 by a pinned
-chain is exempt from the end of the day but never from its start, and that neither
-rebuilt term contains a class moving between rooms mid-term.
+wrong once and would go wrong quietly again:
+
+- the teaching day the solver grades itself against is the one the site enforces;
+- a class dragged past 17:15 by a pinned chain is exempt from the end of the day but
+  never from its start;
+- neither rebuilt term contains a class moving between rooms mid-term;
+- a refresh that leaves a room unmatched says which kind it is, because a reception area
+  the inventory has never carried and a teaching room whose name is spelled differently
+  need opposite responses;
+- the repair after a refresh is decided on whether the solution still fits the term, not
+  on whether the snapshot changed anything — keyed on the snapshot, re-running after a
+  crash skips the repair and republishes the broken rebuild;
+- the About page is **rendered**, not just parsed. A scope slip once shipped a page
+  reading only `H is not defined`: the file parsed, the export ran, and every test
+  passed. So the suite now builds the page the way the browser does, and checks that
+  every element id a page's script reaches for exists in its markup.
 
 Solving into `docs/data` runs the export for you, since `solution.json` and
 `docs/data/timetable.json` are a pair and a stale second one publishes a timetable
@@ -307,11 +337,13 @@ seconds — restarts buy far more than a longer single run. It prints every seed
 same command answers both "what is the best arrangement" and "how many starting points
 reach zero at all".
 
-A seed names a *search*, not a timetable, and only under one version of the rules: the
-solver's own cost reads the teaching-day exemptions, so changing those moves every seed
-onto a different path. `timetable/seeds.js` packs the clean ones for the site, and
-re-checks each against a freshly loaded model before it does — a seed is published as
-clean because it checks clean now, not because a log said so when it ran.
+A seed names a *search*, not a timetable, and only under one version of the rules and
+one version of the data: the solver's own cost reads the teaching-day exemptions, so
+changing those moves every seed onto a different path, and a refresh that adds classes
+makes every recorded seed a solution to a term that no longer exists.
+`timetable/seeds.js` packs the clean ones for the site, and re-checks each against a
+freshly loaded model before it does — a seed is published as clean because it checks
+clean now, not because a log said so when it ran.
 
 ```
 node timetable/seeds.js --term autumn --out docs/data --in /tmp/s1 /tmp/s5 …
@@ -352,18 +384,47 @@ about 550 rooms, four at a time, two or three minutes — and writes
 The signed-in profile is kept in `.auth/`, which is gitignored because it holds a live
 Microsoft session. After the first run `--headless` works and it needs no attention.
 
-To write it in — one command, which packs the site data itself:
+To write it in — **pull first**, then one command:
 
 ```
+git pull
 node timetable/refresh.js timetable/data/snapshot-autumn.json
+git add -A ; git commit -m "Refresh autumn" ; git push
 ```
 
-Type it as far as the space and drag the file onto the terminal window if you would
-rather not type a path. `--dry-run` shows what would change and writes nothing.
+The pull belongs before the refresh and not after: both write into `docs/`, so a pull
+attempted afterwards is refused for the files the refresh has just changed.
+
+Type the middle line as far as the space and drag the file onto the terminal window if
+you would rather not type a path. `--dry-run` shows what would change and writes
+nothing.
+
+That one command does all of it: compares, writes `terms.json`, writes the complete
+list of changes to `<snapshot>-changes.txt` beside the snapshot, **repairs** the rebuilt
+term for whatever moved, and packs the site data. The repair comes before the export,
+which is not an implementation detail — the other order publishes a rebuild full of
+violations and relies on a second command to clear them, and the first time that was
+tried the second command never ran.
+
+Whether to repair is a question about the *solution*, not about the snapshot: it joins
+the published solution to the refreshed term and repairs when any class has no placement
+or any placement has no class. Asking "did this snapshot change anything" instead gets
+the recovery case backwards, because a run that writes `terms.json` and then dies leaves
+the snapshot already written — so re-running finds nothing changed and republishes the
+broken rebuild.
+
+A repair keeps every class that did not move and re-places only the ones that did: a
+second or so, against an hour for a full solve. It is right for ordinary drift, and it
+is only ever as good as the arrangement it starts from, so a term re-published wholesale
+still wants a proper 30-seed solve.
 
 `refresh.js` refuses a snapshot that has lost more than a fifth of the term, because
 that is a fetch that died rather than a quiet week, and the file it would overwrite is
-the only record of the timetable the site was built from.
+the only record of the timetable the site was built from. Rooms it cannot match are
+reported in two lines, not one: a room in a building the site models is a real gap and
+loses teaching bookings every refresh, while a room in no modelled building — `JSV
+Reception Beacon`, say — is space the inventory has never carried and should not, since
+that file is the list of rooms the solver may place a class into.
 
 | Option | |
 |---|---|
@@ -380,9 +441,12 @@ stays as it is. The rebuilt terms are solutions to the old timetable too: if muc
 moved, re-solve them rather than leaving them claiming to repair something that has
 changed.
 
-`docs/admin.html` does the same thing with buttons, including the change report, for
-when a terminal is not to hand. `tools/term-snapshot.js` is the same reader as a
-console paste, for when node is not.
+`docs/admin.html` does the same thing with buttons, including the change report — which
+lists **every** change rather than the first few, since this is the only chance to read
+them before anything is written. It runs `lib/diff.js`, the same comparison `refresh.js`
+uses, because the page and the script were once separate copies and drifted: the page
+went on reporting 377 changes after the script had been fixed to report 197.
+`tools/term-snapshot.js` is the same reader as a console paste, for when node is not.
 
 ## Layout
 
@@ -394,12 +458,14 @@ console paste, for when node is not.
 | `timetable/lib/components.js` | Union-find with offsets: groups classes that cannot move independently. |
 | `timetable/lib/constraints.js` | The rules. Pure — runs in node and in the browser. |
 | `timetable/lib/suggest.js` | "Where else could this go, and what's blocking it?" Pure. |
+| `timetable/lib/join.js` | Attaches a saved solution to a model by what a class *is* — title, day, start, room — not by its position. Joining by id looked obvious and turned 0 violations into 7,263, because a refresh shifts every id after the first change. |
+| `timetable/lib/diff.js` | One snapshot comparison, used by `refresh.js` and by the refresh page. |
 | `timetable/lib/solver.js` | Min-conflicts local search. |
 | `timetable/test.js` | The tests. |
-| `docs/` | The GitHub Pages site. `docs/assets/constraints.js`, `suggest.js` and `term-snapshot.js` are **generated copies** — edit the originals. |
+| `docs/` | The GitHub Pages site. `docs/assets/constraints.js`, `suggest.js`, `diff.js` and `term-snapshot.js` are **generated copies** — edit the originals. |
 | `tools/fetch-term.mjs` | Drives a signed-in browser to read a term out of Resource Booker. |
 | `tools/term-snapshot.js` | The reader itself. Runs under the driver, or pasted into a console. |
-| `timetable/refresh.js` | Folds a snapshot back into `terms.json`, and says what changed. |
+| `timetable/refresh.js` | Folds a snapshot back into `terms.json`, says what changed, repairs the rebuilt term for it, and packs the site data. |
 | `timetable/seeds.js` | Packs the clean timetables a sweep found, re-checking each one. |
 
 ## The site
@@ -413,8 +479,8 @@ Five pages, behind one bar:
 |---|---|
 | **About** | How it was built, what today's method produces, and where the numbers are soft. The landing page. |
 | **Timetables** ▾ | Four of them: each term as it stands, and each rebuilt. The rebuilt spring is re-checked **in the browser on load**, so its headline is verified rather than asserted. Each rebuilt term has a picker for the other clean arrangements. |
-| **Fix a clash** | Pick a module and see every slot its classes could legally move to together — and for the ones they cannot, exactly what is in the way. Ranked, including two-room options when the hour has to be kept. |
-| **Rooms** | Every room as a week calendar. Tick several and see them side by side, in any of the four timetables. |
+| **Find a free room** | Give the slot you need — days, time, weeks, seats, buildings, room type — and it returns the rooms free in every week you ticked, smallest that fits first, then the near misses with the weeks they are taken and by what. |
+| **Search rooms** | Every room as a week calendar. Tick several and see them side by side, in any of the four timetables. |
 | **Room needs** | Records what kind of room a module actually needs, and writes the CSV the solver reads. This is how a correction gets made. |
 
 `docs/admin.html` is a sixth, `noindex` and not in the bar: it is for whoever refreshes

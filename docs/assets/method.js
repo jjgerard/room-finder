@@ -241,7 +241,7 @@
    * Autumn, built the same way and worth reading beside spring.
    *
    * It is display-only: the browser carries the spring model and checks it on
-   * load, and autumn's is fetched only by Fix a clash. So the count here is
+   * load, and autumn's is fetched only by Find a free room. So the count here is
    * the solver's, stated as such, rather than something the page proves.
    */
   function autumnSection(H) {

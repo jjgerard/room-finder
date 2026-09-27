@@ -16,8 +16,8 @@
   <nav id="appnav">
     <a href="#" id="nav-about">About</a>
     <span class="bar-menu" id="nav-terms"></span>
-    <a href="explore.html">Fix a clash</a>
-    <a href="rooms-explorer.html">Rooms</a>
+    <a href="explore.html">Find a free room</a>
+    <a href="rooms-explorer.html">Search rooms</a>
     <a href="rooms.html">Room needs</a>
   </nav>
 </header>
@@ -826,7 +826,7 @@
     var about = document.getElementById('nav-about');
     if (about) about.onclick = function (e) { e.preventDefault(); selectTab('method'); };
 
-    // The timetable picker sits between About and Fix a clash, in the bar with
+    // The timetable picker sits between About and Find a free room, in the bar with
     // them. It is a menu rather than three more links because there are three
     // timetables today and four once autumn is rebuilt.
     var wrap = document.getElementById('nav-terms');
@@ -999,7 +999,7 @@
     };
 
     document.getElementById('method').innerHTML = window.TTMethod.html(H);
-    // A link may name the timetable to open — the picker on Fix a clash
+    // A link may name the timetable to open — the picker on Find a free room
     // points here rather than carrying its own copy of the term list.
     var want = (location.search.match(/[?&]t=([a-zA-Z]+)/) || [])[1];
     // A link may also name one of the clean timetables — the About page lists
