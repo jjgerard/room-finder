@@ -35,12 +35,17 @@
   // 2 ... violations; `published` is the seed the shipped file came from.
   //
   // A seed names a search, not a timetable, and only for one version of the
-  // rules: the solver's own cost reads windowExempt, so the pin exemption
-  // moved every autumn seed onto a different path. These were measured after
-  // that change, and the packed timetables were regenerated from them, so a
-  // seed named here is one the command above reproduces. Re-measure both if
-  // the rules change again — a stale list would read as reproducible and not
-  // be, which is worse than no list.
+  // rules AND one version of the data. The solver's own cost reads
+  // windowExempt, so the pin exemption moved every autumn seed onto a
+  // different path; and a refresh that adds classes makes every seed here a
+  // solution to a term that no longer exists. Either way a stale list reads as
+  // reproducible and is not, which is worse than no list.
+  //
+  // So nothing below is trusted on its own. export.js compares what ships
+  // against seeds-<term>.json and passes the verdict through as `sweep`, and
+  // the section says so when they have parted company — which is what a
+  // refresh-and-repair does immediately: it publishes a repair of the seed,
+  // not the seed.
   //
   // Unlike the figures computed above, these cannot be worked out in the
   // browser: it holds one timetable per term, not thirty.
@@ -615,15 +620,52 @@
    * The sweep in words: the headline per term, and which seeds were clean, so
    * anyone can re-run a named one rather than take the count on trust.
    */
+  /**
+   * Said only when it needs saying: the sweep and the shipped timetable have
+   * parted company. It names what each is, rather than hedging the whole
+   * section — the measurement is still a true measurement, it is just no
+   * longer a description of the file you are reading.
+   */
+  function sweepDrift() {
+    var TAB = { spring: 'springNew', autumn: 'autumnNew' };
+    var out = [];
+    ['spring', 'autumn'].forEach(function (key) {
+      var sw = (H.terms[TAB[key]] || {}).sweep;
+      if (!sw || sw.current) return;
+      var label = key === 'spring' ? 'Spring 2026' : 'Autumn 2026';
+      var grew = sw.classesNow != null && sw.classes != null && sw.classesNow !== sw.classes;
+      out.push('<p class="small muted"><strong>' + label + ' no longer ships seed ' +
+        sw.published + '.</strong> The timetable on this site is that seed <em>repaired</em> ' +
+        'for what the current timetable did next: every class that did not move stayed where ' +
+        'the search put it, and only the ones that did were re-placed' +
+        (grew ? ', against ' + fmtN(sw.classesNow) + ' classes rather than the ' +
+                fmtN(sw.classes) + ' the sweep was run over' : '') +
+        '. The counts above are a true measurement of the search on ' + sw.generated +
+        ', and the ' + SWEEP[key].clean.length + ' timetables linked here are the ones it ' +
+        'produced — but the published one is no longer among them. Re-running the sweep ' +
+        'is what would make it so again.</p>');
+    });
+    return out.join('');
+  }
+
   function sweepSection() {
     // Every clean one is shipped, so each seed is a link to the timetable
     // itself rather than a number to take on trust.
     var TAB = { spring: 'springNew', autumn: 'autumnNew' };
     function line(key, label) {
       var t = SWEEP[key];
+      var sw = (H.terms[TAB[key]] || {}).sweep;
+      // "(published)" is a claim about the file the site serves, so it is only
+      // made while that is still true. After a repair it is not: the shipped
+      // timetable is a repair of that seed, against more classes than the
+      // sweep ever saw.
+      var owns = !sw || sw.current;
       var links = t.clean.map(function (n) {
         return '<a href="?t=' + TAB[key] + '&seed=' + n + '">' + n + '</a>' +
-               (n === t.published ? ' <span class="small muted">(published)</span>' : '');
+               (owns && n === t.published
+                 ? ' <span class="small muted">(published)</span>'
+                 : (!owns && n === t.published
+                     ? ' <span class="small muted">(was published)</span>' : ''));
       }).join(', ');
       // A term with an unavoidable violation has no clean seeds to claim, so
       // it says what the floor is and which seeds reach it instead.
@@ -651,6 +693,7 @@
       'left — so splitting never bought a clean term.</li>',
       '</ul>',
       sweepChart(),
+      sweepDrift(),
       '<p class="small muted">All ' + (SWEEP.spring.zero + SWEEP.autumn.zero) + ' of them are ',
       'published, not just the two the rest of the site is built from. The picker at the top of ',
       'either rebuilt timetable switches between them, and the Rooms calendar takes the same ',

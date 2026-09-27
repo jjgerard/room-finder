@@ -1310,6 +1310,24 @@ test('refresh: repairs on the solution, not on whether the snapshot changed', ()
     'needsRepair no longer joins the solution to the model');
 });
 
+test('export: says when the seed sweep no longer describes what ships', () => {
+  // The About page links the sweep's clean seeds and marks one "(published)".
+  // A repair silently breaks that: the shipped file becomes a repair of that
+  // seed, solved over more classes than the sweep ever saw, while the page
+  // went on claiming the seed itself. The verdict is shipped so the page can
+  // say so rather than being re-worded by hand after every refresh.
+  const packed = JSON.parse(require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'docs', 'data', 'timetable.json'), 'utf8'));
+  for (const key of ['springNew', 'autumnNew']) {
+    const sw = packed.terms[key] && packed.terms[key].sweep;
+    if (!sw) continue;   // no seeds-<term>.json shipped for that term
+    assert.strictEqual(typeof sw.current, 'boolean', key + ' ships no sweep verdict');
+    assert.strictEqual(sw.current, sw.published === sw.seedNow && sw.classes === sw.classesNow,
+      key + ' claims the sweep is current while the seed or class count differs: ' +
+      JSON.stringify(sw));
+  }
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)

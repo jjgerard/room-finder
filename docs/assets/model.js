@@ -153,6 +153,8 @@
         // from Resource Booker since it was solved: its movement figures then
         // compare against a timetable that is no longer the current one.
         staleAgainst: t.staleAgainst || null,
+        // Whether the published seed sweep still describes what ships.
+        sweep: t.sweep || null,
         rows: t.rows.map(function (r) {
           return {
             module: r[R.module], activity: r[R.activity], title: r[R.title],

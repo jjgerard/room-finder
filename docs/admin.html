@@ -139,7 +139,7 @@
   <!-- ------------------------------------------------------------ step 4 -->
   <section class="card pad step">
     <h3><span class="num">4</span> Write it, in the repo</h3>
-    <p class="small muted">A web page cannot write into a folder on your disk, so this last
+    <p class="small muted">A web page cannot write into a folder on your disk, so this
       step is a terminal — but it is <strong>one command</strong>, and there is
       <strong>nothing to install</strong>: it uses only what Node ships with, so it works in a
       fresh clone with no <code>npm install</code>.</p>
@@ -153,8 +153,24 @@
     </div>
     <p class="small muted">It prints what it changed, repairs the rebuilt term for whatever
       moved, packs the site data, and stops if the snapshot looks like a failed fetch. Add
-      <code>--dry-run</code> to see the same comparison as above without writing anything.
-      Then <code>git commit</code> and <code>git push</code> to publish.</p>
+      <code>--dry-run</code> to see the same comparison as above without writing anything.</p>
+  </section>
+
+  <!-- ------------------------------------------------------------ step 5 -->
+  <section class="card pad step">
+    <h3><span class="num">5</span> Publish it</h3>
+    <p class="small muted">Nothing is live until this runs. Three commands on one line:
+      <code>add</code> gathers what changed, <code>commit</code> records it, <code>push</code>
+      sends it to GitHub, which rebuilds the site a minute or two later. The
+      <code>;</code> is what lets PowerShell take all three at once.</p>
+    <pre class="card pad mono small" style="overflow-x:auto"><code id="pub"></code></pre>
+    <div class="row">
+      <button id="copy-pub" type="button">Copy the command</button>
+      <span class="small muted" id="pub-note"></span>
+    </div>
+    <p class="small muted">Change the words in quotes to whatever describes the refresh. Run
+      <code>git pull</code> <em>before</em> step 4 next time: the refresh writes into the same
+      files a pull brings down, so pulling afterwards collides.</p>
 
     <div class="note warn" style="margin-top:14px"><p style="margin:0">
       <strong>This refreshes the timetables as they stand, not the rebuild.</strong> The clash
@@ -386,7 +402,7 @@
     // that has not identified anything: the changes worth querying are as
     // likely to be in the tail as the head, and this is the only place they can
     // be read before the write happens. Long lists scroll within their own box
-    // so the four steps stay on one screen.
+    // so the steps stay on one screen.
     var list = function (rows, head, fmt) {
       if (!rows.length) return;
       out.push('<details class="stat-list" open><summary>' + head + ' (' + fmtN(rows.length) +
@@ -453,6 +469,28 @@
     return 'node timetable/refresh.js ';
   }
   $('cmds').textContent = cmds();
+
+  // ---------------------------------------------------------------- step 5
+  // Three commands, chained, because they are never useful apart: nothing is
+  // published until all three have run, and stopping after the commit leaves
+  // the site showing the old timetable with no sign anything is pending.
+  function pub() {
+    return 'git add -A ; git commit -m "Refresh ' + $('term').value +
+           ' from Resource Booker" ; git push';
+  }
+  function showPub() { $('pub').textContent = pub(); }
+  $('term').addEventListener('change', showPub);
+  showPub();
+
+  $('copy-pub').onclick = function () {
+    navigator.clipboard.writeText(pub()).then(function () {
+      $('pub-note').textContent = 'copied';
+      $('pub-note').className = 'small ok-text';
+    }).catch(function () {
+      $('pub-note').textContent = 'could not copy \u2014 select the text above';
+      $('pub-note').className = 'small warn-text';
+    });
+  };
 
   $('copy-cmds').onclick = function () {
     navigator.clipboard.writeText(cmds()).then(function () {

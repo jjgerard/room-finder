@@ -154,6 +154,36 @@ function staleAgainst(currentKey, solvedOn) {
   return { solvedOn, refreshedOn: refreshed };
 }
 
+/**
+ * Whether the published sweep still describes what ships.
+ *
+ * seeds-<term>.json holds the alternative timetables and names the seed the
+ * site was built from. A repair breaks both claims at once: the shipped file
+ * becomes a new seed (a repair of the old one), and it is a solution to more
+ * classes than the sweep was run against. The About page said "seed 24 of 30,
+ * and here are the other nine to compare" while shipping something else
+ * entirely, which is the kind of claim that reads as checkable and is not.
+ *
+ * So ship the comparison rather than a sentence about it, and let the page say
+ * what is true today. Nothing here decides anything — it only reports.
+ */
+function sweepState(term, solMeta, classesNow) {
+  const f = path.join(DOCS, 'data', `seeds-${term}.json`);
+  if (!fs.existsSync(f) || !solMeta) return null;
+  let s;
+  try { s = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; }
+  return {
+    generated: s.generated || null,
+    classes: s.classes || null,
+    published: s.published,
+    seedNow: solMeta.seed,
+    classesNow,
+    // Current only when the sweep's published seed is still the one shipped
+    // AND it was run against the same set of classes.
+    current: s.published === solMeta.seed && s.classes === classesNow,
+  };
+}
+
 function todayStats(rows) {
   const R = { title: 2, day: 3, start: 4, dur: 5, room: 6, weeks: 8 };
   const DAY_START = 9 * 60 + 15, DAY_END = 17 * 60 + 15;
@@ -243,6 +273,7 @@ let autumnNewRows = null, autumnNewUnresolved = 0;
 let autumnPack = null;   // the autumn model, written beside the main file
 let autumnScore = null;  // its rule counts, for the About page
 let autumnSolvedOn = null;   // the day it was solved, to spot a later refresh
+let autumnSolMeta = null;    // its meta, to compare the sweep against what ships
 const autumnSolPath = path.join(DATA, 'solution-autumn.json');
 if (fs.existsSync(autumnSolPath)) {
   const autumnSol = JSON.parse(fs.readFileSync(autumnSolPath, 'utf8'));
@@ -263,6 +294,7 @@ if (fs.existsSync(autumnSolPath)) {
   // never from the solution file's own count.
   autumnNewUnresolved = 0;
   autumnSolvedOn = autumnSol.meta.generated || null;
+  autumnSolMeta = autumnSol.meta;
   // The same shape the spring model is packed in, so the browser can hydrate
   // it with the same code. It goes in its own file: Fix a clash needs it and
   // nothing else does, so the pages that only show a timetable should not pay
@@ -369,7 +401,8 @@ const packed = {
                  // Null unless the term it repairs has been refreshed since it
                  // was solved, in which case its movement figures compare with
                  // a timetable that is no longer the current one.
-                 staleAgainst: staleAgainst('springCurrent', solution.meta.generated) },
+                 staleAgainst: staleAgainst('springCurrent', solution.meta.generated),
+                 sweep: sweepState('spring', solution.meta, springNewRows.length) },
   },
   // What timetabling has corrected, for the About page's account of how a term
   // got clean.
@@ -418,6 +451,7 @@ if (autumnNewRows) {
     sub: left ? 'rebuilt \u2014 ' + left + ' unresolved' : 'rebuilt',
     score: autumnScore,
     staleAgainst: staleAgainst('autumn', autumnSolvedOn),
+    sweep: sweepState('autumn', autumnSolMeta, autumnNewRows.length),
   };
 }
 
