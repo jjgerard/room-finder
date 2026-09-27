@@ -399,6 +399,50 @@ function load(dir, opts) {
     }
   }
 
+  // ---- one teaching slot booked at two lengths ----------------------------
+  //
+  // `wanders` above is about one class meeting in several rooms. This is the
+  // same fault a level up, and the room-per-class fix cannot see it: four
+  // autumn slots are booked at two different DURATIONS in different weeks —
+  // MKT703_S1/LEC/01 runs two hours in weeks 5 and 7 and three hours in the
+  // other ten — so the model holds them as two classes. Each then gets its own
+  // room, correctly by its own lights, and the published timetable has the
+  // same lecture in one room for two weeks and another for the rest. Which is
+  // exactly the thing the rebuild exists to remove.
+  //
+  // The test is deliberately narrow. Sharing a title, a day and a start is not
+  // enough on its own: 130 autumn slots do that and are genuine parallel
+  // teaching, several groups of one module taught at once in several rooms,
+  // and forcing those into one room would be nonsense. What marks these four
+  // out is that their weeks NEVER overlap — they are never taught together, so
+  // they are one slot in time, and a student attends whichever is on this
+  // week. Spring has none.
+  //
+  // Grouping them here, rather than merging them into one class, keeps each
+  // real duration for the clash checker. The rule that they share a room lives
+  // in constraints.js.
+  const roomGroups = new Map();
+  {
+    const by = new Map();
+    for (const c of classes) {
+      if (c.isShadow) continue;
+      const k = c.title + '\u0000' + c.origDay + '\u0000' + c.origStart;
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(c);
+    }
+    for (const [k, members] of by) {
+      if (members.length < 2) continue;
+      let seen = 0, disjoint = true;
+      for (const c of members) {
+        if (seen & c.weeks) { disjoint = false; break; }
+        seen |= c.weeks;
+      }
+      if (!disjoint) continue;              // parallel teaching, leave it alone
+      roomGroups.set(k, members.map(c => c.id));
+      for (const c of members) c.roomGroup = k;
+    }
+  }
+
   // ---- classes told to stay exactly where they are ------------------------
   //
   // The pinning rule catches the evening by the clock — anything from 17:15 —
@@ -1018,6 +1062,9 @@ function load(dir, opts) {
     clashMode, edgeStats, splitCohorts,
     shadowCount: shadows.length,
     linkedGroups: [...linkedGroups.entries()].map(([key, members]) => ({ key, members })),
+    // One teaching slot the timetable books at two lengths: its classes have
+    // to end up in the same room. See the roomGroups block above.
+    roomGroups: [...roomGroups.entries()].map(([key, ids]) => ({ key, ids })),
   };
 }
 

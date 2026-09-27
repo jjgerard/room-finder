@@ -120,6 +120,23 @@ class Solver {
       this.dayPartners.get(a).push(b); this.dayPartners.get(b).push(a);
     }
 
+    // One teaching slot the timetable books at two lengths, so the model holds
+    // it as two classes: they have to end up in the SAME room. Every other
+    // partner list here is a must-not; this one is a must, and it is the only
+    // rule the solver has about two classes agreeing rather than avoiding.
+    //
+    // It has to be here and not only in constraints.js: the solver scores its
+    // own moves and never calls the checker, so a rule that lives only there
+    // is one the search cannot see and will not fix. Autumn has four such
+    // slots, spring none.
+    this.roomGroupPartners = new Map();
+    for (const c of model.classes) this.roomGroupPartners.set(c.id, []);
+    for (const g of model.roomGroups || []) {
+      for (const a of g.ids) for (const b of g.ids) {
+        if (a !== b && this.roomGroupPartners.has(a)) this.roomGroupPartners.get(a).push(b);
+      }
+    }
+
     // Programme → which days it currently has classes on. A cohort's days
     // should be consecutive, which is a property of the whole programme rather
     // than of any one class, so it is tracked as running counts and updated
@@ -471,6 +488,13 @@ class Solver {
     for (const other of this.dayPartners.get(id)) {
       if (this.day[other] !== d) continue;
       const k = DAY_RULE + pairKey(id, other);
+      if (seen && seen.has(k)) continue;
+      v++;
+      if (seen) seen.add(k);
+    }
+    for (const other of this.roomGroupPartners.get(id)) {
+      if (this.room[other] === r) continue;
+      const k = GROUP_RULE + pairKey(id, other);
       if (seen && seen.has(k)) continue;
       v++;
       if (seen) seen.add(k);
@@ -1601,6 +1625,7 @@ class Solver {
 const ROOM_RULE = 'r';
 const TIME_RULE = 't';
 const DAY_RULE = 'd';
+const GROUP_RULE = 'g';
 
 function pairKey(a, b) { return a < b ? a * 100000 + b : b * 100000 + a; }
 

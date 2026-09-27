@@ -28,6 +28,7 @@ const HARD = [
   'examSlot',       // an exam in its module's usual slot stays in it
   'dayPairing',     // no NEW same-day pairing for a cohort
   'window',         // inside the teaching day
+  'roomSplit',      // one slot booked at two lengths, taught in two rooms
 ];
 
 // Half-open intervals: a class ending at 11:15 and one starting at 11:15 are
@@ -229,6 +230,29 @@ function check(model, assign, opts) {
         });
       } else if (!strictBackToBack && pb.start < pa.start + a.dur) {
         add('linkedOrder', { a: a.id, b: b.id, group: g.key, why: 'out of order or overlapping' });
+      }
+    }
+  }
+
+  // ---- one slot booked at two lengths keeps one room ----------------------
+  //
+  // The model groups classes that share a title, a day and a start and whose
+  // weeks never overlap: one lecture the timetable books at two lengths in
+  // different weeks. They are never taught at the same time, so a student sees
+  // one slot \u2014 and two rooms, if nothing says otherwise. The rebuild's whole
+  // claim is that it removes exactly that.
+  //
+  // Only the room is constrained. Each keeps its own duration, and the clash
+  // rules above judge them separately, because they really are different
+  // lengths.
+  for (const g of model.roomGroups || []) {
+    let room = null;
+    for (const id of g.ids) {
+      const p = at(id);
+      if (!p) continue;
+      if (room === null) { room = p.room; continue; }
+      if (p.room !== room) {
+        add('roomSplit', { a: g.ids[0], b: id, group: g.key, rooms: [room, p.room] });
       }
     }
   }
