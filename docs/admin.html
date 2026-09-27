@@ -382,14 +382,17 @@
       return esc(r[2]) + ' <span class="muted">' + D[r[3]] + ' ' + hhmm(r[4]) + ' \u00b7 ' +
         esc(c.roomName(r[6])) + ' \u00b7 weeks ' + esc(r[8]) + '</span>';
     };
+    // All of them, not the first forty. "and 53 more" is the shape of a report
+    // that has not identified anything: the changes worth querying are as
+    // likely to be in the tail as the head, and this is the only place they can
+    // be read before the write happens. Long lists scroll within their own box
+    // so the four steps stay on one screen.
     var list = function (rows, head, fmt) {
       if (!rows.length) return;
       out.push('<details class="stat-list" open><summary>' + head + ' (' + fmtN(rows.length) +
-        ')</summary><ul>' +
-        rows.slice(0, 40).map(function (r) { return '<li>' + fmt(r) + '</li>'; }).join('') +
-        '</ul>' + (rows.length > 40
-          ? '<p class="small muted">and ' + fmtN(rows.length - 40) + ' more</p>' : '') +
-        '</details>');
+        ')</summary><ul' + (rows.length > 40 ? ' style="max-height:24em;overflow:auto"' : '') +
+        '>' + rows.map(function (r) { return '<li>' + fmt(r) + '</li>'; }).join('') +
+        '</ul></details>');
     };
     list(c.moved, 'Moved', function (x) {
       return '<strong>' + esc(x.title) + '</strong> <span class="muted">' + esc(x.what) +

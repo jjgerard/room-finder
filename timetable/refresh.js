@@ -98,22 +98,24 @@ const before = terms[KEY].rows;
 
 const d = compare(snap.rows, before, roomNames);
 const rows = d.rows;
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 console.log(`snapshot: ${snap.term}, taken ${String(snap.takenAt).slice(0, 10)}, ` +
             `${snap.from} to ${snap.to}`);
 console.log(`bookings: ${d.before} \u2192 ${d.after} in the snapshot`);
-if (d.oneOff) console.log(`          ${d.oneOff} one-off BK bookings left out, as the data always has`);
+if (d.oneOff) console.log(`          ${plural(d.oneOff, 'one-off BK booking')} left out, as the data always has`);
 // Two lines, not one. "dropped \u2014 the room is not in the inventory" read as
 // damage whichever it was, and the two need opposite responses: a reception
 // area has never been in the inventory and should not be, while a teaching
 // room the snapshot spells differently is losing real bookings every refresh.
 if (d.unmodelledRows) {
-  console.log(`          ${d.unmodelledRows} rows in space the site does not model, as the data always has:`);
+  console.log(`          ${plural(d.unmodelledRows, 'row')} in space the site does not ` +
+              `model, as the data always has:`);
   d.unmodelled.slice(0, 6).forEach(([n, c]) => console.log(`             ${n} (${c})`));
   if (d.unmodelled.length > 6) console.log(`             \u2026 and ${d.unmodelled.length - 6} more`);
 }
 if (d.dropped) {
-  console.log(`          ${d.dropped} rows DROPPED \u2014 ${d.unknownRooms.length} room` +
+  console.log(`          ${plural(d.dropped, 'row')} DROPPED \u2014 ${d.unknownRooms.length} room` +
               `${d.unknownRooms.length === 1 ? ' is' : 's are'} in a building the site models ` +
               `but did not match belfast_rooms.csv:`);
   d.unknownRooms.slice(0, 10).forEach(([n, c]) => console.log(`             ${n} (${c} bookings)`));
@@ -121,20 +123,57 @@ if (d.dropped) {
   console.log(`          Those are teaching bookings. Fix the name or add the room.`);
 }
 
+// Every change is written out in full, and the console shows the first dozen of
+// each. A terminal that scrolls two hundred bookings past you has identified
+// nothing — but neither has one that stops at "and 53 more", because the ones
+// worth arguing with are as likely to be in the tail as the head. So the
+// screen gets a readable sample and the file gets all of it.
+const REPORT = path.resolve(IN).replace(/\.json$/i, '') + '-changes.txt';
+const full = [];
+
 const show = (list, mark, fmt, head) => {
+  full.push('', head);
+  list.forEach(x => full.push('   ' + mark + ' ' + fmt(x)));
   if (!list.length) return;
   console.log(`\n${head}`);
   list.slice(0, 12).forEach(x => console.log('   ' + mark + ' ' + fmt(x)));
-  if (list.length > 12) console.log(`   \u2026 and ${list.length - 12} more`);
+  if (list.length > 12) {
+    console.log(`   \u2026 and ${list.length - 12} more, in the file below`);
+  }
 };
 const slot = r => `${r[2]}  ${DAYS[r[3]]} ${hhmm(r[4])} \u00b7 ${d.roomName(r[6])} ` +
                   `\u00b7 weeks ${r[8]}`;
-show(d.moved, '~', x => `${x.title}  ${x.what}`,
-     `${d.moved.length} booking${d.moved.length === 1 ? '' : 's'} moved:`);
-show(d.fresh, '+', slot, `${d.fresh.length} new booking${d.fresh.length === 1 ? '' : 's'}:`);
-show(d.gone, '-', slot,
-     `${d.gone.length} booking${d.gone.length === 1 ? '' : 's'} no longer in the term:`);
-if (!d.moved.length && !d.fresh.length && !d.gone.length) console.log('\nNothing has changed.');
+
+full.push(`${snap.term}, snapshot taken ${String(snap.takenAt).slice(0, 10)}, ` +
+          `${snap.from} to ${snap.to}`,
+          `${d.before} bookings on file \u2192 ${d.after} in the snapshot`);
+if (d.oneOff) full.push(`${plural(d.oneOff, 'one-off BK booking')} left out, as the data always has`);
+if (d.unmodelledRows) {
+  full.push('', `${plural(d.unmodelledRows, 'row')} in space the site does not model:`);
+  d.unmodelled.forEach(([n, c]) => full.push(`   ${n} (${c})`));
+}
+if (d.dropped) {
+  full.push('', `${plural(d.dropped, 'row')} DROPPED \u2014 in a building the site models, ` +
+                `but not matched in belfast_rooms.csv:`);
+  d.unknownRooms.forEach(([n, c]) => full.push(`   ${n} (${c} bookings)`));
+}
+
+show(d.moved, '~', x => `${x.title}  ${x.what}`, `${plural(d.moved.length, 'booking')} moved:`);
+show(d.fresh, '+', slot, `${plural(d.fresh.length, 'new booking')}:`);
+show(d.gone, '-', slot, `${plural(d.gone.length, 'booking')} no longer in the term:`);
+
+if (!d.moved.length && !d.fresh.length && !d.gone.length) {
+  console.log('\nNothing has changed.');
+} else {
+  // Beside the snapshot, not in the repo: it is a working note about one
+  // fetch, not something to publish, and that is the folder already open.
+  try {
+    fs.writeFileSync(REPORT, full.join('\n') + '\n');
+    console.log(`\nevery change, in full: ${REPORT}`);
+  } catch (e) {
+    console.log(`\ncould not write the full list beside the snapshot (${e.message})`);
+  }
+}
 
 // A snapshot that lost most of the term is a failed fetch, not a quiet week.
 // Refusing is the only safe default: the file it would overwrite is the only
