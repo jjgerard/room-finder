@@ -103,10 +103,22 @@ console.log(`snapshot: ${snap.term}, taken ${String(snap.takenAt).slice(0, 10)},
             `${snap.from} to ${snap.to}`);
 console.log(`bookings: ${d.before} \u2192 ${d.after} in the snapshot`);
 if (d.oneOff) console.log(`          ${d.oneOff} one-off BK bookings left out, as the data always has`);
-if (d.dropped) console.log(`          ${d.dropped} rows dropped \u2014 the room is not in the inventory`);
-if (d.unknownRooms.length) {
-  console.log(`rooms not in belfast_rooms.csv (${d.unknownRooms.length}):`);
-  d.unknownRooms.slice(0, 10).forEach(([n, c]) => console.log(`   ${n} (${c} bookings)`));
+// Two lines, not one. "dropped \u2014 the room is not in the inventory" read as
+// damage whichever it was, and the two need opposite responses: a reception
+// area has never been in the inventory and should not be, while a teaching
+// room the snapshot spells differently is losing real bookings every refresh.
+if (d.unmodelledRows) {
+  console.log(`          ${d.unmodelledRows} rows in space the site does not model, as the data always has:`);
+  d.unmodelled.slice(0, 6).forEach(([n, c]) => console.log(`             ${n} (${c})`));
+  if (d.unmodelled.length > 6) console.log(`             \u2026 and ${d.unmodelled.length - 6} more`);
+}
+if (d.dropped) {
+  console.log(`          ${d.dropped} rows DROPPED \u2014 ${d.unknownRooms.length} room` +
+              `${d.unknownRooms.length === 1 ? ' is' : 's are'} in a building the site models ` +
+              `but did not match belfast_rooms.csv:`);
+  d.unknownRooms.slice(0, 10).forEach(([n, c]) => console.log(`             ${n} (${c} bookings)`));
+  if (d.unknownRooms.length > 10) console.log(`             \u2026 and ${d.unknownRooms.length - 10} more`);
+  console.log(`          Those are teaching bookings. Fix the name or add the room.`);
 }
 
 const show = (list, mark, fmt, head) => {

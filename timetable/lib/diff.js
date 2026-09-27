@@ -30,6 +30,31 @@ function codeOf(name) {
   return m ? (m[1] + (m[3] ? '/' + m[3] : '')).toUpperCase() : null;
 }
 
+// The building a room name opens with: BA, BB, BC, BD, NP across the inventory,
+// and every one of its 228 rooms yields one.
+//
+// This is what separates two very different reasons for a room not matching,
+// which the report used to run together under "not in the inventory":
+//
+//   BC-08-104_104A (150)    a room in a building the site models, whose name
+//                           is spelled differently here. A real gap: those
+//                           bookings are teaching, and dropping them loses
+//                           them.
+//   JSV Reception Beacon 1  not in any building the site models at all. The
+//                           inventory is the solver's list of rooms it may
+//                           place classes into, so a reception area does not
+//                           belong in it and never has — terms.json has never
+//                           carried these either.
+//
+// Deliberately not "does the name have a room code", which looked like the
+// same test and is not: eleven inventory rooms have no code, among them
+// BC-LG-211, the 350-seat lecture theatre. A drifted spelling of that one
+// would have been waved through as non-teaching space.
+function buildingOf(name) {
+  const m = strip(name).match(/^([A-Z]{2,3})[-_ ]/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' +
                   String(m % 60).padStart(2, '0');
@@ -61,16 +86,29 @@ function compare(snapRows, beforeRows, roomNames) {
     return byc == null ? undefined : byc;
   };
 
+  const buildings = new Set();
+  roomNames.forEach(name => {
+    const b = buildingOf(name);
+    if (b) buildings.add(b);
+  });
+
   const rows = [];
-  const unknownRooms = new Map();
-  let oneOff = 0, dropped = 0;
+  const unknownRooms = new Map();   // a modelled building, but no matching room
+  const unmodelled = new Map();     // not a building the site models at all
+  let oneOff = 0, dropped = 0, unmodelledRows = 0;
   for (const r of snapRows) {
     if (ONE_OFF.test(r[2])) { oneOff++; continue; }
     const id = roomIdOf(r[6]);
     if (id === undefined) {
       const n = strip(r[6]);
-      unknownRooms.set(n, (unknownRooms.get(n) || 0) + 1);
-      dropped++;
+      const b = buildingOf(n);
+      if (b && buildings.has(b)) {
+        unknownRooms.set(n, (unknownRooms.get(n) || 0) + 1);
+        dropped++;
+      } else {
+        unmodelled.set(n, (unmodelled.get(n) || 0) + 1);
+        unmodelledRows++;
+      }
       continue;
     }
     rows.push([r[0], r[1], r[2], r[3], r[4], r[5], id, r[7], r[8]]);
@@ -115,8 +153,9 @@ function compare(snapRows, beforeRows, roomNames) {
   for (const [title, list] of was) if (!now.has(title)) gone.push(...list);
 
   return {
-    rows, moved, fresh, gone, oneOff, dropped,
+    rows, moved, fresh, gone, oneOff, dropped, unmodelledRows,
     unknownRooms: [...unknownRooms.entries()].sort((a, b) => b[1] - a[1]),
+    unmodelled: [...unmodelled.entries()].sort((a, b) => b[1] - a[1]),
     before: beforeRows.length,
     after: rows.length,
     refused: rows.length < beforeRows.length * KEEP_AT_LEAST,
@@ -124,7 +163,7 @@ function compare(snapRows, beforeRows, roomNames) {
   };
 }
 
-const api = { compare, codeOf, strip, DAYS, hhmm, KEEP_AT_LEAST };
+const api = { compare, codeOf, buildingOf, strip, DAYS, hhmm, KEEP_AT_LEAST };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 // export.js copies this into docs/assets, wrapped, so the refresh page runs the
 // same comparison the script does rather than its own copy of it.

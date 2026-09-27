@@ -341,7 +341,9 @@
       fmtN(c.gone.length) + ' no longer in the term.' +
       (c.oneOff ? ' ' + fmtN(c.oneOff) + ' one-off BK bookings left out, as the data always ' +
                   'has.' : '') +
-      (c.dropped ? ' ' + fmtN(c.dropped) + ' dropped \u2014 the room is not in the inventory.'
+      (c.unmodelledRows ? ' ' + fmtN(c.unmodelledRows) + ' in space the site does not model, ' +
+                          'as the data always has.' : '') +
+      (c.dropped ? ' ' + fmtN(c.dropped) + ' dropped from rooms that should have matched.'
                  : '') + '</p></div>');
 
     if (c.refused) {
@@ -350,15 +352,28 @@
         'died half way through looks like. Check the date range, and that the run finished \u2014 ' +
         'then take it again rather than forcing it through.</p></div>');
     }
-    if (c.unknownRooms.length) {
-      out.push('<p class="small"><strong>' + c.unknownRooms.length + ' room' +
-        (c.unknownRooms.length === 1 ? '' : 's') + ' not in <code>belfast_rooms.csv</code>:</strong> ' +
-        c.unknownRooms.slice(0, 8).map(function (u) {
+    // Rooms in a building the site models are a real gap \u2014 teaching bookings
+    // are being lost to a spelling. Rooms in no modelled building are reception
+    // and event space the inventory has never carried and should not: it is the
+    // list of rooms the solver may place a class into.
+    var rooms = function (list, cls, head, tail) {
+      if (!list.length) return;
+      out.push('<p class="small"><strong' + (cls ? ' class="' + cls + '"' : '') + '>' +
+        head(list.length) + '</strong> ' +
+        list.slice(0, 8).map(function (u) {
           return esc(u[0]) + ' <span class="muted">(' + u[1] + ')</span>';
-        }).join(', ') + (c.unknownRooms.length > 8 ? ' \u2026' : '') +
-        '<br><span class="muted">Their bookings are left out. A new room has to be added to the ' +
-        'inventory before it can hold anything.</span></p>');
-    }
+        }).join(', ') + (list.length > 8 ? ' \u2026' : '') +
+        '<br><span class="muted">' + tail + '</span></p>');
+    };
+    rooms(c.unknownRooms, 'warn-text', function (n) {
+      return n + ' room' + (n === 1 ? '' : 's') + ' in a building the site models, but not ' +
+             'matched in <code>belfast_rooms.csv</code>:';
+    }, 'Those are teaching bookings and they are being left out. Fix the name in the ' +
+       'inventory, or add the room.');
+    rooms(c.unmodelled, '', function (n) {
+      return n + ' room' + (n === 1 ? '' : 's') + ' outside any building the site models:';
+    }, 'Left out, as they always have been. The inventory is the list of rooms the solver ' +
+       'may put a class in, so reception and event space does not belong in it.');
 
     var slot = function (r) {
       return esc(r[2]) + ' <span class="muted">' + D[r[3]] + ' ' + hhmm(r[4]) + ' \u00b7 ' +

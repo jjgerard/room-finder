@@ -1252,6 +1252,48 @@ test('solve.js grades itself against the same day it solves for', () => {
     'solve.js widens the teaching day when reporting: ' + line);
 });
 
+test('refresh: an unmatched room in a modelled building is not filed as non-teaching', () => {
+  // The two used to be one "not in the inventory" count, which read as damage
+  // whichever it was. They need opposite responses: BC-08-104 spelled
+  // differently is losing teaching bookings every refresh, while JSV Reception
+  // is space the inventory has never carried and should not.
+  const { compare } = require('./lib/diff');
+  const roomNames = ['BA-00-008 (35)', 'BC-LG-211 (350) (Lecture Theatre 1)'];
+  const row = (title, room) => ['CMM125', 'LEC', title, 1, 615, 60, room, 1, '1'];
+  const d = compare([
+    row('CMM125_S1/LEC/01', 'B_BA-00-008 (35)'),          // matches
+    row('COM517_S1/LEC/01', 'B_BC-08-104_104A (150)'),    // BC: a real gap
+    row('Open Day Welcome Desk', 'B_JSV Reception Beacon 1'),
+    row('Applicant Day', 'B_JSV Reception Beacon 2'),
+  ], [], roomNames);
+
+  assert.strictEqual(d.dropped, 1, 'the BC room should count as dropped');
+  assert.deepStrictEqual(d.unknownRooms, [['BC-08-104_104A (150)', 1]]);
+  assert.strictEqual(d.unmodelledRows, 2, 'both JSV rooms are outside the model');
+  assert.strictEqual(d.unmodelled.length, 2);
+  assert.ok(d.unmodelled.every(([n]) => /^JSV/.test(n)),
+    'a modelled building leaked into the non-teaching list: ' + JSON.stringify(d.unmodelled));
+  assert.strictEqual(d.rows.length, 1, 'only the matching row should be adopted');
+});
+
+test('refresh: a codeless inventory room is still treated as a real gap', () => {
+  // Not "does the name have a room code": eleven inventory rooms have none,
+  // BC-LG-211 among them at 350 seats. A drifted spelling of that would have
+  // been waved through as non-teaching space by the obvious test.
+  const { compare, codeOf, buildingOf } = require('./lib/diff');
+  assert.strictEqual(codeOf('BC-LG-211 (350) (Lecture Theatre 1)'), null,
+    'this case only bites while that name has no room code');
+  assert.strictEqual(buildingOf('BC-LG-211 (350) Lecture Theatre 1'), 'BC');
+
+  const d = compare(
+    [['COM517', 'LEC', 'COM517_S1/LEC/01', 1, 615, 60,
+      'B_BC-LG-211 - Lecture Theatre 1', 1, '1']],
+    [], ['BA-00-008 (35)', 'BC-LG-211 (350) (Lecture Theatre 1)']);
+  assert.strictEqual(d.unmodelledRows, 0,
+    'the lecture theatre was written off as space the site does not model');
+  assert.strictEqual(d.dropped, 1);
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)
