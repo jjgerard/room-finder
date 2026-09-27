@@ -148,21 +148,24 @@
       it pastes its own path. Then press Enter.</p>
     <pre class="card pad mono small" style="overflow-x:auto"><code id="cmds"></code></pre>
     <div class="row">
-      <button id="copy-cmds" type="button">Copy the commands</button>
+      <button id="copy-cmds" type="button">Copy the command</button>
       <span class="small muted" id="cmds-note"></span>
     </div>
-    <p class="small muted">It prints what it changed, packs the site data, and stops if the
-      snapshot looks like a failed fetch. Add <code>--dry-run</code> to see the same
-      comparison as above without writing anything. Then <code>git commit</code> and
-      <code>git push</code> to publish.</p>
+    <p class="small muted">It prints what it changed, repairs the rebuilt term for whatever
+      moved, packs the site data, and stops if the snapshot looks like a failed fetch. Add
+      <code>--dry-run</code> to see the same comparison as above without writing anything.
+      Then <code>git commit</code> and <code>git push</code> to publish.</p>
 
     <div class="note warn" style="margin-top:14px"><p style="margin:0">
       <strong>This refreshes the timetables as they stand, not the rebuild.</strong> The clash
       graph — which classes share students — was inferred from the timetable as it was, and the
       API carries no enrolment data, so it stays as it is. The rebuilt terms are solutions to the
-      old timetable too: if much has moved, re-solve them
-      (<code>node timetable/solve.js --term autumn --seeds 30 --clashes evidenced --out docs/data</code>)
-      rather than leaving them claiming to be a repair of something that has changed.</p></div>
+      old timetable too. The command above repairs them for what moved \u2014 it keeps every
+      class that did not move and re-places only the ones that did, which takes a second.
+      That is enough for ordinary drift. After a term is re-published or a rule changes,
+      solve it properly instead
+      (<code>node timetable/solve.js --term autumn --seeds 30 --clashes evidenced --out docs/data</code>),
+      because a repair can only ever be as good as the arrangement it starts from.</p></div>
   </section>
 
 </main>
@@ -436,19 +439,17 @@
   // ---------------------------------------------------------------- step 4
 
   function cmds() {
-    // The first line ends in a space, so the downloaded file can be dragged
-    // onto the terminal to supply its own path. refresh.js packs the site data
-    // itself; the second line repairs the rebuilt term for whatever moved,
-    // which takes about a second and changes only the classes it must.
-    var t = $('term').value;
-    var sol = t === 'spring' ? 'solution.json' : 'solution-' + t + '.json';
-    return 'node timetable/refresh.js \n\n' +
-           'node timetable/solve.js --term ' + t + ' --from docs/data/' + sol +
-           ' --seeds 1 --clashes evidenced --out docs/data';
+    // One command. It ends in a space so the downloaded file can be dragged
+    // onto the terminal to supply its own path.
+    //
+    // This used to print two, the second repairing the rebuilt term. That made
+    // the repair something a person had to remember, and the first time it was
+    // run for real the second command never happened \u2014 leaving the published
+    // autumn with 155 hard violations. refresh.js repairs and packs the site
+    // data itself now, so there is nothing left to forget.
+    return 'node timetable/refresh.js ';
   }
-  function showCmds() { $('cmds').textContent = cmds(); }
-  $('term').addEventListener('change', showCmds);
-  showCmds();
+  $('cmds').textContent = cmds();
 
   $('copy-cmds').onclick = function () {
     navigator.clipboard.writeText(cmds()).then(function () {
