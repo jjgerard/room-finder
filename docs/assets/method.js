@@ -53,8 +53,11 @@
     seeds: 30,
     spring: { zero: 6, dist: [6, 9, 6, 7, 1, 1], published: 7,
               clean: [6, 7, 8, 15, 21, 28] },
-    autumn: { zero: 10, dist: [10, 16, 4], published: 24,
-              clean: [1, 5, 9, 13, 14, 17, 23, 24, 28, 29] },
+    // Re-measured 27 Sep, after the refresh (2,261 classes to 2,294) and the
+    // one-room rule for a slot booked at two lengths. Two changes at once, so
+    // 9 against the previous 10 says nothing about the cost of the rule.
+    autumn: { zero: 9, dist: [9, 10, 8, 3], published: 18,
+              clean: [1, 6, 7, 10, 13, 18, 19, 27, 29] },
   };
 
   function fmtN(n) { return Number(n).toLocaleString(); }
