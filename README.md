@@ -213,19 +213,21 @@ uses. Same problem, opposite ends.
 
 ## The result
 
-Both terms rebuild to **zero hard-rule violations**, checked by the same code that
-enforced them — spring re-checked in your browser every time the page loads.
+**Spring rebuilds to zero hard-rule violations. Autumn gets to four**, all of them two
+classes wanting one room — against 123 and 41 in the timetables as they stand. Checked by
+the same code that enforced them, and spring re-checked in your browser every time the
+page loads.
 
 | | Autumn, today | Autumn, rebuilt | Spring, today | Spring, rebuilt |
 |---|---|---|---|---|
 | Lecture+seminar pulled apart | 0 of 218 | **0** | 75 of 146 | **0** |
 | A session outside 09:15–17:15 | 41 | **0**\* | 48 | **0**\* |
 | A class moving between rooms mid-term | 15 | **0** | 35 | **0** |
-| Two classes in one room at once | 0 | **0** | 0 | **0** |
+| Two classes in one room at once | 0 | **4** | 0 | **0** |
 | A cohort or lecturer in two places | 0 | **0** | 0 | **0** |
-| Classes in the 9–10 or 4–5 edge slots | 801 | **476** | 668 | **394** |
-| Cohort gap-days | 425 | **311** | 399 | **307** |
-| Classes left exactly where they are | — | 649 of 2,294 | — | 587 of 1,870 |
+| Classes in the 9–10 or 4–5 edge slots | 698 | **423** | 658 | **387** |
+| Cohort gap-days | 429 | **337** | 408 | **291** |
+| Classes left exactly where they are | — | 547 of 2,037 | — | 597 of 1,844 |
 
 \* Nineteen sessions still finish after 17:15 — eleven in spring and eight in autumn.
 Seventeen of them belong to a chain of classes longer than a teaching day, which cannot
@@ -238,22 +240,34 @@ inside it.
 **Neither result is one lucky shuffle.** The search starts from a random arrangement, so
 both terms were run from 30 different starting points against the same rules:
 
-| | Reached zero | Ended on 1 | on 2 | on 3+ |
-|---|---|---|---|---|
-| Spring 2026 | **6 of 30** | 9 | 6 | 9 |
-| Autumn 2026 | **9 of 30** | 10 | 8 | 3 |
+| | Reached zero | Ended on 1 | on 2 | on 3 | on 4+ |
+|---|---|---|---|---|---|
+| Spring 2026 | **9 of 30** | 9 | 8 | 2 | 2 |
+| Autumn 2026 | **0 of 30** | — | — | — | 30, the best of them on 4 |
 
-Every one of those 15 clean timetables is published, not just the two the site is built
-from — the picker at the top of either rebuilt term switches between them. No clean run
-had to split a class across two rooms.
+Every one of spring's nine clean timetables is published, not just the one the site is
+built from — the picker at the top of the rebuilt term switches between them. Neither
+published timetable splits a class across two rooms.
+
+**Both rows moved on 28 September, and the reason is worth more than the numbers.** Until
+then a class was a booking, and the timetable records one class as several: ARC524's
+lecture is three bookings at the same hour in different weeks, BEN147's is nine, eight at
+09:15 and one at 12:15 because something clashed that week. Counted that way the pieces
+could take a room each, and autumn's rebuild put 105 of them in different rooms — a
+lecture in one room some weeks and another the rest, which is the exact fault the rebuild
+exists to remove. The old "no class moves between rooms" could not see it, because that
+check keys on the booking title and these carry three.
+
+Once a class is a class, spring got **better**: 9 of 30 starting points reach zero, against
+6 before, because there is less to place. Autumn got worse and no longer reaches zero at
+all — it merges 169 classes against spring's 26, and each merged class must now hold one
+room and one hour across the whole term, which is where its slack went. Autumn's four are
+all room clashes.
 
 A seed names a search, not a timetable, and only for one version of the rules **and one
-version of the data**. Autumn's row was re-measured on 27 September, after a refresh took
-it from 2,261 classes to 2,294 and after the one-room rule below. Two things moved at
-once, so 9 against the previous 10 says nothing about the cost of either. `export.js`
-compares the published sweep against the file actually shipped and the site says so
-itself when they part company, rather than leaving a stale claim that reads as
-reproducible.
+version of the data**. `export.js` compares the published sweep against the file actually
+shipped, and the site says so itself when they part company rather than leaving a stale
+claim that reads as reproducible.
 
 **Two rooms at once is not the fault being fixed.** A booking holding several rooms in
 the same hour is parallel teaching, and the rebuild books every one of them: MEC114's

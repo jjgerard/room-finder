@@ -49,15 +49,22 @@
   //
   // Unlike the figures computed above, these cannot be worked out in the
   // browser: it holds one timetable per term, not thirty.
+  //
+  // Re-measured 28 Sep, when a class stopped being a booking. The timetable
+  // records one class as several — ARC524's lecture is three bookings at the
+  // same hour in different weeks, BEN147's is nine — and counted that way the
+  // pieces could each take a room. Spring got BETTER for the change, 9 of 30
+  // against 6, because there is less to place. Autumn no longer reaches zero:
+  // it merges 169 classes to spring's 26, and each must now hold one room and
+  // one hour all term.
   var SWEEP = {
     seeds: 30,
-    spring: { zero: 6, dist: [6, 9, 6, 7, 1, 1], published: 7,
-              clean: [6, 7, 8, 15, 21, 28] },
-    // Re-measured 27 Sep, after the refresh (2,261 classes to 2,294) and the
-    // one-room rule for a slot booked at two lengths. Two changes at once, so
-    // 9 against the previous 10 says nothing about the cost of the rule.
-    autumn: { zero: 9, dist: [9, 10, 8, 3], published: 18,
-              clean: [1, 6, 7, 10, 13, 18, 19, 27, 29] },
+    spring: { zero: 9, dist: [9, 9, 8, 2, 2], published: 22,
+              clean: [4, 13, 16, 17, 22, 23, 25, 27, 28] },
+    // No clean seed to publish, so it says what the floor is instead.
+    autumn: { zero: 0, dist: [0, 0, 0, 0, 4, 4, 9, 8, 2, 1, 1, 1], published: 14,
+              floor: 4, clean: [14],
+              forced: 'four pairs of classes wanting one room between them' },
   };
 
   function fmtN(n) { return Number(n).toLocaleString(); }
@@ -702,11 +709,9 @@
       // A term with an unavoidable violation has no clean seeds to claim, so
       // it says what the floor is and which seeds reach it instead.
       return t.floor
-        ? '<li><strong>' + label + ': ' + t.zero + ' of ' + SWEEP.seeds +
-          '</strong> starting points got as close as the term allows \u2014 ' + links +
-          '. None reaches zero, and none can: ' + t.forced + ', so it runs an hour past ' +
-          'the teaching day whatever else moves. That one overflow is the only rule any of ' +
-          'them breaks.</li>'
+        ? '<li><strong>' + label + ': none of ' + SWEEP.seeds + ' reached zero.</strong> ' +
+          'The best got to ' + t.floor + ' \u2014 ' + links + ' \u2014 and what is left is ' +
+          t.forced + '. Every other rule holds in it.</li>'
         : '<li><strong>' + label + ': ' + t.zero + ' of ' + SWEEP.seeds +
           '</strong> starting points finished with every rule holding \u2014 ' + links +
           '. Each one opens as a timetable you can read.</li>';
@@ -720,24 +725,26 @@
       '<ul>',
       line('spring', 'Spring 2026'),
       line('autumn', 'Autumn 2026'),
-      '<li>No clean run had to <strong>split a class across two rooms</strong>. Six spring ',
-      'starts did fall back to splitting, and every one of them still ended with violations ',
-      'left — so splitting never bought a clean term.</li>',
+      '<li>Neither published timetable <strong>splits a class across two rooms</strong>. ',
+      'The per-start figures that used to sit here were measured before a class stopped ',
+      'being a booking, and have not been re-run.</li>',
       '</ul>',
       sweepChart(),
       sweepDrift(H),
-      '<p class="small muted">All ' + (SWEEP.spring.zero + SWEEP.autumn.zero) + ' of them are ',
-      'published, not just the two the rest of the site is built from. The picker at the top of ',
+      '<p class="small muted">All ' + SWEEP.spring.zero + ' of spring\u2019s are ',
+      'published, not just the one the rest of the site is built from. The picker at the top of ',
       'either rebuilt timetable switches between them, and the Rooms calendar takes the same ',
       'picker \u2014 which rooms a term leans on is the thing that differs most between two ',
       'arrangements that are equally correct.</p>',
-      '<p class="small muted">The tail is short in both terms: no autumn start ended worse ' +
-      'than ' + (SWEEP.autumn.dist.length - 1) + ', and ' +
-      (SWEEP.autumn.dist[0] + SWEEP.autumn.dist[1]) + ' of ' + SWEEP.seeds +
-      ' ended on nothing or one. That is a reversal: under the room sizes first ',
-      'read off the booking data, autumn could not get near this at all. What changed was the ',
-      'data, not the search \u2014 the confirmed cohort sizes, the room types a module actually ',
-      'needs, and the rooms a module is pinned to.</p>',
+      '<p class="small muted">The two rows moved on 28 September, and the reason matters ',
+      'more than the numbers. Until then a class was a booking, and the timetable records ',
+      'one class as several: ARC524\u2019s lecture is three bookings at the same hour in ',
+      'different weeks, BEN147\u2019s is nine. Counted that way the pieces could take a room ',
+      'each, and autumn\u2019s rebuild put 105 of them in different rooms \u2014 a lecture in ',
+      'one room some weeks and another the rest. Once a class is a class, spring got ',
+      '<strong>better</strong>, 9 of 30 against 6, because there is less to place; autumn no ',
+      'longer reaches zero at all, because it merges 169 classes to spring\u2019s 26 and each ',
+      'must now hold one room and one hour across the whole term.</p>',
     ].join('');
   }
 
