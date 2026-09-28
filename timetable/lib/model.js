@@ -44,6 +44,17 @@ function weekList(mask) {
   return out;
 }
 
+function fmtWeeks(mask) {
+  const ws = weekList(mask), out = [];
+  for (let i = 0; i < ws.length;) {
+    let j = i;
+    while (j + 1 < ws.length && ws[j + 1] === ws[j] + 1) j++;
+    out.push(j > i ? ws[i] + '\u2013' + ws[j] : String(ws[i]));
+    i = j + 1;
+  }
+  return out.join(', ');
+}
+
 function splitList(s) {
   return String(s || '').split(';').map(x => x.trim()).filter(Boolean);
 }
@@ -326,6 +337,56 @@ function load(dir, opts) {
     }
   } catch (e) { /* no booking history: every class keeps its full week mask */ }
 
+  // The room profile: how many rooms a class holds at once, whether it
+  // wanders between them, and which room is its baseline. Extracted so it can
+  // be recomputed — merging two bookings into one class changes bookedRooms,
+  // and every one of these is derived from it.
+  function roomProfile(c) {
+  // How many rooms the class holds AT ONCE, which is not how many it uses.
+  // A class that moves from one room to another mid-term uses two and holds
+  // one; MEC114's tutorial holds eight in the same hour, because the 350
+  // students are taught in eight parallel groups under a single booking
+  // title. The first is a split the rebuild can close by giving the class
+  // one room. The second is not: those rooms are the teaching.
+  let par = c.bookedRooms.length ? 1 : 1;
+  for (let w = 0; w < MAX_WEEK; w++) {
+    const inWeek = new Set();
+    for (const b of c.bookedRooms) if (b.weeks & (1 << w)) inWeek.add(b.room);
+    if (inWeek.size > par) par = inWeek.size;
+  }
+  c.parallelRooms = par;
+  c.wanders = par === 1 && new Set(c.bookedRooms.map(b => b.room)).size > 1;
+
+  // A class that moves between rooms has to fit in every one of them, so
+  // the largest is the better proxy for its size. Taking the dominant room
+  // instead sized SOP543 at 12 when it also meets in rooms for 24, and the
+  // rebuild duly offered it the 12. A confirmed cohort still wins, and
+  // still caps this.
+  if (c.wanders) {
+    let widest = 0, widestRoom = null;
+    for (const b of c.bookedRooms) {
+      const r = rooms[b.room];
+      if (r && r.capacityKnown && r.capacity > widest) { widest = r.capacity; widestRoom = b.room; }
+    }
+    if (!c.sizeConfirmed && widest > c.size) {
+      const cohort = trueSizes.get(String(c.module || '').trim());
+      c.size = cohort == null ? widest : Math.min(widest, cohort);
+    }
+    // And its baseline room is that one, not whichever the class file called
+    // dominant. A class with no single room today has no true "where it is";
+    // the widest is the only one of its rooms that holds it all term, and
+    // staying put is always legal, so starting from a room too small left
+    // SOP543 in a room for 12 when it also meets in one for 24.
+    if (widestRoom !== null && widest >= c.size) {
+      c.origRoom = widestRoom;
+      c.homeRoom = widestRoom;
+      c.homeRoomName = rooms[widestRoom].name;
+      c.origRoomWeeks = c.bookedRooms.filter(b => b.room === widestRoom)
+                                     .reduce((m, b) => m | b.weeks, 0) || c.weeks;
+    }
+  }
+  }
+
   for (const c of classes) {
     // Rows under this title, the ones in the same slot first: a title can
     // cover two sittings, and the class file sometimes merges them.
@@ -354,48 +415,80 @@ function load(dir, opts) {
       c.origRoomWeeks = c.weeks;
     }
 
-    // How many rooms the class holds AT ONCE, which is not how many it uses.
-    // A class that moves from one room to another mid-term uses two and holds
-    // one; MEC114's tutorial holds eight in the same hour, because the 350
-    // students are taught in eight parallel groups under a single booking
-    // title. The first is a split the rebuild can close by giving the class
-    // one room. The second is not: those rooms are the teaching.
-    let par = c.bookedRooms.length ? 1 : 1;
-    for (let w = 0; w < MAX_WEEK; w++) {
-      const inWeek = new Set();
-      for (const b of c.bookedRooms) if (b.weeks & (1 << w)) inWeek.add(b.room);
-      if (inWeek.size > par) par = inWeek.size;
-    }
-    c.parallelRooms = par;
-    c.wanders = par === 1 && new Set(c.bookedRooms.map(b => b.room)).size > 1;
+    roomProfile(c);
+}
 
-    // A class that moves between rooms has to fit in every one of them, so
-    // the largest is the better proxy for its size. Taking the dominant room
-    // instead sized SOP543 at 12 when it also meets in rooms for 24, and the
-    // rebuild duly offered it the 12. A confirmed cohort still wins, and
-    // still caps this.
-    if (c.wanders) {
-      let widest = 0, widestRoom = null;
-      for (const b of c.bookedRooms) {
-        const r = rooms[b.room];
-        if (r && r.capacityKnown && r.capacity > widest) { widest = r.capacity; widestRoom = b.room; }
+  // ---- one class booked as several ---------------------------------------
+  //
+  // ARC524's lecture is three bookings: weeks 1,3,5,9,11 as LEC 01/01, the even
+  // weeks as LEC/EVENS, week 7 as LEC 02/01. Same module, same activity, same
+  // Wednesday at 13:15, same three hours, and week patterns that never overlap.
+  // It is one weekly lecture that timetabling has recorded three times, and the
+  // model held it as three classes free to take three different rooms — which
+  // in the autumn rebuild 105 of them did.
+  //
+  // So merge them. Not a constraint: one class, with the union of the weeks.
+  // The room-hours are identical either way, because they are already at the
+  // same hour and never in the same week — all the split ever bought was the
+  // freedom to scatter them, which is the fault itself.
+  //
+  // What is NOT merged, and why:
+  //   - different durations. MKT703 runs two hours in some weeks and three in
+  //     others; there is no honest single duration, so those stay separate and
+  //     the room rule below holds them together instead.
+  //   - different activities. A lecture and its exam share a module and
+  //     sometimes an hour; they are not one session.
+  //   - overlapping weeks. Those are parallel groups taught at once, and 130
+  //     autumn slots look like this. Merging them would be nonsense.
+  //   - anything pinned, shadowed, or in a different linked chain from its
+  //     fellows, where merging would quietly move something it should not.
+  const mergedInto = new Map();
+  {
+    const by = new Map();
+    for (const c of classes) {
+      if (c.isShadow || c.isFixed || !c.module) continue;
+      const k = [c.module, c.activity, c.origDay, c.origStart, c.dur].join('\u0000');
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(c);
+    }
+    for (const [, members] of by) {
+      if (members.length < 2) continue;
+      let seen = 0, disjoint = true;
+      for (const c of members) {
+        if (seen & c.weeks) { disjoint = false; break; }
+        seen |= c.weeks;
       }
-      if (!c.sizeConfirmed && widest > c.size) {
-        const cohort = trueSizes.get(String(c.module || '').trim());
-        c.size = cohort == null ? widest : Math.min(widest, cohort);
+      if (!disjoint) continue;
+      // Every member must already be in the SAME chain, and "no chain" counts
+      // as one. Letting a survivor with no chain inherit one from a booking it
+      // absorbs puts it in a lecture/seminar sequence it was never part of, and
+      // the ordering rule then fires against today's own timetable: four chains
+      // broke exactly that way, every one of them invented by the merge.
+      if (new Set(members.map(m => m.linked || '')).size > 1) continue;
+
+      // The one with most weeks keeps its title, because it is the one anybody
+      // looking at the timetable would call the class.
+      members.sort((a, b) => b.nWeeks - a.nWeeks || a.id - b.id);
+      const keep = members[0];
+      for (const drop of members.slice(1)) {
+        keep.weeks |= drop.weeks;
+        keep.programmes = [...new Set(keep.programmes.concat(drop.programmes))];
+        if (drop.size > keep.size) { keep.size = drop.size; }
+        keep.sizeConfirmed = keep.sizeConfirmed || drop.sizeConfirmed;
+        keep.sizeKnown = keep.sizeKnown || drop.sizeKnown;
+        keep.bookedRooms = (keep.bookedRooms || []).concat(drop.bookedRooms || []);
+        mergedInto.set(drop.id, keep.id);
       }
-      // And its baseline room is that one, not whichever the class file called
-      // dominant. A class with no single room today has no true "where it is";
-      // the widest is the only one of its rooms that holds it all term, and
-      // staying put is always legal, so starting from a room too small left
-      // SOP543 in a room for 12 when it also meets in one for 24.
-      if (widestRoom !== null && widest >= c.size) {
-        c.origRoom = widestRoom;
-        c.homeRoom = widestRoom;
-        c.homeRoomName = rooms[widestRoom].name;
-        c.origRoomWeeks = c.bookedRooms.filter(b => b.room === widestRoom)
-                                       .reduce((m, b) => m | b.weeks, 0) || c.weeks;
-      }
+      keep.nWeeks = weekList(keep.weeks).length;
+      keep.weeksText = fmtWeeks(keep.weeks);
+      keep.mergedFrom = members.slice(1).map(m => m.title);
+      // bookedRooms has changed, so everything derived from it must be redone.
+      roomProfile(keep);
+    }
+  }
+  if (mergedInto.size) {
+    for (let i = classes.length - 1; i >= 0; i--) {
+      if (mergedInto.has(classes[i].id)) classes.splice(i, 1);
     }
   }
 
@@ -775,9 +868,10 @@ function load(dir, opts) {
 
   const byId = new Map(classes.map(c => [c.id, c]));
 
+  const surviving = id => (mergedInto.has(id) ? mergedInto.get(id) : id);
   const pairFile = f => rd(f)
-    .map(r => [Number(r.class_id_a), Number(r.class_id_b)])
-    .filter(([a, b]) => byId.has(a) && byId.has(b));
+    .map(r => [surviving(Number(r.class_id_a)), surviving(Number(r.class_id_b))])
+    .filter(([a, b]) => a !== b && byId.has(a) && byId.has(b));
 
   // Spring's conflict pairs arrive as files keyed to its own class ids. Autumn
   // has none, so they are derived from the same thing those files encode: two
