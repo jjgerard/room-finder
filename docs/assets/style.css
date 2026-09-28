@@ -801,3 +801,21 @@ a.tab { text-decoration: none; }
   color: var(--muted);
 }
 .substeps > li > p:first-of-type { margin-top: 0; }
+
+/* A verdict, not a scorecard. Where the finding is a yes/no rather than a
+   quantity, a big mono number in a tile makes the reader decode it: "2" means
+   nothing until you have read the 12px caption under it. So the sentence is
+   the display, at a size that is read rather than scanned past, and the
+   numbers go underneath in ordinary prose for whoever wants them. */
+.verdict { margin: 26px 0 12px; }
+.verdict p {
+  font-size: 23px; line-height: 1.38; font-weight: 500; letter-spacing: -.2px;
+  margin: 0 0 10px; padding-left: 16px; border-left: 3px solid var(--line);
+  color: var(--ink);
+}
+.verdict p:last-child { margin-bottom: 0; }
+.verdict p.no { border-left-color: var(--warn); }
+.verdict p.yes { border-left-color: var(--good); }
+.verdict strong { font-weight: 700; }
+.verdict-note { font-size: 15px; color: var(--ink-2); margin: 14px 0 0; padding-left: 19px; }
+@media (max-width: 640px) { .verdict p { font-size: 19px; } }
