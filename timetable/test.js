@@ -1421,6 +1421,32 @@ test('labs: the shipped analysis is what labs.js produces', () => {
   }
 });
 
+test('nav: every page with the bar wires the Timetables menu', () => {
+  // A rewrite of one page dropped its copy of the open/close handler and the
+  // menu silently stopped opening — the button was still there and still
+  // looked like one. The behaviour lives in assets/nav.js now; this checks no
+  // page carries the markup without the script, or a second copy of its own.
+  const fs = require('fs');
+  const path = require('path');
+  const docs = path.join(__dirname, '..', 'docs');
+  for (const page of ['index.html', 'explore.html', 'rooms.html', 'rooms-explorer.html']) {
+    const html = fs.readFileSync(path.join(docs, page), 'utf8');
+    if (!/id="nav-terms"/.test(html)) continue;
+    assert.ok(/assets\/nav\.js/.test(html), page + ' has the menu markup but never loads nav.js');
+    assert.ok(/id="nav-terms-btn"/.test(html), page + ' has no trigger for the menu');
+    // Opening on hover is the nav menu's own behaviour and belongs only to
+    // nav.js. Pages have other things that open — the programme combobox uses
+    // the same class name — so this looks for the hover handlers, not for
+    // "open".
+    assert.ok(!/mouse(enter|leave)/.test(html),
+      page + ' handles hover itself; the nav menu is nav.js\'s job and two copies is how it drifted');
+  }
+  // And the gap between trigger and menu must stay bridged, or crossing it
+  // closes the menu before it can be reached.
+  const css = fs.readFileSync(path.join(docs, 'assets', 'style.css'), 'utf8');
+  assert.ok(/\.bar-drop::before/.test(css), 'the dead zone under the trigger is unbridged again');
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)

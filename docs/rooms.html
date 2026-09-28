@@ -102,6 +102,7 @@
   </div>
 </footer>
 
+<script src="assets/nav.js"></script>
 <script src="assets/model.js"></script>
 <script>
 (function () {
@@ -269,24 +270,6 @@
     else done();
   };
 
-  // The picker, same behaviour as the other pages.
-  (function () {
-    var wrap = document.getElementById('nav-terms');
-    var trigger = document.getElementById('nav-terms-btn');
-    if (!wrap || !trigger) return;
-    var hoverable = function () { return matchMedia('(hover: hover)').matches; };
-    function open() { wrap.classList.add('open'); trigger.setAttribute('aria-expanded', 'true'); }
-    function close() { wrap.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); }
-    wrap.onmouseenter = function () { if (hoverable()) open(); };
-    wrap.onmouseleave = function () { if (hoverable()) close(); };
-    trigger.onclick = function (e) {
-      e.stopPropagation();
-      if (!wrap.classList.contains('open')) open();
-      else if (!hoverable()) close();
-    };
-    document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) close(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
-  })();
 
   window.TTModel.loadTimetable().then(function (h) {
     H = h;

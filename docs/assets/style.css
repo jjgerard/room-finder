@@ -189,6 +189,10 @@ body {
   padding: 4px 0;
 }
 .bar-menu.open .bar-drop { display: block; }
+/* The 4px below the trigger is a gap the pointer has to cross, and crossing it
+   left both the trigger and the menu — so mouseleave fired and the menu shut
+   before it could be reached. This bridges it invisibly. */
+.bar-drop::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; height: 6px; }
 
 .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 16px 72px; }
 /* Which timetable is open, said once where the eye lands first. */

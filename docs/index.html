@@ -15,7 +15,10 @@
   <h1>Belfast Timetable</h1>
   <nav id="appnav">
     <a href="#" id="nav-about">About</a>
-    <span class="bar-menu" id="nav-terms"></span>
+    <span class="bar-menu" id="nav-terms">
+      <button class="bar-link" id="nav-terms-btn" aria-haspopup="true" aria-expanded="false">Timetables</button>
+      <div class="bar-drop" role="menu"><div class="drop-item soon">Loading…</div></div>
+    </span>
     <a href="explore.html">Find a free room</a>
     <a href="rooms-explorer.html">Search rooms</a>
     <a href="rooms.html">Room needs</a>
@@ -103,6 +106,7 @@
   </div>
 </footer>
 
+<script src="assets/nav.js"></script>
 <script src="assets/model.js"></script>
 <script src="assets/constraints.js"></script>
 <script src="assets/seeds.js"></script>
@@ -830,17 +834,13 @@
     // them. It is a menu rather than three more links because there are three
     // timetables today and four once autumn is rebuilt.
     var wrap = document.getElementById('nav-terms');
-    if (!wrap) return;
-    wrap.innerHTML = '';
-    var trigger = document.createElement('button');
-    trigger.className = 'bar-link';
-    trigger.id = 'nav-terms-btn';
-    trigger.setAttribute('aria-haspopup', 'true');
-    trigger.setAttribute('aria-expanded', 'false');
-    trigger.textContent = 'Timetables';
-    var menu = document.createElement('div');
-    menu.className = 'bar-drop';
-    menu.setAttribute('role', 'menu');
+    var trigger = document.getElementById('nav-terms-btn');
+    var menu = wrap && wrap.querySelector('.bar-drop');
+    if (!wrap || !trigger || !menu) return;
+    // The trigger and menu are in the markup, not built here: this runs only
+    // once the packed timetable has loaded, which is two megabytes, and for
+    // that whole time the bar had no Timetables button to click at all.
+    menu.innerHTML = '';
 
     TERM_TABS.forEach(function (k) {
       var t = H.terms[k];
@@ -850,7 +850,7 @@
       item.dataset.k = k;
       item.setAttribute('role', 'menuitem');
       item.innerHTML = esc(t.label) + '<span class="sub">' + esc(t.sub) + '</span>';
-      item.onclick = function () { close(); selectTab(k); };
+      item.onclick = function () { selectTab(k); };
       menu.appendChild(item);
     });
     // Only while a term has not been rebuilt: a gap would leave a visitor
@@ -862,35 +862,9 @@
       menu.appendChild(soon);
     }
 
-    function open() {
-      wrap.classList.add('open');
-      trigger.setAttribute('aria-expanded', 'true');
-    }
-    function close() {
-      wrap.classList.remove('open');
-      trigger.setAttribute('aria-expanded', 'false');
-    }
-    // Hover opens it where there is a pointer; the click handler stays for
-    // phones, and for a keyboard user who arrives on the trigger with Tab.
-    wrap.onmouseenter = function () { if (matchMedia('(hover: hover)').matches) open(); };
-    wrap.onmouseleave = function () { if (matchMedia('(hover: hover)').matches) close(); };
-    trigger.onclick = function (e) {
-      e.stopPropagation();
-      // Where hover already opened it, a click must not close it again: the
-      // pointer is over the trigger, so closing would be undone immediately
-      // and read as the menu refusing to open.
-      if (!wrap.classList.contains('open')) open();
-      else if (!matchMedia('(hover: hover)').matches) close();
-    };
-    document.addEventListener('click', function (e) {
-      if (!wrap.contains(e.target)) close();
-    });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') close();
-    });
-
-    wrap.appendChild(trigger);
-    wrap.appendChild(menu);
+    // Opening and closing lives in assets/nav.js, with every other page's.
+    // Already wired on DOM ready; this is a no-op unless that was missed.
+    window.TTNav.wire(wrap, trigger);
     markNav();
   }
 
