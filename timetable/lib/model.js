@@ -447,18 +447,41 @@ function load(dir, opts) {
     const by = new Map();
     for (const c of classes) {
       if (c.isShadow || c.isFixed || !c.module) continue;
-      const k = [c.module, c.activity, c.origDay, c.origStart, c.dur].join('\u0000');
+      // Deliberately NOT keyed on the day and hour it sits at today. BEN147's
+      // spring lecture is nine bookings: 09:15 in most weeks and 12:15 in weeks
+      // 5 and 9, because something clashed in those two. Keyed on where they
+      // are, that reads as two different lectures and the rebuild faithfully
+      // reproduces a class that moves hour twice a term. It is one lecture, and
+      // a student should find it in the same place every week.
+      //
+      // Two lecture streams for different cohorts are what this would wrongly
+      // catch, and the disjoint-weeks test below excludes them: those run the
+      // same weeks as each other, not complementary ones.
+      const k = [c.module, c.activity, c.dur].join('\u0000');
       if (!by.has(k)) by.set(k, []);
       by.get(k).push(c);
     }
-    for (const [, members] of by) {
-      if (members.length < 2) continue;
-      let seen = 0, disjoint = true;
-      for (const c of members) {
-        if (seen & c.weeks) { disjoint = false; break; }
-        seen |= c.weeks;
+    // Greedily, not all-or-nothing. A module's lectures are one group now that
+    // the hour is out of the key, and a single overlapping pair in it used to
+    // discard the whole group — which lost more merges than the looser key
+    // gained. So take the widest class and absorb whatever fits around it,
+    // then start again on what is left.
+    const runs = [];
+    for (const [, all] of by) {
+      let pool = all.slice().sort((a, b) => b.nWeeks - a.nWeeks || a.id - b.id);
+      while (pool.length > 1) {
+        const head = pool[0], take = [head];
+        let seen = head.weeks;
+        const rest = [];
+        for (const c of pool.slice(1)) {
+          if (!(seen & c.weeks)) { take.push(c); seen |= c.weeks; }
+          else rest.push(c);
+        }
+        if (take.length > 1) runs.push(take);
+        pool = rest;
       }
-      if (!disjoint) continue;
+    }
+    for (const members of runs) {
       // Every member must already be in the SAME chain, and "no chain" counts
       // as one. Letting a survivor with no chain inherit one from a booking it
       // absorbs puts it in a lecture/seminar sequence it was never part of, and
@@ -466,9 +489,8 @@ function load(dir, opts) {
       // broke exactly that way, every one of them invented by the merge.
       if (new Set(members.map(m => m.linked || '')).size > 1) continue;
 
-      // The one with most weeks keeps its title, because it is the one anybody
-      // looking at the timetable would call the class.
-      members.sort((a, b) => b.nWeeks - a.nWeeks || a.id - b.id);
+      // The widest keeps its title: it is the one anybody looking at the
+      // timetable would call the class.
       const keep = members[0];
       for (const drop of members.slice(1)) {
         keep.weeks |= drop.weeks;
