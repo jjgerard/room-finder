@@ -173,6 +173,9 @@
       roomTypes: packed.roomTypes || [],
       // How many corrections timetabling has supplied, by kind.
       corrections: packed.corrections || null,
+      // The one-room finding, for the About page. Null if labs.json was absent
+      // when the data was packed, and the section is then simply not shown.
+      labs: packed.labs || null,
       // When this data file was built, which is not the same as the day any
       // one term was solved.
       generated: packed.generated || null,

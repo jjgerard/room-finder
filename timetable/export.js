@@ -407,6 +407,24 @@ const packed = {
   // What timetabling has corrected, for the About page's account of how a term
   // got clean.
   corrections: correctionCounts(),
+  // The one-room finding, from timetable/labs.js. Read rather than recomputed:
+  // half of it is sixty solver runs that take an hour, and the file is
+  // committed. Missing or unreadable, the About page simply omits the section.
+  labs: (function () {
+    try {
+      const L = JSON.parse(fs.readFileSync(path.join(DOCS, 'data', 'labs.json'), 'utf8'));
+      const big = L.spring.rooms[0], next = L.spring.rooms[1], A = L.experiment.arms;
+      const zero = a => a.filter(v => v === 0).length;
+      return {
+        code: big.code, capacity: big.capacity, nextCapacity: next.capacity,
+        labs: L.spring.rooms.length,
+        sole: big.sole, soleAutumn: L.autumn.rooms[0].sole, sizes: big.soleSizes,
+        seeds: L.experiment.seeds,
+        shutBest: Math.min(...A.all8), openBest: Math.min(...A.but311),
+        openZero: zero(A.but311), freeZero: zero(A.none),
+      };
+    } catch (e) { return null; }
+  })(),
   classes: packClasses(model, solved, c => c.programmes.map(p => progId(p))),
   cand: model.classes.map(c => c.cand),
   // Rooms of a kind each class can use, whatever their size: what a

@@ -651,6 +651,35 @@
     return out.join('');
   }
 
+  /**
+   * One room. Brief on purpose: the finding is a yes/no, so it is two
+   * sentences and the numbers that make them checkable, not a study.
+   */
+  function labsSection(H) {
+    var L = H.labs;
+    if (!L) return '';
+    return [
+      '<h3>One room</h3>',
+      '<p class="small muted">Eight computer labs carry <strong>CEBE</strong> in their names, ',
+      'six of them <em>School of Computing</em>, and eight schools teach in them. Seven could ',
+      'be reserved for Computing tomorrow: not one of them is the only room that fits anybody. ',
+      'The eighth is.</p>',
+      '<div class="verdict">',
+      '<p class="no"><strong>Close ' + esc(L.code) + '</strong> and Spring 2026 cannot be ',
+      'timetabled at all without breaking rules.</p>',
+      '<p class="yes"><strong>Open it</strong> \u2014 with the other seven still shut \u2014 ',
+      'and every rule can hold.</p>',
+      '</div>',
+      '<p class="small muted">It holds ' + L.capacity + ', the next largest holds ' +
+      L.nextCapacity + ', so ' + fmtN(L.sole) + ' spring and ' + fmtN(L.soleAutumn) +
+      ' autumn classes of ' + L.sizes[0] + '\u2013' + L.sizes[1] + ' students have no other ',
+      'CEBE room that fits them. Across ' + L.seeds + ' attempts each way, with the other ',
+      'seven closed in both: shut, the best still broke ' + L.shutBest + ' rules and none of ',
+      'the ' + L.seeds + ' reached zero; open, ' + L.openZero + ' did. It restores what is ',
+      'possible, not what is easy \u2014 with nothing closed at all, ' + L.freeZero + ' do.</p>',
+    ].join('');
+  }
+
   function sweepSection(H) {
     // Every clean one is shipped, so each seed is a link to the timetable
     // itself rather than a number to take on trust.
@@ -971,6 +1000,8 @@
       '</ul>',
 
       sweepSection(H),
+
+      labsSection(H),
 
       stripeGraphic(),
 

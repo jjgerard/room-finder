@@ -467,7 +467,7 @@ went on reporting 377 changes after the script had been fixed to report 197.
 | `tools/term-snapshot.js` | The reader itself. Runs under the driver, or pasted into a console. |
 | `timetable/refresh.js` | Folds a snapshot back into `terms.json`, says what changed, repairs the rebuilt term for it, and packs the site data. |
 | `timetable/seeds.js` | Packs the clean timetables a sweep found, re-checking each one. |
-| `timetable/labs.js` | The CEBE lab analysis behind **One room**; writes `docs/data/labs.json`. |
+| `timetable/labs.js` | The CEBE lab analysis behind the About page's **One room**; writes `docs/data/labs.json`, which `export.js` folds into the packed data. |
 | `timetable/experiments/` | One-off studies whose numbers a page quotes. `cebe-fence.js` is the ring-fence run; it takes about an hour and its results are recorded in `labs.js` rather than regenerated. |
 
 ## The site
@@ -475,7 +475,7 @@ went on reporting 377 changes after the script had been fixed to report 197.
 Served straight from `docs/` by GitHub Pages — **Settings → Pages → Deploy from a branch
 → `/docs`**. Live at **https://jjgerard.github.io/room-finder/**.
 
-Six pages, behind one bar:
+Five pages, behind one bar:
 
 | | |
 |---|---|
@@ -484,7 +484,6 @@ Six pages, behind one bar:
 | **Find a free room** | Give the slot you need — days, time, weeks, seats, buildings, room type — and it returns the rooms free in every week you ticked, smallest that fits first, then the near misses with the weeks they are taken and by what. |
 | **Search rooms** | Every room as a week calendar. Tick several and see them side by side, in any of the four timetables. |
 | **Room needs** | Records what kind of room a module actually needs, and writes the CSV the solver reads. This is how a correction gets made. |
-| **One room** | One argument, with its workings: eight labs are branded for a single school and eight schools teach in them. Seven could be reserved tomorrow with no effect; the eighth is the difference between a legal spring timetable and none. |
 
 `docs/admin.html` is a sixth, `noindex` and not in the bar: it is for whoever refreshes
 the data, and is described [above](#refreshing-from-resource-booker).
