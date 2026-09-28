@@ -1379,6 +1379,48 @@ test('pages: every element id the scripts reach for exists in the markup', () =>
   }
 });
 
+test('labs: the shipped analysis is what labs.js produces', () => {
+  // docs/data/labs.json carries the argument on docs/labs.html. It is
+  // generated, so a hand-edit or a stale copy would put a claim on the site
+  // that the model no longer supports — which is the failure the whole page is
+  // about. Regenerate with: node timetable/labs.js
+  const fs = require('fs');
+  const path = require('path');
+  const file = path.join(__dirname, '..', 'docs', 'data', 'labs.json');
+  if (!fs.existsSync(file)) return;
+  const shipped = JSON.parse(fs.readFileSync(file, 'utf8'));
+
+  // The eight rooms named at the outset, independent of any pattern. The first
+  // version of this analysis matched "BD ACADemy" on /CAD/ and ring-fenced the
+  // catering kitchens.
+  const WANTED = ['BC-02-303', 'BC-03-303', 'BC-03-305', 'BC-03-309',
+                  'BC-03-311', 'BC-05-306', 'BC-03-307', 'BC-03-308'].sort();
+  for (const term of ['spring', 'autumn']) {
+    const t = shipped[term];
+    assert.deepStrictEqual(t.rooms.map(r => r.code).sort(), WANTED,
+      term + ': the analysis covers rooms that are not the CEBE labs');
+    assert.ok(t.rooms.every(r => r.capacity > 0), term + ': a lab with no recorded capacity');
+    // Capacities nest, so only the largest can be anyone's sole option.
+    const sole = t.rooms.filter(r => r.sole > 0);
+    assert.strictEqual(sole.length, 1,
+      term + ': ' + sole.length + ' labs are a sole option; the nesting argument assumes one');
+    assert.strictEqual(sole[0].capacity, Math.max(...t.rooms.map(r => r.capacity)),
+      term + ': the sole-option lab is not the largest, which breaks the nesting argument');
+  }
+
+  // Releasing rooms can only ever help, so the arms must not cross.
+  const A = shipped.experiment.arms;
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  assert.ok(Math.min(...A.none) <= Math.min(...A.but311), 'best: none worse than but311');
+  assert.ok(Math.min(...A.but311) <= Math.min(...A.all8), 'best: but311 worse than all8');
+  assert.ok(mean(A.none) <= mean(A.but311), 'mean: none worse than but311');
+  assert.ok(mean(A.but311) <= mean(A.all8), 'mean: but311 worse than all8');
+  for (const k of Object.keys(A)) {
+    assert.strictEqual(A[k].length, shipped.experiment.seeds,
+      k + ' does not have ' + shipped.experiment.seeds + ' seeds');
+  }
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)

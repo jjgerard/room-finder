@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One room · Belfast Timetable</title>
+<meta name="description" content="Eight rooms are branded for one school. Seven of them could be reserved tomorrow with no effect. The eighth is the difference between a legal spring timetable and none.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="appbar">
+  <span class="mark" aria-hidden="true"></span>
+  <h1>Belfast Timetable</h1>
+  <nav>
+    <a href="index.html">About</a>
+    <span class="bar-menu" id="nav-terms">
+      <button class="bar-link" id="nav-terms-btn" aria-haspopup="true" aria-expanded="false">Timetables</button>
+      <div class="bar-drop" role="menu">
+        <a class="drop-item" role="menuitem" href="index.html?t=autumn">Autumn 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNow">Spring 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNew">Spring 2026<span class="sub">rebuilt</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=autumnNew">Autumn 2026<span class="sub">rebuilt</span></a>
+      </div>
+    </span>
+    <a href="explore.html">Find a free room</a>
+    <a href="rooms-explorer.html">Search rooms</a>
+    <a href="rooms.html">Room needs</a>
+    <a href="labs.html" aria-current="page">One room</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <h2 style="margin-bottom:6px">One room</h2>
+  <p class="lead">
+    Eight computer labs on the Belfast campus carry <strong>CEBE</strong> in their names, six of
+    them <em>School of Computing</em>. Eight schools teach in them. This asks what it would cost
+    to take the name literally — and finds that seven of the eight could be reserved tomorrow
+    with nobody noticing, while the eighth is the difference between a legal spring timetable
+    and none.
+  </p>
+
+  <div id="head"></div>
+
+  <h3>The eight rooms</h3>
+  <p class="small muted">Demand counts classes that do <em>not</em> already teach in a CEBE lab
+    but could use this one. <strong>Sole option</strong> counts those for which it is the only
+    CEBE room that fits them at all.</p>
+  <div id="rooms"></div>
+
+  <h3>Why only one of them counts</h3>
+  <p class="small muted" id="nest"></p>
+
+  <h3>What the ring-fence costs</h3>
+  <p class="small muted">Three arms, twenty random starting points each, on Spring 2026 — the
+    denser of the two terms and the one with least slack. Everything but the room rule is
+    identical between arms, so the difference is the ring-fence and nothing else.</p>
+  <div id="exp"></div>
+
+  <h3>What this means</h3>
+  <div class="note good"><p style="margin:0">
+    <strong>Seven of the eight labs could be reserved for the School of Computing with no
+    effect on anyone.</strong> The eighth, <code>BC-03-311</code>, is the only computer lab on
+    campus holding more than 50 — and in the tighter of the two terms it is the difference
+    between a timetable that breaks no rules and one that does. The ask is one room, not eight.
+  </p></div>
+
+  <h3>How this was checked, and where it is soft</h3>
+  <details class="stat-list" open>
+    <summary>Three things that would weaken it, stated rather than waited for</summary>
+    <ul>
+      <li><strong>Nobody is stranded.</strong> Not one of the classes that loses its only CEBE
+        option is left with nowhere at all — they have rooms outside the set. The cost is lost
+        flexibility, not impossibility, which is a weaker claim than it first sounds and the
+        true one.</li>
+      <li><strong>Spring has little slack anyway.</strong> It reaches a legal timetable from
+        6 of 30 starting points against autumn's 9, and it is the denser term — 3,302 bookings
+        against 2,369. A term that tight will tip under most added restrictions. Autumn absorbs
+        the same ring-fence without becoming unsolvable, and that is the honest limit on the
+        claim.</li>
+      <li><strong>Candidate rooms are partly inferred.</strong> Which rooms a class may use is
+        derived from the model, and 98% of class sizes in it are inferred from the room the
+        class currently sits in rather than from a confirmed figure. So "rooms available" is
+        the pool the model considers eligible, not a survey of what would physically work.</li>
+    </ul>
+  </details>
+  <details class="stat-list">
+    <summary>Two ways this analysis was wrong before it was right</summary>
+    <ul>
+      <li><strong>It ring-fenced the catering kitchens.</strong> The first room pattern was
+        <code>/CEBE|MARCS|CAD/</code>, which matches <em>BD&nbsp;ACADemy</em> on the substring.
+        That run produced a confident answer to a question nobody had asked. The pattern now
+        uses word boundaries, and a test checks the eight rooms matched are the eight
+        intended.</li>
+      <li><strong>It ran at five seeds, and measured noise.</strong> At five starting points the
+        variance between runs is larger than the difference between configurations, and that
+        version scored some room releases as <em>worse</em> than fencing everything — which
+        cannot happen, since releasing a room only ever adds options. That impossibility is the
+        only thing that revealed it. The arms below are compared on median and mean as well as
+        best, at twenty seeds.</li>
+    </ul>
+  </details>
+  <p class="small muted" id="prov"></p>
+
+</main>
+
+<script src="assets/model.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(t) {
+    return String(t).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  var n = function (v) { return Number(v).toLocaleString(); };
+  var mean = function (a) { return a.reduce(function (x, y) { return x + y; }, 0) / a.length; };
+  var min = function (a) { return Math.min.apply(null, a); };
+  function median(a) { var s = a.slice().sort(function (x, y) { return x - y; }); return s[Math.floor(s.length / 2)]; }
+
+  fetch('data/labs.json').then(function (r) { return r.json(); }).then(function (L) {
+    var sp = L.spring, au = L.autumn;
+
+    $('head').innerHTML = '<div class="note"><p style="margin:0">' +
+      'Ring-fencing all eight would take <strong>' + n(sp.lose) + '</strong> spring classes and ' +
+      '<strong>' + n(au.lose) + '</strong> autumn classes out of the pool, removing ' +
+      n(sp.slots) + ' and ' + n(au.slots) + ' possible room placements. ' +
+      '<strong>' + n(sp.keep) + '</strong> and <strong>' + n(au.keep) + '</strong> classes ' +
+      'respectively already teach in one and would keep their access.</p></div>';
+
+    var rows = sp.rooms.map(function (r, i) {
+      var a = au.rooms[i];
+      var sole = r.sole || a.sole;
+      return '<tr' + (sole ? ' style="font-weight:600"' : '') + '>' +
+        '<td><code>' + esc(r.code) + '</code></td>' +
+        '<td style="text-align:right">' + r.capacity + '</td>' +
+        '<td style="text-align:right">' + n(r.demand) + '</td>' +
+        '<td style="text-align:right">' + n(a.demand) + '</td>' +
+        '<td style="text-align:right">' + (r.sole ? n(r.sole) : '\u2014') + '</td>' +
+        '<td style="text-align:right">' + (a.sole ? n(a.sole) : '\u2014') + '</td></tr>';
+    }).join('');
+    $('rooms').innerHTML =
+      '<div class="card" style="overflow:hidden"><div class="scroll"><table><thead><tr>' +
+      '<th>Room</th><th style="text-align:right">Seats</th>' +
+      '<th style="text-align:right" colspan="2">Could use it</th>' +
+      '<th style="text-align:right" colspan="2">Sole CEBE option</th></tr><tr>' +
+      '<th></th><th></th><th style="text-align:right">spring</th><th style="text-align:right">autumn</th>' +
+      '<th style="text-align:right">spring</th><th style="text-align:right">autumn</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+
+    var big = sp.rooms[0], next = sp.rooms[1];
+    $('nest').innerHTML =
+      'Capacities nest. <code>' + esc(big.code) + '</code> holds <strong>' + big.capacity +
+      '</strong>; the next largest holds <strong>' + next.capacity + '</strong>. Anything that ' +
+      'fits a smaller lab therefore also fits the largest, so releasing any of the other seven ' +
+      'gives access only to classes that could have used <code>' + esc(big.code) + '</code> ' +
+      'anyway. It is the only one that opens the set to a group nothing else can hold: ' +
+      '<strong>' + n(big.sole) + '</strong> spring classes and <strong>' + n(au.rooms[0].sole) +
+      '</strong> autumn classes, of ' + big.soleSizes[0] + ' to ' + big.soleSizes[1] +
+      ' students. Every other lab is the sole option for nobody.';
+
+    var E = L.experiment, A = E.arms;
+    var arm = function (key, label) {
+      var v = A[key];
+      return '<tr><td>' + label + '</td>' +
+        '<td style="text-align:right">' + v.filter(function (x) { return x === 0; }).length +
+        ' / ' + E.seeds + '</td>' +
+        '<td style="text-align:right">' + min(v) + '</td>' +
+        '<td style="text-align:right">' + median(v) + '</td>' +
+        '<td style="text-align:right">' + mean(v).toFixed(1) + '</td></tr>';
+    };
+    var rec = Math.round(100 * (mean(A.all8) - mean(A.but311)) / (mean(A.all8) - mean(A.none)));
+    $('exp').innerHTML =
+      '<div class="card" style="overflow:hidden"><div class="scroll"><table><thead><tr><th>Arm</th>' +
+      '<th style="text-align:right">Reached zero</th><th style="text-align:right">Best</th>' +
+      '<th style="text-align:right">Median</th><th style="text-align:right">Mean</th>' +
+      '</tr></thead><tbody>' +
+      arm('none', 'As timetabled today') +
+      arm('all8', 'All eight ring-fenced') +
+      arm('but311', 'All but <code>BC-03-311</code>') +
+      '</tbody></table></div></div>' +
+      '<div class="note ' + (min(A.but311) === 0 ? 'good' : 'warn') + '"><p style="margin:0">' +
+      'With all eight closed, <strong>no starting point reaches a legal timetable</strong> — the ' +
+      'best manages ' + min(A.all8) + ' hard violations. Open <code>BC-03-311</code> alone and ' +
+      'spring is solvable again, recovering <strong>' + rec + '%</strong> of the loss. ' +
+      '<span class="muted">Solvable is not the same as comfortable: it reaches zero from ' +
+      A.but311.filter(function (x) { return x === 0; }).length + ' seed' +
+      (A.but311.filter(function (x) { return x === 0; }).length === 1 ? '' : 's') + ' in ' +
+      E.seeds + ', against ' + A.none.filter(function (x) { return x === 0; }).length +
+      ' unrestricted.</span></p></div>';
+
+    $('prov').innerHTML = 'Room figures computed from the timetable this site ships, ' +
+      'regenerated by <code>node timetable/labs.js</code> (' + esc(L.generated) + '). ' +
+      'Solver figures from <code>' + esc(E.command) + '</code>, run ' + esc(E.ran) + ' — ' +
+      (E.seeds * 3) + ' solves, about an hour.';
+  }).catch(function (e) {
+    $('head').innerHTML = '<div class="note warn"><p style="margin:0">Could not load the ' +
+      'analysis: ' + esc(e.message) + '</p></div>';
+  });
+})();
+</script>
+
+</body>
+</html>
