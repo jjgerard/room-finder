@@ -442,8 +442,15 @@ function load(dir, opts) {
   //     autumn slots look like this. Merging them would be nonsense.
   //   - anything pinned, shadowed, or in a different linked chain from its
   //     fellows, where merging would quietly move something it should not.
+  // `merge: false` loads the timetable exactly as recorded, one class per
+  // booking. That is what "today" has to be measured on: merging is a claim
+  // about what a class IS, and applying it to the baseline would put a class at
+  // one hour and attribute to it every week it really sat at another — which
+  // reports faults in Ulster's timetable that are not there. Autumn's count
+  // rose from 43 to 66 that way. The rebuild uses the merged model; the
+  // baseline it is compared against does not.
   const mergedInto = new Map();
-  {
+  if (opts.merge !== false) {
     const by = new Map();
     for (const c of classes) {
       if (c.isShadow || c.isFixed || !c.module) continue;
@@ -891,9 +898,23 @@ function load(dir, opts) {
   const byId = new Map(classes.map(c => [c.id, c]));
 
   const surviving = id => (mergedInto.has(id) ? mergedInto.get(id) : id);
-  const pairFile = f => rd(f)
-    .map(r => [surviving(Number(r.class_id_a)), surviving(Number(r.class_id_b))])
-    .filter(([a, b]) => a !== b && byId.has(a) && byId.has(b));
+  // Deduped after the remap, and that is not tidiness. Two pairs (A,B) and
+  // (A,B') where B' merged into B become the SAME pair twice; the checker
+  // walks the list and counts both, the solver keys on the pair and counts
+  // one, and the two stop agreeing — which is the one thing the solver's
+  // incremental cost may never do. Spring drifted by 9 that way.
+  const pairFile = f => {
+    const seen = new Set(), out = [];
+    for (const r of rd(f)) {
+      const a = surviving(Number(r.class_id_a)), b = surviving(Number(r.class_id_b));
+      if (a === b || !byId.has(a) || !byId.has(b)) continue;
+      const k = a < b ? a + ':' + b : b + ':' + a;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push([a, b]);
+    }
+    return out;
+  };
 
   // Spring's conflict pairs arrive as files keyed to its own class ids. Autumn
   // has none, so they are derived from the same thing those files encode: two

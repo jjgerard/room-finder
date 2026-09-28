@@ -309,7 +309,12 @@ if (fs.existsSync(autumnSolPath)) {
   {
     const C = require('./lib/constraints');
     const opts = { dayStart: C.DAY_START, dayEnd: C.DAY_END };
-    const baseline = new Map(autumnModel.classes.map(c =>
+    // Today is measured on the UNMERGED model — the timetable as recorded,
+    // one class per booking. See model.js on `merge: false`.
+    const todayModel = load(null, { clashes: autumnSol.meta.clashMode || 'all',
+                                    term: 'autumn', merge: false });
+    build(todayModel);
+    const baseline = new Map(todayModel.classes.map(c =>
       [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom, weeks: c.origRoomWeeks }]));
     const solvedAssign = new Map(autumnModel.classes.map(c => {
       const a = placed.get(c.id);
@@ -318,8 +323,8 @@ if (fs.existsSync(autumnSolPath)) {
     }));
     const fixedChk = C.check(autumnModel, solvedAssign, opts);
     autumnScore = {
-      now: C.check(autumnModel, baseline,
-        Object.assign({ occupancy: autumnModel.currentOccupancy }, opts)).counts,
+      now: C.check(todayModel, baseline,
+        Object.assign({ occupancy: todayModel.currentOccupancy }, opts)).counts,
       fixed: fixedChk.counts,
       // What is still broken, by name. The solution file's own count came
       // from a run that graded itself against a widened teaching day and

@@ -114,6 +114,11 @@ test('offsets: a consistent cycle is accepted', () => {
 
 // ---------------------------------------------------------------- model
 const model = load();
+// Today's timetable is the one as recorded, a class per booking. Assertions
+// about what the CURRENT timetable contains must use this, not the merged
+// model: merging is a claim about what a class is, and it puts a class at one
+// hour while attributing to it weeks that really sat at another.
+const todayModel = load(null, { merge: false });
 
 test('model: BK bookings are excluded', () => {
   eq(model.classes.filter(c => c.activity === 'BK').length, 0);
@@ -195,8 +200,8 @@ test('model: preserved pairs really are adjacent today', () => {
 test('model: overlap today is used only to remove clash edges, never add', () => {
   // Two classes running at the same time cannot share students or a lecturer.
   // So no edge in the list may name a pair that currently overlaps.
-  for (const [x, y] of model.cannotShareTime) {
-    const a = model.byId.get(x), b = model.byId.get(y);
+  for (const [x, y] of todayModel.cannotShareTime) {
+    const a = todayModel.byId.get(x), b = todayModel.byId.get(y);
     if (a.origDay !== b.origDay) continue;
     if (!(a.weeks & b.weeks)) continue;
     assert.ok(!(a.origStart < b.origStart + b.dur && b.origStart < a.origStart + a.dur),
@@ -508,9 +513,9 @@ test('checker: movement counts day, time and room separately', () => {
 test('baseline: today has no cohort or staff clashes', () => {
   // The conflict graph was inferred from this timetable, so anything else
   // would mean the model contradicts its own source.
-  const assign = new Map(model.classes.map(c =>
+  const assign = new Map(todayModel.classes.map(c =>
     [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom }]));
-  const r = C.check(model, assign, {});
+  const r = C.check(todayModel, assign, {});
   eq(r.counts.timeClash, 0);
   eq(r.counts.dayPairing, 0);
 });
@@ -521,9 +526,9 @@ test('baseline: the room-clash count measures forcing one room per class', () =>
   // so checking it measures: IF every class were squeezed into one room, how
   // many pairs would collide? That is the problem statement, not a claim that
   // the live timetable double-books 295 rooms — it does not.
-  const assign = new Map(model.classes.map(c =>
+  const assign = new Map(todayModel.classes.map(c =>
     [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom }]));
-  const r = C.check(model, assign, {});
+  const r = C.check(todayModel, assign, {});
   assert.ok(r.counts.roomClash > 100, 'expected collapsing to one room to create collisions');
   eq(r.counts.timeClash, 0, 'the live timetable has no cohort clashes');
 });

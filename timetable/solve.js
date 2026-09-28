@@ -52,12 +52,18 @@ console.log(`clash edges: ${model.cannotShareTime.length} of ${model.edgeStats.t
 // The baseline carries the weeks each class is actually in its original room,
 // which is not its full week list when it is split across rooms. Without that
 // the comparison reports clashes today that never happen.
-const baseline = new Map(model.classes.map(c =>
+// The baseline is the timetable as recorded, one class per booking — NOT the
+// merged model the solver works on. Merging says several bookings are one
+// class; measuring today that way puts the class at one hour and charges it
+// with every week it really sat at another.
+const todayModel = load(null, { clashes: CLASHES, term: TERM, merge: false });
+require('./lib/components').build(todayModel);
+const baseline = new Map(todayModel.classes.map(c =>
   [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom, weeks: c.origRoomWeeks }]));
 // Judged from the bookings themselves: the class file cannot say which
 // weeks a split class is in which room, and scoring it as if it were in
 // its dominant room all term reported 288 clashes that never happen.
-const base = C.check(model, baseline,
+const base = C.check(todayModel, baseline,
   Object.assign({ occupancy: model.currentOccupancy }, CHECK_OPTS));
 console.log(`today's timetable, judged against the hard rules: ${base.total} violations ` +
             `(${base.counts.roomClash} room, ${base.counts.linkedOrder} lecture/seminar)\n`);
