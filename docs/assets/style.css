@@ -133,10 +133,10 @@ body {
   opacity: .85;
   flex: none;
 }
-.appbar h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: .2px; }
-/* The links sit beside the title rather than across the bar: About reads as
-   part of the masthead, and Fix a clash closes the same short row. */
-.appbar nav { margin-left: 14px; display: flex; gap: 2px; flex-wrap: wrap; }
+/* There is no title in the bar: the mark carries the site and About sits
+   straight after it, so the row reads as one short list rather than a
+   masthead with a menu bolted on. */
+.appbar nav { margin-left: 0; display: flex; gap: 2px; flex-wrap: wrap; }
 .appbar nav a {
   color: var(--bar-sub);
   text-decoration: none;
@@ -149,7 +149,7 @@ body {
 .appbar nav a:hover { background: rgba(255, 255, 255, .08); color: var(--bar-ink); }
 .appbar nav a[aria-current="page"] { background: rgba(255, 255, 255, .14); color: var(--bar-ink); }
 
-/* The timetable picker, sitting in the bar between About and Fix a clash. The
+/* The timetable picker, sitting in the bar just after About. The
    trigger is a button so it can own the menu, so it borrows the links' look
    rather than inheriting it. */
 .bar-menu { position: relative; display: flex; }
