@@ -125,6 +125,24 @@
     if (!el) return Promise.resolve(null);
     return load(termKey).then(function (pack) {
       if (!pack) { el.hidden = true; el.innerHTML = ''; return null; }
+
+      // A pack solved against a different set of classes is not an alternative
+      // to this timetable, it is an alternative to a different one. apply()
+      // already refuses such a placement, but refusing AFTER the chips are on
+      // screen means offering someone a timetable that throws when they click
+      // it — which is what shipping a stale pack did. Check before offering.
+      var term = H.terms[termKey];
+      var stale = !term || !pack.seeds.length ||
+                  pack.seeds[0].day.length !== term.rows.length;
+      if (stale) {
+        el.hidden = false;
+        el.innerHTML = '<div class="seedbar-head"><strong>Alternative arrangements</strong> ' +
+          '<span class="small muted">Not shown: these were solved against ' +
+          (pack.classes ? pack.classes.toLocaleString() : 'a different number of') +
+          ' classes and this timetable has ' + term.rows.length.toLocaleString() +
+          '. They are being regenerated.</span></div>';
+        return null;
+      }
       el.hidden = false;
 
       var chosen = seed == null ? pack.published : seed;

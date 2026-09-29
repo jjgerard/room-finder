@@ -821,7 +821,14 @@
     // reported 288 room clashes, and the per-room data shows none of them
     // happen.
     var occ = M.currentOccupancy ? M.currentOccupancy(H) : null;
-    var now = C.check(model, a.current, occ ? { occupancy: occ } : {});
+    // Today's counts come from the export, measured on the unmerged model — a
+    // class per booking, which is what the timetable actually is. Computing
+    // them here judges today through the rebuild's model, where several
+    // bookings have become one class sitting at one hour, and it reported 74
+    // lecture/seminar pairs pulled apart against the real 75.
+    var now = H.todayCounts
+      ? { counts: H.todayCounts.counts, total: H.todayCounts.total, violations: [] }
+      : C.check(model, a.current, occ ? { occupancy: occ } : {});
     var fixed = C.check(model, a.solved, {});
     var mv = C.movement(model, a.solved);
     var softNow = C.softScore(model, a.current);
@@ -996,7 +1003,9 @@
       '<li><strong>So the rules bend instead of the calendar.</strong> When nothing fits, a class ',
       'moves to a different room part-way through the term' +
       (TODAY ? ' (' + fmtN(moved.length) + ' of ' + fmtN(TODAY.bookings) + ' bookings)' : '') +
-      ', or a gap opens between a lecture and its seminar (' + gappy + ' of ' + groups + ').</li>',
+      ', or a gap opens in a lecture-and-seminar chain (' +
+      (H.todayCounts ? H.todayCounts.gappy + ' of ' + H.todayCounts.groups
+                     : gappy + ' of ' + groups) + ' chains).</li>',
       TODAY
         ? '<li><strong>And the day stretches.</strong> ' + fmtN(TODAY.outside) + ' of ' +
           fmtN(TODAY.roomBookings) + ' room-bookings fall outside 9\u20135; ' +

@@ -391,6 +391,32 @@ const springNewRows = model.classes.map(c => {
 // ---- the model behind the rebuilt term, for checking and suggestions --------
 const packed = {
   meta: solution.meta,
+  // Spring's "today" counts, measured on the UNMERGED model — the timetable as
+  // recorded, a class per booking. The page used to compute these in the
+  // browser from the model it ships, which is the merged one, and a merged
+  // class sits at one hour carrying weeks that really sat at another: it read
+  // 74 lecture/seminar pairs pulled apart where the timetable has 75. Autumn's
+  // equivalent is in its own scorecard for the same reason.
+  todayCounts: (function () {
+    const C = require('./lib/constraints');
+    const t = load(null, { clashes: solution.meta.clashMode || 'all', merge: false });
+    build(t);
+    const base = new Map(t.classes.map(c =>
+      [c.id, { day: c.origDay, start: c.origStart, room: c.origRoom, weeks: c.origRoomWeeks }]));
+    const r = C.check(t, base, { occupancy: t.currentOccupancy });
+    // Linked groups that have a gap today, counted on the same unmerged model.
+    // The page worked this out from the merged one, where a pair's day and
+    // start relationship is not the one the timetable has.
+    let gappy = 0;
+    for (const g of t.linkedGroups) {
+      for (let i = 0; i + 1 < g.members.length; i++) {
+        const x = g.members[i], y = g.members[i + 1];
+        if (x.origDay !== y.origDay || x.origStart + x.dur !== y.origStart) { gappy++; break; }
+      }
+    }
+    return { counts: r.counts, total: r.violations.length, classes: t.classes.length,
+             gappy, groups: t.linkedGroups.length };
+  })(),
   // When this file was built. meta.generated is the day SPRING was solved, so
   // it said 2026-09-21 on a file whose autumn term had been re-solved since.
   generated: new Date().toISOString().slice(0, 10),

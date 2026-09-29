@@ -1452,6 +1452,28 @@ test('nav: every page with the bar wires the Timetables menu', () => {
   assert.ok(/\.bar-drop::before/.test(css), 'the dead zone under the trigger is unbridged again');
 });
 
+test('seeds: a shipped pack matches the timetable it offers alternatives to', () => {
+  // A pack solved against a different set of classes is an alternative to a
+  // different timetable. The picker refuses it at mount now rather than after
+  // the chips are on screen, but a stale pack still should not ship: it costs
+  // the reader a row of options that are not there.
+  const fs = require('fs');
+  const path = require('path');
+  const dir = path.join(__dirname, '..', 'docs', 'data');
+  const packed = path.join(dir, 'timetable.json');
+  if (!fs.existsSync(packed)) return;
+  const t = JSON.parse(fs.readFileSync(packed, 'utf8'));
+  for (const [file, key] of [['seeds-spring.json', 'springNew'], ['seeds-autumn.json', 'autumnNew']]) {
+    const f = path.join(dir, file);
+    if (!fs.existsSync(f) || !t.terms[key]) continue;
+    const pack = JSON.parse(fs.readFileSync(f, 'utf8'));
+    if (!pack.seeds || !pack.seeds.length) continue;
+    assert.strictEqual(pack.seeds[0].day.length, t.terms[key].rows.length,
+      file + ' holds ' + pack.seeds[0].day.length + ' placements for a timetable of ' +
+      t.terms[key].rows.length + ' — regenerate it with timetable/seeds.js');
+  }
+});
+
 if (slow.length) {
   console.log('\nslowest:');
   slow.sort((a, b) => b[0] - a[0]).slice(0, 5)
