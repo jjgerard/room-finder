@@ -107,14 +107,7 @@ the alternative arrangements), **Find a free room**, **Search rooms**, **Ubook e
 and **Room needs**, which writes the CSV a correction goes into. Search is by programme
 first — a cohort is what people actually ask about.
 
-## What this is not
-
-A feasibility study, not a publishable timetable, and all three reasons are properties of
-the source data: the clash graph is inferred rather than read from enrolment or staff
-records; class sizes are mostly room capacities standing in for headcounts; and many rooms
-have no recorded capacity at all.
-
-## The extension
+## The UBook extension
 
 A browser extension for Resource Booker. Ask it in plain words — *rooms seating 45+ in BC
 or BD free 12:15–13:15 every Monday from 28 Sep to 7 Dec* — and it answers in words:
