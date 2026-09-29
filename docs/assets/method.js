@@ -61,9 +61,12 @@
     seeds: 30,
     spring: { zero: 9, dist: [9, 9, 8, 2, 2], published: 22,
               clean: [4, 13, 16, 17, 22, 23, 25, 27, 28] },
-    // No clean seed to publish, so it says what the floor is instead.
-    autumn: { zero: 0, dist: [0, 0, 0, 0, 4, 4, 9, 8, 2, 1, 1, 1], published: 14,
-              floor: 4, clean: [14],
+    // No clean seed to publish, so it says what the floor is instead. Re-run
+    // after the September refresh added eight bookings: the repair that
+    // followed it left the term on 13, and only a fresh sweep brought it back
+    // to the floor, which is the cost of repairing rather than re-solving.
+    autumn: { zero: 0, seeds: 32, dist: [0, 0, 0, 0, 2, 3, 11, 6, 4, 4, 0, 1, 0, 1],
+              published: 29, floor: 4, clean: [2, 29],
               forced: 'four pairs of classes wanting one room between them' },
   };
 
@@ -618,7 +621,8 @@
     return [
       '<div class="algo-graphic"><div class="algo-inner" style="min-width:600px">',
       '<svg viewBox="0 0 ' + W + ' ' + (axisY + 30) + '" role="img" aria-label="',
-      'Of ' + SWEEP.seeds + ' starting points per term, ' + SWEEP.spring.zero +
+      'Of ' + SWEEP.seeds + ' starting points in spring and ' +
+      (SWEEP.autumn.seeds || SWEEP.seeds) + ' in autumn, ' + SWEEP.spring.zero +
       ' reached zero violations in spring and ' + SWEEP.autumn.zero + ' in autumn.">',
       '<text x="40" y="16" class="g-title">Seeds by the number of violations they ended on</text>',
       body, labels,
@@ -693,6 +697,7 @@
     var TAB = { spring: 'springNew', autumn: 'autumnNew' };
     function line(key, label) {
       var t = SWEEP[key];
+      var nSeeds = t.seeds || SWEEP.seeds;
       var sw = (H.terms[TAB[key]] || {}).sweep;
       // "(published)" is a claim about the file the site serves, so it is only
       // made while that is still true. After a repair it is not: the shipped
@@ -709,10 +714,10 @@
       // A term with an unavoidable violation has no clean seeds to claim, so
       // it says what the floor is and which seeds reach it instead.
       return t.floor
-        ? '<li><strong>' + label + ': none of ' + SWEEP.seeds + ' reached zero.</strong> ' +
+        ? '<li><strong>' + label + ': none of ' + nSeeds + ' reached zero.</strong> ' +
           'The best got to ' + t.floor + ' \u2014 ' + links + ' \u2014 and what is left is ' +
           t.forced + '. Every other rule holds in it.</li>'
-        : '<li><strong>' + label + ': ' + t.zero + ' of ' + SWEEP.seeds +
+        : '<li><strong>' + label + ': ' + t.zero + ' of ' + nSeeds +
           '</strong> starting points finished with every rule holding \u2014 ' + links +
           '. Each one opens as a timetable you can read.</li>';
     }
