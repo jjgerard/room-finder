@@ -1,6 +1,6 @@
 # Timetables
 
-Rebuilds Ulster Belfast's Autumn and Spring timetables so that every class has one room
+Rebuilds Ulster University's Autumn and Spring timetables for the Belfast campus so that every class has one room
 and no hard rule is broken, and publishes the result as a site you can search:
 **https://jjgerard.github.io/timetables/** — which is where the current figures live, kept
 in step with the data rather than written down here.
