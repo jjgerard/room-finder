@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ubook extension · Timetables</title>
+<meta name="description" content="A browser extension that searches every room in Resource Booker at once, in plain words, against live booking data.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316233d%27/%3E%3Cpath d=%27M9 8v10a7 7 0 0 0 14 0V8%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="appbar">
+  <span class="mark" aria-hidden="true"></span>
+  <nav>
+    <a href="index.html">About</a>
+    <span class="bar-menu" id="nav-terms">
+      <button class="bar-link" id="nav-terms-btn" aria-haspopup="true" aria-expanded="false">Timetables</button>
+      <div class="bar-drop" role="menu">
+        <a class="drop-item" role="menuitem" href="index.html?t=autumn">Autumn 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNow">Spring 2026<span class="sub">as it stands</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=springNew">Spring 2026<span class="sub">rebuilt</span></a>
+        <a class="drop-item" role="menuitem" href="index.html?t=autumnNew">Autumn 2026<span class="sub">rebuilt</span></a>
+      </div>
+    </span>
+    <a href="explore.html">Find a free room</a>
+    <a href="rooms-explorer.html">Search rooms</a>
+    <a href="extension.html" aria-current="page">Ubook extension</a>
+    <a href="rooms.html">Room needs</a>
+  </nav>
+</header>
+
+<main class="wrap narrow">
+
+  <h2 class="term-title">Ubook extension<span>search every room at once, inside Resource Booker</span></h2>
+
+  <p class="small muted">The rest of this site searches a <strong>snapshot</strong> — the
+    timetable as it was when the data was last refreshed, which is what makes the rebuilt
+    terms comparable. This extension searches <strong>live</strong> booking data instead, in
+    the Resource Booker tab you are already signed in to. Use the site to ask what the term
+    looks like; use this to ask what is free right now.</p>
+
+  <p class="small muted">Clicking through the booking pages room by room does not scale:
+    about 550 rooms across a twelve-week term is thousands of clicks, and the calendar only
+    ever answers for one room in one week. This asks all of them in one go.</p>
+
+  <section class="card pad">
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <a class="dl" href="ubook-extension.zip" download>Download the extension</a>
+        <p class="small muted" style="margin:10px 0 0">
+          <code>ubook-extension.zip</code> · 24&nbsp;KB · version 0.2.0 ·
+          Chrome&nbsp;111+, Edge, Firefox&nbsp;128+
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <div class="note">
+    <p style="margin:0"><strong>What it is asked in plain words:</strong>
+      <span class="mono small">rooms seating 45+ in BC or BD free 12:15–13:15 every Monday from 28 Sep to 7 Dec</span></p>
+    <p class="small" style="margin:10px 0 0">…and what comes back is an answer, not a grid:
+      <em>nothing in the 34 rooms searched is free on all 11 dates; the closest miss is
+      B_BC-01-002 (48), busy on 2 Nov only, taken by CMM125_S1/LEC/01; move the slot 30
+      minutes later and 4 rooms are free on every date.</em> Each of those suggestions is a
+      button.</p>
+  </div>
+
+  <!-- ------------------------------------------------------------ step 1 -->
+  <section class="card pad step">
+    <h3><span class="num">1</span> Unzip it somewhere permanent</h3>
+    <p class="small muted" style="margin-bottom:0">The browser loads the extension from the
+      folder, not from the zip, and keeps reading it from there — so unzip it somewhere you
+      will not tidy away. Your Documents folder is fine; Downloads is not.</p>
+  </section>
+
+  <!-- ------------------------------------------------------------ step 2 -->
+  <section class="card pad step">
+    <h3><span class="num">2</span> Load it into your browser</h3>
+    <p class="small muted">There is no store listing, so it loads unpacked. That sounds more
+      involved than it is: it is four clicks, and it survives restarting the browser.</p>
+
+    <p class="small" style="margin-bottom:4px"><strong>Chrome or Edge</strong></p>
+    <ol class="steps small">
+      <li>Go to <code>chrome://extensions</code> — type it into the address bar.</li>
+      <li>Turn on <strong>Developer mode</strong>, top right.</li>
+      <li>Click <strong>Load unpacked</strong>.</li>
+      <li>Pick the unzipped folder — the one holding <code>manifest.json</code>.</li>
+    </ol>
+
+    <p class="small" style="margin:14px 0 4px"><strong>Firefox</strong></p>
+    <ol class="steps small">
+      <li>Go to <code>about:debugging#/runtime/this-firefox</code>.</li>
+      <li>Click <strong>Load Temporary Add-on</strong> and pick <code>manifest.json</code>.</li>
+    </ol>
+    <p class="small muted" style="margin-bottom:0">Firefox clears temporary add-ons when it
+      closes, so it needs loading again each session. Chrome and Edge remember it.</p>
+  </section>
+
+  <!-- ------------------------------------------------------------ step 3 -->
+  <section class="card pad step">
+    <h3><span class="num">3</span> Use it in Resource Booker</h3>
+    <ol class="steps small">
+      <li>Open Resource Booker and sign in as you always do, so you are on a
+        <code>…/app/booking-types/…</code> page.</li>
+      <li><strong>Click something in the app</strong> — the room search box, or a calendar
+        arrow. This is what makes the booking app issue its first authenticated request,
+        which is what the extension latches on to. Without it, the first search will say so
+        and ask you to.</li>
+      <li>Click <strong>Find rooms</strong>, bottom right.</li>
+      <li>Type your question and press <strong>Search</strong>, or Ctrl/Cmd+Enter.</li>
+    </ol>
+    <p class="small muted" style="margin-bottom:0">The booking type is read from the address,
+      so it works for any one you have access to — there is nothing to configure. Anything in
+      your question it cannot place is listed back as <em>“Ignored: …”</em> rather than
+      quietly misread, and <strong>Refine by hand</strong> has every field as a control.</p>
+  </section>
+
+  <section class="card pad">
+    <h3 style="margin:0 0 8px">What it can see, and what it cannot</h3>
+    <p class="small muted">It is <strong>read-only</strong>: it lists rooms and reads busy
+      times. It never submits a booking request — that booking type is view-only anyway, and
+      bookings go through Timetabling and Attendance.</p>
+    <p class="small muted">It does not handle your login. You sign in to Resource Booker
+      yourself, through Microsoft SSO, exactly as you always do; the extension then reuses the
+      authorisation header the booking app attaches to its <em>own</em> requests, without ever
+      reading the token's value. So:</p>
+    <ul class="small muted" style="margin-top:0">
+      <li>no password, MFA code or token is seen, stored, or sent anywhere;</li>
+      <li><strong>no API key of any kind</strong> — your question is parsed in your browser,
+        by rules, with no AI service involved and nothing leaving the page;</li>
+      <li>there is no server of ours, so there is nothing to send anything to;</li>
+      <li>every request goes to the same API the page itself calls, with your own
+        permissions;</li>
+      <li>it asks for <strong>no browser permissions at all</strong> in
+        <code>manifest.json</code> — no host permissions, no storage, no network beyond the
+        page's own.</li>
+    </ul>
+    <p class="small muted" style="margin-bottom:0">Close the tab and it stops. If your session
+      expires mid-search it nudges the app's own UI to refresh it and carries on — the same
+      thing you would do by clicking a calendar arrow.</p>
+  </section>
+
+  <div class="note warn">
+    <p style="margin:0"><strong>Check two rooms in the booking app before you rely on an
+      answer</strong> — one date inside British Summer Time and one after the October clock
+      change. Every room in the results links to its own day view. The extension converts
+      every time through <code>Europe/London</code> because the API returns true UTC while
+      labelling it <code>+00:00</code>, and that one habit catches the whole class of error.</p>
+  </div>
+
+  <p class="small muted">The source is the same repository as this site:
+    <a href="https://github.com/jjgerard/timetables">jjgerard/timetables</a> — the extension is
+    the four files at the top level, and the zip above is built from them by
+    <code>tools/pack-extension.sh</code>.</p>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    The extension reads live booking data; every other page on this site reads a snapshot.
+    Source: <a href="https://github.com/jjgerard/timetables">jjgerard/timetables</a>.
+  </div>
+</footer>
+
+<script src="assets/nav.js"></script>
+</body>
+</html>

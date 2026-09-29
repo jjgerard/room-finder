@@ -1434,7 +1434,8 @@ test('nav: every page with the bar wires the Timetables menu', () => {
   const fs = require('fs');
   const path = require('path');
   const docs = path.join(__dirname, '..', 'docs');
-  for (const page of ['index.html', 'explore.html', 'rooms.html', 'rooms-explorer.html']) {
+  for (const page of ['index.html', 'explore.html', 'rooms.html', 'rooms-explorer.html',
+                       'extension.html']) {
     const html = fs.readFileSync(path.join(docs, page), 'utf8');
     if (!/id="nav-terms"/.test(html)) continue;
     assert.ok(/assets\/nav\.js/.test(html), page + ' has the menu markup but never loads nav.js');
@@ -1450,6 +1451,48 @@ test('nav: every page with the bar wires the Timetables menu', () => {
   // closes the menu before it can be reached.
   const css = fs.readFileSync(path.join(docs, 'assets', 'style.css'), 'utf8');
   assert.ok(/\.bar-drop::before/.test(css), 'the dead zone under the trigger is unbridged again');
+});
+
+test('the offered extension download is the extension in this repository', () => {
+  // docs/ubook-extension.zip is what the Ubook extension page hands people,
+  // and nothing regenerates it: change content.js and the download quietly
+  // goes on serving the old one, which is worse than no download because it
+  // looks current. The zip stores a CRC32 per entry, so the archive can be
+  // checked against the source without unpacking it.
+  const fs = require('fs');
+  const path = require('path');
+  const zlib = require('zlib');
+  const root = path.join(__dirname, '..');
+  const zip = fs.readFileSync(path.join(root, 'docs', 'ubook-extension.zip'));
+
+  // Walk the central directory, which is the authoritative index: name,
+  // uncompressed size and CRC, all before any decompression.
+  const entries = new Map();
+  for (let i = 0; i + 4 <= zip.length; i++) {
+    if (zip.readUInt32LE(i) !== 0x02014b50) continue;
+    const crc = zip.readUInt32LE(i + 16);
+    const size = zip.readUInt32LE(i + 24);
+    const nameLen = zip.readUInt16LE(i + 28);
+    entries.set(zip.toString('utf8', i + 46, i + 46 + nameLen), { crc, size });
+  }
+  assert.ok(entries.size >= 5, 'the zip has no central directory to read');
+
+  for (const f of ['manifest.json', 'parse.js', 'analyse.js', 'content.js']) {
+    const e = entries.get('ubook-extension/' + f);
+    assert.ok(e, f + ' is missing from the download; it is loaded by manifest.json');
+    const src = fs.readFileSync(path.join(root, f));
+    assert.strictEqual(e.size, src.length,
+      'docs/ubook-extension.zip is stale for ' + f + ' — rebuild it with tools/pack-extension.sh');
+    assert.strictEqual(e.crc >>> 0, zlib.crc32(src) >>> 0,
+      'docs/ubook-extension.zip differs from ' + f + ' — rebuild it with tools/pack-extension.sh');
+  }
+
+  // The page states a version; a download labelled 0.2.0 that carries 0.3.0 is
+  // the same staleness one step further on.
+  const page = fs.readFileSync(path.join(root, 'docs', 'extension.html'), 'utf8');
+  const ver = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8')).version;
+  assert.ok(page.includes('version ' + ver),
+    'the extension page does not say version ' + ver + ', which is what the zip holds');
 });
 
 test('seeds: a shipped pack matches the timetable it offers alternatives to', () => {

@@ -1,4 +1,4 @@
-/* Ulster Room Finder — runs inside a Resource Booker tab you are already signed in to.
+/* Ubook room search — runs inside a Resource Booker tab you are already signed in to.
  *
  * It reuses the headers the booking app itself sends, so it never sees, stores, or
  * transmits a password, and never reads the bearer token's value. Every request it
@@ -633,7 +633,7 @@
 
     var body = el('div', { class: 'body' }, [fPrompt, go, readBack, refine, status, out]);
     var close = el('button', { text: '×', title: 'Close' });
-    panel.appendChild(el('div', { class: 'head' }, [el('h1', { text: 'Ulster Room Finder' }), close]));
+    panel.appendChild(el('div', { class: 'head' }, [el('h1', { text: 'Ubook room search' }), close]));
     panel.appendChild(body);
 
     close.addEventListener('click', function () { panel.style.display = 'none'; launcher.style.display = ''; });

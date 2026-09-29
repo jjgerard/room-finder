@@ -5,9 +5,10 @@ every class has one room and no hard rule is broken, with a site that shows the 
 and lets you search it: **https://jjgerard.github.io/timetables/**
 
 A browser extension for live room searches lives here too — see
-[Room finder](#room-finder-the-extension). Same API, opposite ends: the extension asks
-*"is this room free?"* against live data, the solver asks *"could the whole term be
-arranged better?"* against a snapshot.
+[Ubook room search](#ubook-room-search-the-extension), downloadable from
+[the site](https://jjgerard.github.io/timetables/extension.html). Same API, opposite ends:
+the extension asks *"is this room free?"* against live data, the solver asks *"could the
+whole term be arranged better?"* against a snapshot.
 
 ## The result
 
@@ -87,7 +88,7 @@ node timetable/solve.js --term spring --seeds 30 --clashes evidenced --out docs/
 node timetable/solve.js --term autumn --seeds 30 --clashes evidenced --out docs/data
 ```
 
-118 checks: the rules themselves, the solver never making a timetable worse, the model's
+119 checks: the rules themselves, the solver never making a timetable worse, the model's
 own cost agreeing with the independent checker, and each thing that went wrong once and
 would go wrong quietly again — the teaching day the solver grades itself against being the
 one the site enforces; a class dragged past 17:15 by a pinned chain exempt from the end of
@@ -174,7 +175,7 @@ once separate copies and drifted.
 ## The site
 
 Served straight from `docs/` by GitHub Pages (**Settings → Pages → Deploy from a branch →
-`/docs`**). Five pages behind one bar:
+`/docs`**). Six pages behind one bar:
 
 | | |
 |---|---|
@@ -182,9 +183,10 @@ Served straight from `docs/` by GitHub Pages (**Settings → Pages → Deploy fr
 | **Timetables** ▾ | Each term as it stands and each rebuilt. Rebuilt spring is re-checked **in the browser on load**; each rebuilt term has a picker for the other clean arrangements. |
 | **Find a free room** | Give days, time, weeks, seats, buildings, room type — get the rooms free in every week you ticked, smallest first, then near misses with what takes them. |
 | **Search rooms** | Every room as a week calendar; tick several to compare side by side. |
+| **Ubook extension** | Downloads the browser extension and says how to load it. Live booking data, as against every other page's snapshot. |
 | **Room needs** | Records what kind of room a module actually needs, and writes the CSV the solver reads. |
 
-`docs/admin.html` is a sixth, `noindex` and not in the bar. Search is **by programme
+`docs/admin.html` is a seventh, `noindex` and not in the bar. Search is **by programme
 first**, then module, then room — a cohort is what people actually ask about. CI runs the
 tests and fails if the committed `docs/` differs from what `node timetable/export.js`
 produces; Pages serves the folder directly.
@@ -266,7 +268,7 @@ place in the clash graph.
 
 ---
 
-# Room finder, the extension
+# Ubook room search, the extension
 
 A browser extension for Ulster's Scientia Resource Booker. Ask it a question in your own
 words:
@@ -297,10 +299,12 @@ thing you would do by clicking a calendar arrow.
 
 ### Install
 
-No store listing, so it loads unpacked.
+No store listing, so it loads unpacked. The site offers it as a zip —
+**https://jjgerard.github.io/timetables/extension.html** — built from the four files at the
+top level of this repository by `tools/pack-extension.sh`, which the test suite checks
+against their CRCs so a stale download cannot ship.
 
-**Chrome / Edge** (111+): download the repository (**Code → Download ZIP**) and unzip, or
-`git clone https://github.com/jjgerard/timetables.git`. Go to `chrome://extensions`, turn on
+**Chrome / Edge** (111+): unzip it somewhere permanent, go to `chrome://extensions`, turn on
 **Developer mode**, click **Load unpacked**, pick the folder containing `manifest.json`.
 
 **Firefox** (128+): `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** →
@@ -381,3 +385,4 @@ category of error above.
 | `analyse.js` | busy times → what fits, what nearly fits, what would open it up. Pure. |
 | `content.js` | auth capture, the API calls, the panel. |
 | `test.js` | 99 checks — `node test.js`. |
+| `tools/pack-extension.sh` | Builds `docs/ubook-extension.zip`, the download the site offers. |

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Ulster Room Finder",
+  "name": "Ubook room search",
   "version": "0.2.0",
   "description": "Ask in plain words which rooms are free in a recurring slot in Ulster's Resource Booker, and see what would open it up.",
   "content_scripts": [
