@@ -5,7 +5,7 @@ and no hard rule is broken, and publishes the result as a site you can search:
 **https://jjgerard.github.io/timetables/** — which is where the current figures live, kept
 in step with the data rather than written down here.
 
-A browser extension for UBook room searches lives here too — see [the extension](#the-extension).
+A browser extension for UBook room searches lives here too — see [the extension](#the-ubook-extension).
 
 ## How the solver works
 
