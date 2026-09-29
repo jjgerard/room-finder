@@ -1070,21 +1070,55 @@ test('solver: the room preferences never bar a room outright', () => {
   eq(s2.roomReluctance(general, lab), 0);
 });
 
-test('solver: a multi-room exam never puts two sittings in one room', () => {
+test('solver: two sittings of one exam in one room is a clash the search can see', () => {
   // The sittings of one exam are members of a single component at offset 0 —
-  // they move together, which is right, but it also hid them from each
-  // other's room choice. Splitting an exam across rooms and then putting two
-  // of the parts back in the same room defeats the point of splitting it.
+  // they move together, which is right, but it also hid them from each other's
+  // room choice, and a pair nothing counts is a pair the search has no reason
+  // to separate.
+  //
+  // What this asserts is that the pair is *counted*, not that this particular
+  // run has already separated them. A budget this small does not converge —
+  // it leaves dozens of room clashes standing — so asserting a clean
+  // arrangement asserts luck, and duly broke when a refresh added eight autumn
+  // rows and shifted every class id under seed 61. The guarantee that holds at
+  // any budget is the one the original fault broke.
   const s = new Solver(model, Object.assign({ seed: 61 }, TEST_BUDGET));
   s.run();
   const a = s.assignment();
+  const counted = new Set();
+  for (const v of C.check(model, a).violations) {
+    if (v.kind !== 'roomClash') continue;
+    counted.add(v.a + ':' + v.b);
+    counted.add(v.b + ':' + v.a);
+  }
   for (const c of model.classes) {
     if (!c.isShadow) continue;
-    const mine = a.get(c.id);
-    const parent = a.get(c.shadowOf);
-    if (!mine || !parent) continue;
-    assert.notStrictEqual(mine.room, parent.room,
-      (c.module || c.id) + ' put a sitting back in its parent\'s room');
+    const mine = a.get(c.id), parent = a.get(c.shadowOf);
+    if (!mine || !parent || mine.room !== parent.room) continue;
+    assert.ok(counted.has(c.id + ':' + c.shadowOf),
+      (c.module || c.id) + ' is in its own parent\'s room and nothing counts it');
+  }
+});
+
+test('neither published timetable puts two sittings of one exam in one room', () => {
+  // The rule above is what lets the search fix it; this is whether it did, in
+  // the arrangement the site actually serves.
+  const fs = require('fs');
+  const path = require('path');
+  const { join } = require('./lib/join');
+  const docs = path.join(__dirname, '..', 'docs', 'data');
+  for (const [term, file] of [['spring', 'solution.json'], ['autumn', 'solution-autumn.json']]) {
+    const sol = JSON.parse(fs.readFileSync(path.join(docs, file), 'utf8'));
+    const m = load(null, { clashes: (sol.meta && sol.meta.clashMode) || 'all',
+                           term: term === 'spring' ? undefined : term });
+    const { placed } = join(m, sol.rows);
+    for (const c of m.classes) {
+      if (!c.isShadow) continue;
+      const mine = placed.get(c.id), parent = placed.get(c.shadowOf);
+      if (!mine || !parent) continue;
+      assert.notStrictEqual(mine.room, parent.room,
+        term + ': ' + (c.module || c.id) + ' sits in its own parent\'s room');
+    }
   }
 });
 

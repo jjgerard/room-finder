@@ -147,6 +147,20 @@ body {
   white-space: nowrap;
 }
 .appbar nav a:hover { background: rgba(255, 255, 255, .08); color: var(--bar-ink); }
+/* Narrow screens: the bar used to spend its whole first row on the mark,
+   because nav is one flex item and a flex item will not shrink below its
+   content. Letting it shrink puts the first few links beside the mark and
+   wraps the rest underneath, which is the row the space is there for. */
+@media (max-width: 720px) {
+  .appbar { gap: 8px; padding: 0 12px; }
+  .appbar nav { flex: 1 1 0; min-width: 0; }
+  .appbar nav a, .appbar .bar-link { padding: 7px 9px; }
+}
+/* Six links and a mark will not make two rows at phone width on the bar's
+   ordinary type, and the third row is all whitespace for one link. */
+@media (max-width: 400px) {
+  .appbar nav a, .appbar .bar-link { font-size: 12.5px; padding: 7px 7px; }
+}
 .appbar nav a[aria-current="page"] { background: rgba(255, 255, 255, .14); color: var(--bar-ink); }
 
 /* The timetable picker, sitting in the bar just after About. The
